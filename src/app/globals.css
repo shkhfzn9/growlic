@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #000000;
+}
+
+body {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  font-family: var(--font-geist-sans), sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+/* Custom styles to enforce clean black & white aesthetics */
+input, select, textarea {
+  border: 1px solid #000000;
+  border-radius: 0 !important;
+  background-color: #ffffff;
+  color: #000000;
+  padding: 0.5rem;
+  font-family: var(--font-geist-mono), monospace;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid #000000;
+  outline-offset: -2px;
+}
+
+/* Old school scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #ffffff;
+  border-left: 1px solid #000000;
+}
+::-webkit-scrollbar-thumb {
+  background: #000000;
+}
+
+/* Monochrome Utility overrides */
+.border-black-strong {
+  border: 1px solid #000000;
+}
+
+.border-black-double {
+  border: 3px double #000000;
+}
+
+.font-mono-custom {
+  font-family: var(--font-geist-mono), monospace;
+}
