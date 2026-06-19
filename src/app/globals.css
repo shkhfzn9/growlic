@@ -53,3 +53,17 @@ input:focus, select:focus, textarea:focus {
 .font-mono-custom {
   font-family: var(--font-geist-mono), monospace;
 }
+
+/* Click micro-animations and active states for buttons */
+button, 
+.btn-animate, 
+a.border {
+  transition: transform 0.1s ease, filter 0.1s ease;
+}
+
+button:active:not(:disabled), 
+.btn-animate:active, 
+a.border:active {
+  transform: scale(0.96) !important;
+  filter: brightness(0.9);
+}

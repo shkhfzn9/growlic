@@ -1,15 +1,20 @@
 'use server';
 
 import { cookies } from 'next/headers';
-import dbConnect from '@/lib/mongodb';
-import Menu from '@/models/Menu';
-import PairingRule from '@/models/PairingRule';
-import DiscountTier from '@/models/DiscountTier';
-import ComboRule from '@/models/ComboRule';
-import Order from '@/models/Order';
 import { verifyToken } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
+import * as recommendationService from '@/services/recommendationService';
+import * as menuItemService from '@/services/menuItemService';
+import * as pairingRuleService from '@/services/pairingRuleService';
+import * as discountTierService from '@/services/discountTierService';
+import * as comboRuleService from '@/services/comboRuleService';
 
+/**
+ * Validates the admin's authentication cookie ('admin_token') and decodes its payload.
+ * Throws an Error if the token is missing or invalid.
+ * 
+ * @returns The decoded admin session JWT token object.
+ */
 async function checkAdminAuth() {
   const cookieStore = await cookies();
   const token = cookieStore.get('admin_token')?.value;
@@ -25,169 +30,92 @@ async function checkAdminAuth() {
   return decoded;
 }
 
-// In-memory cache for computed affinity scores to prevent heavy database aggregation on every cart load
-let cachedAffinity: {
-  restaurantId: string;
-  computedAffinity: Record<string, Array<{ name: string; confidence: number }>>;
-  completedCount: number;
-  timestamp: number;
-} | null = null;
-
-// Get all configurations for upsells (can be accessed by client/admin)
+/**
+ * Server action to retrieve complete upsell configs including rules, tiers, and computed affinity charts.
+ * 
+ * @param restaurantId The restaurant identifier slug.
+ * @returns Serialized, plain configuration dataset.
+ */
 export async function getUpsellConfig(restaurantId: string) {
   try {
-    await dbConnect();
-
-    const menuItems = await Menu.find({ restaurantId }).sort({ category: 1, name: 1 });
-    const pairingRules = await PairingRule.find({ restaurantId, active: true });
-    const discountTiers = await DiscountTier.find({ restaurantId }).sort({ minSpend: 1 });
-    const comboRules = await ComboRule.find({ restaurantId, active: true });
-
-    // Compute data-driven affinity scores if completed orders count > 50
-    let computedAffinity: Record<string, Array<{ name: string; confidence: number }>> = {};
-    let completedCount = 0;
-
-    const CACHE_TTL_MS = 60 * 1000; // Cache computed affinity for 1 minute
-    const now = Date.now();
-
-    if (cachedAffinity && cachedAffinity.restaurantId === restaurantId && (now - cachedAffinity.timestamp) < CACHE_TTL_MS) {
-      computedAffinity = cachedAffinity.computedAffinity;
-      completedCount = cachedAffinity.completedCount;
-    } else {
-      const completedOrders = await Order.find({ restaurantId, status: 'completed' });
-      completedCount = completedOrders.length;
-
-      if (completedCount >= 50) {
-        const itemCountMap: Record<string, number> = {};
-        const coOccurrenceMap: Record<string, Record<string, number>> = {};
-
-        completedOrders.forEach((order) => {
-          const uniqueItems = Array.from(new Set(order.items.map((i) => i.name)));
-          
-          uniqueItems.forEach((item) => {
-            itemCountMap[item] = (itemCountMap[item] || 0) + 1;
-          });
-
-          for (let i = 0; i < uniqueItems.length; i++) {
-            for (let j = 0; j < uniqueItems.length; j++) {
-              if (i === j) continue;
-              const itemA = uniqueItems[i];
-              const itemB = uniqueItems[j];
-
-              if (!coOccurrenceMap[itemA]) {
-                coOccurrenceMap[itemA] = {};
-              }
-              coOccurrenceMap[itemA][itemB] = (coOccurrenceMap[itemA][itemB] || 0) + 1;
-            }
-          }
-        });
-
-        // Filter pairs where occurrence count >= 20 and confidence > 0.2
-        Object.keys(coOccurrenceMap).forEach((itemA) => {
-          const countA = itemCountMap[itemA] || 0;
-          if (countA >= 20) {
-            const suggestions: Array<{ name: string; confidence: number }> = [];
-            Object.keys(coOccurrenceMap[itemA]).forEach((itemB) => {
-              const countPair = coOccurrenceMap[itemA][itemB];
-              if (countPair >= 20) {
-                const confidence = countPair / countA;
-                if (confidence > 0.2) {
-                  suggestions.push({ name: itemB, confidence });
-                }
-              }
-            });
-
-            if (suggestions.length > 0) {
-              computedAffinity[itemA] = suggestions.sort((a, b) => b.confidence - a.confidence);
-            }
-          }
-        });
-      }
-
-      cachedAffinity = {
-        restaurantId,
-        computedAffinity,
-        completedCount,
-        timestamp: now,
-      };
-    }
-
-    return {
-      menuItems: JSON.parse(JSON.stringify(menuItems)),
-      pairingRules: JSON.parse(JSON.stringify(pairingRules)),
-      discountTiers: JSON.parse(JSON.stringify(discountTiers)),
-      comboRules: JSON.parse(JSON.stringify(comboRules)),
-      computedAffinity,
-      completedCount,
-    };
+    const config = await recommendationService.getUpsellConfig(restaurantId);
+    return JSON.parse(JSON.stringify(config));
   } catch (error) {
-    console.error('Error fetching upsell config:', error);
+    console.error('Error fetching upsell config action:', error);
     throw new Error('Failed to load recommendation settings');
   }
 }
 
-// 1. Tagging updates
+/**
+ * Server action to update a menu item's category.
+ * Triggers Next.js path revalidation.
+ * 
+ * @param itemId Target item database identifier.
+ * @param category Target category name.
+ * @returns Serialized, plain modified menu item object.
+ */
 export async function updateMenuItemCategory(itemId: string, category: string) {
   try {
     const admin = await checkAdminAuth();
-    await dbConnect();
-
-    const updated = await Menu.findOneAndUpdate(
-      { _id: itemId, restaurantId: admin.restaurantId },
-      { category: category.trim() },
-      { new: true }
-    );
-
+    const updated = await menuItemService.updateMenuItem(itemId, admin.restaurantId, { category: category.trim() });
     revalidatePath(`/admin/upsell`);
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(updated));
   } catch (error) {
-    console.error('Error updating category:', error);
+    console.error('Error updating category action:', error);
     throw new Error('Failed to update category');
   }
 }
 
+/**
+ * Server action to update the categories this item triggers cross-sell pairings with.
+ * Triggers Next.js path revalidation.
+ * 
+ * @param itemId Target item database identifier.
+ * @param pairsWithCategories Categories list to pair with.
+ * @returns Serialized, plain modified menu item object.
+ */
 export async function updateMenuItemPairsWith(itemId: string, pairsWithCategories: string[]) {
   try {
     const admin = await checkAdminAuth();
-    await dbConnect();
-
-    const updated = await Menu.findOneAndUpdate(
-      { _id: itemId, restaurantId: admin.restaurantId },
-      { pairsWithCategories },
-      { new: true }
-    );
-
+    const updated = await menuItemService.updateMenuItem(itemId, admin.restaurantId, { pairsWithCategories });
     revalidatePath(`/admin/upsell`);
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(updated));
   } catch (error) {
-    console.error('Error updating pairings:', error);
+    console.error('Error updating pairings action:', error);
     throw new Error('Failed to update item pairings');
   }
 }
 
+/**
+ * Server action to toggle a menu item's active/live visibility state.
+ * Triggers Next.js path revalidation.
+ * 
+ * @param itemId Target item database identifier.
+ * @param active Visible flag state to set.
+ * @returns Serialized, plain modified menu item object.
+ */
 export async function updateMenuItemActive(itemId: string, active: boolean) {
   try {
     const admin = await checkAdminAuth();
-    await dbConnect();
-
-    const updated = await Menu.findOneAndUpdate(
-      { _id: itemId, restaurantId: admin.restaurantId },
-      { active, available: active },
-      { new: true }
-    );
-
+    const updated = await menuItemService.updateMenuItem(itemId, admin.restaurantId, { active, available: active });
     revalidatePath(`/admin/upsell`);
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(updated));
   } catch (error) {
-    console.error('Error updating item state:', error);
+    console.error('Error updating item state action:', error);
     throw new Error('Failed to update item active status');
   }
 }
 
-// 2. Pairing Rules CRUD
+/**
+ * Server action to save or update a category pairing rule.
+ * Triggers Next.js path revalidation.
+ * 
+ * @param data Pairing rule configuration parameters.
+ * @returns Serialized, plain saved rule object.
+ */
 export async function savePairingRule(data: {
   _id?: string;
   triggerCategory: string;
@@ -196,51 +124,41 @@ export async function savePairingRule(data: {
 }) {
   try {
     const admin = await checkAdminAuth();
-    await dbConnect();
-
-    let rule;
-    if (data._id) {
-      rule = await PairingRule.findOneAndUpdate(
-        { _id: data._id, restaurantId: admin.restaurantId },
-        {
-          triggerCategory: data.triggerCategory,
-          suggestCategories: data.suggestCategories,
-          active: data.active,
-        },
-        { new: true }
-      );
-    } else {
-      rule = await PairingRule.create({
-        restaurantId: admin.restaurantId,
-        triggerCategory: data.triggerCategory,
-        suggestCategories: data.suggestCategories,
-        active: data.active,
-      });
-    }
-
+    const rule = await pairingRuleService.savePairingRule(admin.restaurantId, data);
     revalidatePath(`/admin/upsell`);
     return JSON.parse(JSON.stringify(rule));
   } catch (error) {
-    console.error('Error saving pairing rule:', error);
+    console.error('Error saving pairing rule action:', error);
     throw new Error('Failed to save pairing rule');
   }
 }
 
+/**
+ * Server action to delete a pairing rule.
+ * Triggers Next.js path revalidation.
+ * 
+ * @param id Target rule ID string.
+ * @returns Resolves to success state object.
+ */
 export async function deletePairingRule(id: string) {
   try {
     const admin = await checkAdminAuth();
-    await dbConnect();
-
-    await PairingRule.deleteOne({ _id: id, restaurantId: admin.restaurantId });
+    await pairingRuleService.deletePairingRule(id, admin.restaurantId);
     revalidatePath(`/admin/upsell`);
     return { success: true };
   } catch (error) {
-    console.error('Error deleting pairing rule:', error);
+    console.error('Error deleting pairing rule action:', error);
     throw new Error('Failed to delete pairing rule');
   }
 }
 
-// 3. Discount Tiers CRUD
+/**
+ * Server action to save or update a discount tier rule.
+ * Triggers Next.js path revalidation.
+ * 
+ * @param data Discount tier configuration parameters.
+ * @returns Serialized, plain saved tier object.
+ */
 export async function saveDiscountTier(data: {
   _id?: string;
   minSpend: number;
@@ -250,53 +168,41 @@ export async function saveDiscountTier(data: {
 }) {
   try {
     const admin = await checkAdminAuth();
-    await dbConnect();
-
-    let tier;
-    if (data._id) {
-      tier = await DiscountTier.findOneAndUpdate(
-        { _id: data._id, restaurantId: admin.restaurantId },
-        {
-          minSpend: Number(data.minSpend),
-          percentOff: Number(data.percentOff),
-          categoryScope: data.categoryScope ? data.categoryScope.trim() : null,
-          active: data.active !== undefined ? data.active : true,
-        },
-        { new: true }
-      );
-    } else {
-      tier = await DiscountTier.create({
-        restaurantId: admin.restaurantId,
-        minSpend: Number(data.minSpend),
-        percentOff: Number(data.percentOff),
-        categoryScope: data.categoryScope ? data.categoryScope.trim() : null,
-        active: data.active !== undefined ? data.active : true,
-      });
-    }
-
+    const tier = await discountTierService.saveDiscountTier(admin.restaurantId, data);
     revalidatePath(`/admin/upsell`);
     return JSON.parse(JSON.stringify(tier));
   } catch (error) {
-    console.error('Error saving discount tier:', error);
+    console.error('Error saving discount tier action:', error);
     throw new Error('Failed to save discount tier');
   }
 }
 
+/**
+ * Server action to delete a discount tier.
+ * Triggers Next.js path revalidation.
+ * 
+ * @param id Target tier ID string.
+ * @returns Resolves to success state object.
+ */
 export async function deleteDiscountTier(id: string) {
   try {
     const admin = await checkAdminAuth();
-    await dbConnect();
-
-    await DiscountTier.deleteOne({ _id: id, restaurantId: admin.restaurantId });
+    await discountTierService.deleteDiscountTier(id, admin.restaurantId);
     revalidatePath(`/admin/upsell`);
     return { success: true };
   } catch (error) {
-    console.error('Error deleting discount tier:', error);
+    console.error('Error deleting discount tier action:', error);
     throw new Error('Failed to delete discount tier');
   }
 }
 
-// 4. Combo Rules CRUD
+/**
+ * Server action to save or update a combo rule.
+ * Triggers Next.js path revalidation.
+ * 
+ * @param data Combo rule configuration parameters.
+ * @returns Serialized, plain saved rule object.
+ */
 export async function saveComboRule(data: {
   _id?: string;
   conditionCategory: string;
@@ -308,52 +214,30 @@ export async function saveComboRule(data: {
 }) {
   try {
     const admin = await checkAdminAuth();
-    await dbConnect();
-
-    let rule;
-    if (data._id) {
-      rule = await ComboRule.findOneAndUpdate(
-        { _id: data._id, restaurantId: admin.restaurantId },
-        {
-          conditionCategory: data.conditionCategory,
-          conditionExcludeCategory: data.conditionExcludeCategory,
-          rewardType: data.rewardType,
-          rewardTarget: data.rewardTarget,
-          customerMessage: data.customerMessage,
-          active: data.active,
-        },
-        { new: true }
-      );
-    } else {
-      rule = await ComboRule.create({
-        restaurantId: admin.restaurantId,
-        conditionCategory: data.conditionCategory,
-        conditionExcludeCategory: data.conditionExcludeCategory,
-        rewardType: data.rewardType,
-        rewardTarget: data.rewardTarget,
-        customerMessage: data.customerMessage,
-        active: data.active,
-      });
-    }
-
+    const rule = await comboRuleService.saveComboRule(admin.restaurantId, data);
     revalidatePath(`/admin/upsell`);
     return JSON.parse(JSON.stringify(rule));
   } catch (error) {
-    console.error('Error saving combo rule:', error);
+    console.error('Error saving combo rule action:', error);
     throw new Error('Failed to save combo rule');
   }
 }
 
+/**
+ * Server action to delete a combo rule.
+ * Triggers Next.js path revalidation.
+ * 
+ * @param id Target rule ID string.
+ * @returns Resolves to success state object.
+ */
 export async function deleteComboRule(id: string) {
   try {
     const admin = await checkAdminAuth();
-    await dbConnect();
-
-    await ComboRule.deleteOne({ _id: id, restaurantId: admin.restaurantId });
+    await comboRuleService.deleteComboRule(id, admin.restaurantId);
     revalidatePath(`/admin/upsell`);
     return { success: true };
   } catch (error) {
-    console.error('Error deleting combo rule:', error);
+    console.error('Error deleting combo rule action:', error);
     throw new Error('Failed to delete combo rule');
   }
 }

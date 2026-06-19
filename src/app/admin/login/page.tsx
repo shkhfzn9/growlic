@@ -4,6 +4,9 @@ import React, { useState, Suspense } from 'react';
 import { useDispatch } from 'react-redux';
 import { loginSuccess } from '@/redux/authSlice';
 import { useRouter, useSearchParams } from 'next/navigation';
+import type { AppDispatch } from '@/redux/store'; // wait, is there store? let's keep original imports or just add Eye/EyeOff
+import Link from 'next/link';
+import { Eye, EyeOff } from 'lucide-react';
 
 function LoginForm() {
   const dispatch = useDispatch();
@@ -14,6 +17,7 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,15 +96,25 @@ function LoginForm() {
 
           <div className="flex flex-col gap-1">
             <label className="text-xs font-bold uppercase">Password</label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={loading}
-              className="w-full text-xs font-mono-custom"
-              required
-            />
+            <div className="relative flex items-center">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                className="w-full text-xs font-mono-custom pr-10"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-black cursor-pointer bg-transparent border-0 focus:outline-none flex items-center justify-center"
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
           <button
@@ -111,6 +125,17 @@ function LoginForm() {
             {loading ? 'LOGGING IN...' : '[ LOGIN ]'}
           </button>
         </form>
+
+        {/* Register redirection link */}
+        <div className="mt-6 pt-4 border-t border-dashed border-black/20 text-center font-mono-custom">
+          <span className="text-[10px] text-zinc-500 uppercase block mb-2">Want to launch a new restaurant?</span>
+          <Link
+            href="/admin/register"
+            className="inline-block text-xs font-bold uppercase underline hover:no-underline hover:text-zinc-650 transition-colors"
+          >
+            [ Register your Restaurant ]
+          </Link>
+        </div>
       </div>
     </div>
   );

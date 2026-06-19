@@ -17,6 +17,7 @@ export interface CartState {
   subtotal: number;
   total: number;
   restaurantId: string | null;
+  restaurantName: string | null;
 }
 
 const initialState: CartState = {
@@ -24,6 +25,7 @@ const initialState: CartState = {
   subtotal: 0,
   total: 0,
   restaurantId: null,
+  restaurantName: null,
 };
 
 const calculateTotals = (state: CartState) => {
@@ -36,6 +38,7 @@ const persistCartToStorage = (state: CartState) => {
     localStorage.setItem('qr_cart', JSON.stringify({
       items: state.items,
       restaurantId: state.restaurantId,
+      restaurantName: state.restaurantName,
     }));
   }
 };
@@ -44,8 +47,8 @@ const cartSlice = createSlice({
   name: 'cart',
   initialState,
   reducers: {
-    addItem: (state, action: PayloadAction<{ item: Omit<CartItem, 'quantity'>; restaurantId: string }>) => {
-      const { item, restaurantId } = action.payload;
+    addItem: (state, action: PayloadAction<{ item: Omit<CartItem, 'quantity'>; restaurantId: string; restaurantName: string }>) => {
+      const { item, restaurantId, restaurantName } = action.payload;
       
       // If adding item from a different restaurant, clear previous cart
       if (state.restaurantId && state.restaurantId !== restaurantId) {
@@ -53,6 +56,7 @@ const cartSlice = createSlice({
       }
       
       state.restaurantId = restaurantId;
+      state.restaurantName = restaurantName;
 
       const existingItem = state.items.find((i) => i.id === item.id);
       if (existingItem) {
@@ -92,6 +96,7 @@ const cartSlice = createSlice({
       state.subtotal = 0;
       state.total = 0;
       state.restaurantId = null;
+      state.restaurantName = null;
       persistCartToStorage(state);
     },
     hydrateCart: (state) => {
@@ -103,6 +108,7 @@ const cartSlice = createSlice({
             if (parsed.items && Array.isArray(parsed.items)) {
               state.items = parsed.items;
               state.restaurantId = parsed.restaurantId || null;
+              state.restaurantName = parsed.restaurantName || null;
               calculateTotals(state);
             }
           } catch (e) {

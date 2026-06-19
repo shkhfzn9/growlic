@@ -1,11 +1,16 @@
 'use server';
 
 import { cookies } from 'next/headers';
-import dbConnect from '@/lib/mongodb';
-import Menu from '@/models/Menu';
 import { verifyToken } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
+import * as menuItemService from '@/services/menuItemService';
 
+/**
+ * Validates the admin's authentication cookie ('admin_token') and decodes its payload.
+ * Throws an Error if the token is missing or invalid.
+ * 
+ * @returns The decoded admin session JWT token object.
+ */
 async function checkAdminAuth() {
   const cookieStore = await cookies();
   const token = cookieStore.get('admin_token')?.value;
@@ -21,33 +26,47 @@ async function checkAdminAuth() {
   return decoded;
 }
 
+/**
+ * Server action to retrieve all menu items registered under a specific restaurant.
+ * 
+ * @param restaurantId The restaurant slug ID.
+ * @returns Serialized, plain array of menu items.
+ */
 export async function getMenuItems(restaurantId: string) {
   try {
-    await dbConnect();
-    const items = await Menu.find({ restaurantId }).sort({ category: 1, name: 1 });
+    const items = await menuItemService.getMenuItems(restaurantId);
     return JSON.parse(JSON.stringify(items));
   } catch (error) {
-    console.error('Error fetching menu items:', error);
+    console.error('Error fetching menu items action:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch menu items';
     throw new Error(message);
   }
 }
 
+/**
+ * Server action to retrieve a single menu item by its database ID.
+ * 
+ * @param id The database ID string of the target item.
+ * @returns Serialized, plain menu item record.
+ */
 export async function getMenuItemById(id: string) {
   try {
-    await dbConnect();
-    const item = await Menu.findById(id);
-    if (!item) {
-      throw new Error('Menu item not found');
-    }
+    const item = await menuItemService.getMenuItemById(id);
     return JSON.parse(JSON.stringify(item));
   } catch (error) {
-    console.error('Error fetching menu item:', error);
+    console.error('Error fetching menu item by ID action:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch menu item';
     throw new Error(message);
   }
 }
 
+/**
+ * Server action to create a new menu item for the authenticated admin's restaurant.
+ * Triggers Next.js page revalidation.
+ * 
+ * @param data Menu item configuration values.
+ * @returns Serialized, plain object of the newly created menu item.
+ */
 export async function createMenuItem(data: {
   category: string;
   name: string;
@@ -72,36 +91,24 @@ export async function createMenuItem(data: {
 }) {
   try {
     const admin = await checkAdminAuth();
-    await dbConnect();
-
-    const newItem = await Menu.create({
-      restaurantId: admin.restaurantId,
-      category: data.category,
-      name: data.name,
-      description: data.description,
-      image: data.image,
-      price: Number(data.price),
-      available: data.available !== undefined ? data.available : true,
-      images: data.images || [],
-      preparation: data.preparation || '',
-      ingredients: data.ingredients || [],
-      nutrition: data.nutrition || { calories: 0, protein: 0, carbs: 0, fat: 0 },
-      spiceLevel: data.spiceLevel || 0,
-      portionSize: data.portionSize || '',
-      prepTimeMin: data.prepTimeMin || 0,
-      prepTimeMax: data.prepTimeMax || 0,
-      chefNote: data.chefNote || '',
-    });
-
+    const newItem = await menuItemService.createMenuItem(admin.restaurantId, data);
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(newItem));
   } catch (error) {
-    console.error('Error creating menu item:', error);
+    console.error('Error creating menu item action:', error);
     const message = error instanceof Error ? error.message : 'Failed to create menu item';
     throw new Error(message);
   }
 }
 
+/**
+ * Server action to update configurations of an existing menu item.
+ * Triggers Next.js page revalidation.
+ * 
+ * @param id The database ID of the target item.
+ * @param data Updated menu item properties.
+ * @returns Serialized, plain updated menu item object.
+ */
 export async function updateMenuItem(
   id: string,
   data: {
@@ -129,83 +136,52 @@ export async function updateMenuItem(
 ) {
   try {
     const admin = await checkAdminAuth();
-    await dbConnect();
-
-    // Verify item belongs to admin's restaurant
-    const item = await Menu.findById(id);
-    if (!item || item.restaurantId !== admin.restaurantId) {
-      throw new Error('Unauthorized or item not found');
-    }
-
-    const updatedItem = await Menu.findByIdAndUpdate(
-      id,
-      {
-        category: data.category,
-        name: data.name,
-        description: data.description,
-        image: data.image,
-        price: Number(data.price),
-        available: data.available !== undefined ? data.available : true,
-        images: data.images || [],
-        preparation: data.preparation || '',
-        ingredients: data.ingredients || [],
-        nutrition: data.nutrition || { calories: 0, protein: 0, carbs: 0, fat: 0 },
-        spiceLevel: data.spiceLevel !== undefined ? data.spiceLevel : item.spiceLevel,
-        portionSize: data.portionSize !== undefined ? data.portionSize : item.portionSize,
-        prepTimeMin: data.prepTimeMin !== undefined ? data.prepTimeMin : item.prepTimeMin,
-        prepTimeMax: data.prepTimeMax !== undefined ? data.prepTimeMax : item.prepTimeMax,
-        chefNote: data.chefNote !== undefined ? data.chefNote : item.chefNote,
-      },
-      { new: true }
-    );
-
+    const updatedItem = await menuItemService.updateMenuItem(id, admin.restaurantId, data);
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(updatedItem));
   } catch (error) {
-    console.error('Error updating menu item:', error);
+    console.error('Error updating menu item action:', error);
     const message = error instanceof Error ? error.message : 'Failed to update menu item';
     throw new Error(message);
   }
 }
 
+/**
+ * Server action to toggle a menu item's active/live availability.
+ * Triggers Next.js page revalidation.
+ * 
+ * @param id The database ID string of the target item.
+ * @param available The target availability state to set.
+ * @returns Serialized, plain updated menu item object.
+ */
 export async function toggleMenuItemAvailability(id: string, available: boolean) {
   try {
     const admin = await checkAdminAuth();
-    await dbConnect();
-
-    const item = await Menu.findById(id);
-    if (!item || item.restaurantId !== admin.restaurantId) {
-      throw new Error('Unauthorized or item not found');
-    }
-
-    item.available = available;
-    await item.save();
-
+    const item = await menuItemService.toggleMenuItemAvailability(id, admin.restaurantId, available);
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(item));
   } catch (error) {
-    console.error('Error toggling menu item availability:', error);
+    console.error('Error toggling menu item availability action:', error);
     const message = error instanceof Error ? error.message : 'Failed to toggle item availability';
     throw new Error(message);
   }
 }
 
+/**
+ * Server action to delete a menu item from the store.
+ * Triggers Next.js page revalidation.
+ * 
+ * @param id The database ID string of the target item.
+ * @returns Resolves to an object indicating success status.
+ */
 export async function deleteMenuItem(id: string) {
   try {
     const admin = await checkAdminAuth();
-    await dbConnect();
-
-    const item = await Menu.findById(id);
-    if (!item || item.restaurantId !== admin.restaurantId) {
-      throw new Error('Unauthorized or item not found');
-    }
-
-    await Menu.findByIdAndDelete(id);
-
+    await menuItemService.deleteMenuItem(id, admin.restaurantId);
     revalidatePath(`/menu/${admin.restaurantId}`);
     return { success: true };
   } catch (error) {
-    console.error('Error deleting menu item:', error);
+    console.error('Error deleting menu item action:', error);
     const message = error instanceof Error ? error.message : 'Failed to delete menu item';
     throw new Error(message);
   }

@@ -5,8 +5,8 @@ export function proxy(request: NextRequest) {
   const token = request.cookies.get('admin_token')?.value;
   const { pathname } = request.nextUrl;
 
-  // Protect all /admin routes except login page
-  if (pathname.startsWith('/admin') && pathname !== '/admin/login') {
+  // Protect all /admin routes except login and register pages
+  if (pathname.startsWith('/admin') && pathname !== '/admin/login' && pathname !== '/admin/register') {
     if (!token) {
       const loginUrl = new URL('/admin/login', request.url);
       // Optional: Redirect back after login

@@ -548,6 +548,7 @@ export default function CartPage() {
             nudgeRuleId,
           },
           restaurantId: cart.restaurantId,
+          restaurantName: cart.restaurantName || '',
         })
       );
     }
@@ -635,7 +636,14 @@ export default function CartPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-8 font-mono-custom min-h-screen flex flex-col relative">
       <div className="flex justify-between items-baseline border-b border-black pb-4 mb-6">
-        <h1 className="text-2xl font-bold uppercase">Your Cart</h1>
+        <div>
+          <h1 className="text-2xl font-bold uppercase">Your Cart</h1>
+          {cart.restaurantName && (
+            <span className="text-[10px] uppercase text-zinc-500 font-bold block mt-1">
+              Ordering from: {cart.restaurantName}
+            </span>
+          )}
+        </div>
         <Link href={menuUrl} className="text-xs uppercase hover:underline">
           ← Keep Ordering
         </Link>

@@ -1,42 +1,21 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import dbConnect from '@/lib/mongodb';
-import Admin from '@/models/Admin';
-import { comparePassword, signToken } from '@/lib/auth';
+import { authenticateAdmin } from '@/services/adminService';
+import { handleRouteError } from '@/lib/errors';
 
+/**
+ * REST API Endpoint to authenticate an admin using email/password.
+ * Sets the 'admin_token' httpOnly session cookie and returns admin metadata.
+ * Delegates errors to handleRouteError.
+ * 
+ * @param req Standard Request object containing JSON payload with email and password.
+ * @returns JSON Response indicating success status or error message.
+ */
 export async function POST(req: Request) {
   try {
-    await dbConnect();
     const { email, password } = await req.json();
 
-    if (!email || !password) {
-      return NextResponse.json(
-        { success: false, error: 'Email and password are required' },
-        { status: 400 }
-      );
-    }
-
-    const admin = await Admin.findOne({ email: email.toLowerCase() });
-    if (!admin) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid credentials' },
-        { status: 401 }
-      );
-    }
-
-    const isMatch = await comparePassword(password, admin.password);
-    if (!isMatch) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid credentials' },
-        { status: 401 }
-      );
-    }
-
-    const token = signToken({
-      email: admin.email,
-      restaurantId: admin.restaurantId,
-      restaurantName: admin.restaurantName,
-    });
+    const { admin, token } = await authenticateAdmin(email, password);
 
     const cookieStore = await cookies();
     cookieStore.set('admin_token', token, {
@@ -55,10 +34,6 @@ export async function POST(req: Request) {
       email: admin.email,
     });
   } catch (error) {
-    console.error('Login error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    );
+    return handleRouteError(error);
   }
 }

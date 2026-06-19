@@ -1,6 +1,5 @@
 import React from 'react';
-import dbConnect from '@/lib/mongodb';
-import Admin from '@/models/Admin';
+import { getAdminByRestaurantId } from '@/services/adminService';
 import { getUpsellConfig } from '@/actions/upsell';
 import MenuList from '@/components/menu/MenuList';
 import Link from 'next/link';
@@ -44,8 +43,7 @@ export default async function MenuPage({ params }: PageProps) {
   let upsellDataResult: any = null;
 
   try {
-    await dbConnect();
-    const admin = await Admin.findOne({ restaurantId: slug });
+    const admin = await getAdminByRestaurantId(slug);
     upsellDataResult = await getUpsellConfig(slug);
     menuItems = upsellDataResult.menuItems;
     restaurantName = admin ? admin.restaurantName : 'Tokyo Momos';

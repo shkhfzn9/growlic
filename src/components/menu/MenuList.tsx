@@ -262,6 +262,7 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
           nudgeRuleId,
         },
         restaurantId,
+        restaurantName,
       })
     );
   };
@@ -289,11 +290,11 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
       {/* Header */}
       <header className="border-b-2 border-black py-6 px-4 bg-white sticky top-0 z-10">
         <div className="max-w-2xl mx-auto flex flex-col gap-4">
-          <div className="flex justify-between items-baseline">
-            <h1 className="text-3xl font-bold tracking-tighter uppercase font-mono-custom">
+          <div className="flex justify-between items-baseline flex-wrap gap-2">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tighter uppercase font-mono-custom break-words max-w-[75%]">
               {restaurantName}
             </h1>
-            <span className="text-xs uppercase border border-black px-2 py-0.5 font-mono-custom">
+            <span className="text-xs uppercase border border-black px-2 py-0.5 font-mono-custom shrink-0">
               QR Menu
             </span>
           </div>
