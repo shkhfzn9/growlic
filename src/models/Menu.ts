@@ -10,6 +10,20 @@ export interface IMenu extends Document {
   available: boolean;
   pairsWithCategories: string[];
   active: boolean;
+  images: string[];
+  preparation: string;
+  ingredients: string[];
+  nutrition: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
+  spiceLevel: number;
+  portionSize: string;
+  prepTimeMin: number;
+  prepTimeMax: number;
+  chefNote?: string;
 }
 
 const MenuSchema: Schema = new Schema<IMenu>(
@@ -23,6 +37,20 @@ const MenuSchema: Schema = new Schema<IMenu>(
     available: { type: Boolean, default: true },
     pairsWithCategories: { type: [String], default: [] },
     active: { type: Boolean, default: true },
+    images: { type: [String], default: [] },
+    preparation: { type: String, default: '' },
+    ingredients: { type: [String], default: [] },
+    nutrition: {
+      calories: { type: Number, default: 0 },
+      protein: { type: Number, default: 0 },
+      carbs: { type: Number, default: 0 },
+      fat: { type: Number, default: 0 },
+    },
+    spiceLevel: { type: Number, default: 0 },
+    portionSize: { type: String, default: '' },
+    prepTimeMin: { type: Number, default: 0 },
+    prepTimeMax: { type: Number, default: 0 },
+    chefNote: { type: String, default: '' },
   },
   { timestamps: true }
 );

@@ -6,6 +6,9 @@ export interface IOrderItem {
   price: number;
   quantity: number;
   image?: string;
+  originatedFromNudge?: boolean;
+  nudgeType?: 'cross_sell' | 'threshold_discount' | 'combo_freebie';
+  nudgeRuleId?: string;
 }
 
 export interface IOrder extends Document {
@@ -27,6 +30,9 @@ const OrderItemSchema: Schema = new Schema<IOrderItem>({
   price: { type: Number, required: true },
   quantity: { type: Number, required: true },
   image: { type: String, default: '' },
+  originatedFromNudge: { type: Boolean, default: false },
+  nudgeType: { type: String, enum: ['cross_sell', 'threshold_discount', 'combo_freebie'], default: null },
+  nudgeRuleId: { type: String, default: null },
 });
 
 const OrderSchema: Schema = new Schema<IOrder>(

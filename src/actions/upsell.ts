@@ -25,6 +25,14 @@ async function checkAdminAuth() {
   return decoded;
 }
 
+// In-memory cache for computed affinity scores to prevent heavy database aggregation on every cart load
+let cachedAffinity: {
+  restaurantId: string;
+  computedAffinity: Record<string, Array<{ name: string; confidence: number }>>;
+  completedCount: number;
+  timestamp: number;
+} | null = null;
+
 // Get all configurations for upsells (can be accessed by client/admin)
 export async function getUpsellConfig(restaurantId: string) {
   try {
@@ -36,55 +44,72 @@ export async function getUpsellConfig(restaurantId: string) {
     const comboRules = await ComboRule.find({ restaurantId, active: true });
 
     // Compute data-driven affinity scores if completed orders count > 50
-    const completedOrders = await Order.find({ restaurantId, status: 'completed' });
-    const completedCount = completedOrders.length;
-    const computedAffinity: Record<string, Array<{ name: string; confidence: number }>> = {};
+    let computedAffinity: Record<string, Array<{ name: string; confidence: number }>> = {};
+    let completedCount = 0;
 
-    if (completedCount >= 50) {
-      const itemCountMap: Record<string, number> = {};
-      const coOccurrenceMap: Record<string, Record<string, number>> = {};
+    const CACHE_TTL_MS = 60 * 1000; // Cache computed affinity for 1 minute
+    const now = Date.now();
 
-      completedOrders.forEach((order) => {
-        const uniqueItems = Array.from(new Set(order.items.map((i) => i.name)));
-        
-        uniqueItems.forEach((item) => {
-          itemCountMap[item] = (itemCountMap[item] || 0) + 1;
-        });
+    if (cachedAffinity && cachedAffinity.restaurantId === restaurantId && (now - cachedAffinity.timestamp) < CACHE_TTL_MS) {
+      computedAffinity = cachedAffinity.computedAffinity;
+      completedCount = cachedAffinity.completedCount;
+    } else {
+      const completedOrders = await Order.find({ restaurantId, status: 'completed' });
+      completedCount = completedOrders.length;
 
-        for (let i = 0; i < uniqueItems.length; i++) {
-          for (let j = 0; j < uniqueItems.length; j++) {
-            if (i === j) continue;
-            const itemA = uniqueItems[i];
-            const itemB = uniqueItems[j];
+      if (completedCount >= 50) {
+        const itemCountMap: Record<string, number> = {};
+        const coOccurrenceMap: Record<string, Record<string, number>> = {};
 
-            if (!coOccurrenceMap[itemA]) {
-              coOccurrenceMap[itemA] = {};
-            }
-            coOccurrenceMap[itemA][itemB] = (coOccurrenceMap[itemA][itemB] || 0) + 1;
-          }
-        }
-      });
-
-      // Filter pairs where occurrence count >= 20 and confidence > 0.2
-      Object.keys(coOccurrenceMap).forEach((itemA) => {
-        const countA = itemCountMap[itemA] || 0;
-        if (countA >= 20) {
-          const suggestions: Array<{ name: string; confidence: number }> = [];
-          Object.keys(coOccurrenceMap[itemA]).forEach((itemB) => {
-            const countPair = coOccurrenceMap[itemA][itemB];
-            if (countPair >= 20) {
-              const confidence = countPair / countA;
-              if (confidence > 0.2) {
-                suggestions.push({ name: itemB, confidence });
-              }
-            }
+        completedOrders.forEach((order) => {
+          const uniqueItems = Array.from(new Set(order.items.map((i) => i.name)));
+          
+          uniqueItems.forEach((item) => {
+            itemCountMap[item] = (itemCountMap[item] || 0) + 1;
           });
 
-          if (suggestions.length > 0) {
-            computedAffinity[itemA] = suggestions.sort((a, b) => b.confidence - a.confidence);
+          for (let i = 0; i < uniqueItems.length; i++) {
+            for (let j = 0; j < uniqueItems.length; j++) {
+              if (i === j) continue;
+              const itemA = uniqueItems[i];
+              const itemB = uniqueItems[j];
+
+              if (!coOccurrenceMap[itemA]) {
+                coOccurrenceMap[itemA] = {};
+              }
+              coOccurrenceMap[itemA][itemB] = (coOccurrenceMap[itemA][itemB] || 0) + 1;
+            }
           }
-        }
-      });
+        });
+
+        // Filter pairs where occurrence count >= 20 and confidence > 0.2
+        Object.keys(coOccurrenceMap).forEach((itemA) => {
+          const countA = itemCountMap[itemA] || 0;
+          if (countA >= 20) {
+            const suggestions: Array<{ name: string; confidence: number }> = [];
+            Object.keys(coOccurrenceMap[itemA]).forEach((itemB) => {
+              const countPair = coOccurrenceMap[itemA][itemB];
+              if (countPair >= 20) {
+                const confidence = countPair / countA;
+                if (confidence > 0.2) {
+                  suggestions.push({ name: itemB, confidence });
+                }
+              }
+            });
+
+            if (suggestions.length > 0) {
+              computedAffinity[itemA] = suggestions.sort((a, b) => b.confidence - a.confidence);
+            }
+          }
+        });
+      }
+
+      cachedAffinity = {
+        restaurantId,
+        computedAffinity,
+        completedCount,
+        timestamp: now,
+      };
     }
 
     return {

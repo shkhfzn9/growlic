@@ -55,6 +55,20 @@ export async function createMenuItem(data: {
   image: string;
   price: number;
   available?: boolean;
+  images?: string[];
+  preparation?: string;
+  ingredients?: string[];
+  nutrition?: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
+  spiceLevel?: number;
+  portionSize?: string;
+  prepTimeMin?: number;
+  prepTimeMax?: number;
+  chefNote?: string;
 }) {
   try {
     const admin = await checkAdminAuth();
@@ -68,6 +82,15 @@ export async function createMenuItem(data: {
       image: data.image,
       price: Number(data.price),
       available: data.available !== undefined ? data.available : true,
+      images: data.images || [],
+      preparation: data.preparation || '',
+      ingredients: data.ingredients || [],
+      nutrition: data.nutrition || { calories: 0, protein: 0, carbs: 0, fat: 0 },
+      spiceLevel: data.spiceLevel || 0,
+      portionSize: data.portionSize || '',
+      prepTimeMin: data.prepTimeMin || 0,
+      prepTimeMax: data.prepTimeMax || 0,
+      chefNote: data.chefNote || '',
     });
 
     revalidatePath(`/menu/${admin.restaurantId}`);
@@ -88,6 +111,20 @@ export async function updateMenuItem(
     image: string;
     price: number;
     available?: boolean;
+    images?: string[];
+    preparation?: string;
+    ingredients?: string[];
+    nutrition?: {
+      calories: number;
+      protein: number;
+      carbs: number;
+      fat: number;
+    };
+    spiceLevel?: number;
+    portionSize?: string;
+    prepTimeMin?: number;
+    prepTimeMax?: number;
+    chefNote?: string;
   }
 ) {
   try {
@@ -109,6 +146,15 @@ export async function updateMenuItem(
         image: data.image,
         price: Number(data.price),
         available: data.available !== undefined ? data.available : true,
+        images: data.images || [],
+        preparation: data.preparation || '',
+        ingredients: data.ingredients || [],
+        nutrition: data.nutrition || { calories: 0, protein: 0, carbs: 0, fat: 0 },
+        spiceLevel: data.spiceLevel !== undefined ? data.spiceLevel : item.spiceLevel,
+        portionSize: data.portionSize !== undefined ? data.portionSize : item.portionSize,
+        prepTimeMin: data.prepTimeMin !== undefined ? data.prepTimeMin : item.prepTimeMin,
+        prepTimeMax: data.prepTimeMax !== undefined ? data.prepTimeMax : item.prepTimeMax,
+        chefNote: data.chefNote !== undefined ? data.chefNote : item.chefNote,
       },
       { new: true }
     );

@@ -7,6 +7,9 @@ export interface CartItem {
   quantity: number;
   image: string;
   category: string;
+  originatedFromNudge?: boolean;
+  nudgeType?: 'cross_sell' | 'threshold_discount' | 'combo_freebie';
+  nudgeRuleId?: string;
 }
 
 export interface CartState {

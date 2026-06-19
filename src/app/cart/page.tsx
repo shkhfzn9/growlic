@@ -4,10 +4,11 @@ import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { updateQuantity, removeItem, clearCart, addItem } from '@/redux/cartSlice';
-import { createOrder } from '@/actions/orders';
+import { createOrder, logEvent } from '@/actions/orders';
 import { getUpsellConfig } from '@/actions/upsell';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { RefreshCw } from 'lucide-react';
 
 interface MenuItem {
   _id: string;
@@ -77,10 +78,12 @@ export default function CartPage() {
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [offersLoading, setOffersLoading] = useState(true);
 
   // Fetch upsell configs on component load or restaurant ID changes
   useEffect(() => {
     if (cart.restaurantId) {
+      setOffersLoading(true);
       getUpsellConfig(cart.restaurantId)
         .then((config) => {
           setMenuItems(config.menuItems || []);
@@ -92,6 +95,9 @@ export default function CartPage() {
         })
         .catch((err) => {
           console.error('Error fetching upsell config:', err);
+        })
+        .finally(() => {
+          setOffersLoading(false);
         });
     }
   }, [cart.restaurantId]);
@@ -473,7 +479,7 @@ export default function CartPage() {
       index++;
     }
 
-    return combined.slice(0, 3);
+    return combined.slice(0, 8);
   }, [menuItems, items, completedCount, computedAffinity, pairingRules]);
 
   // 3. Compile Nudges to Display (Cap at 2, ranked by savings value)
@@ -495,9 +501,9 @@ export default function CartPage() {
         id: 'cross_sell_' + topItem._id,
         type: 'cross_sell',
         title: 'Complete Your Meal',
-        message: `Complete your meal with our delicious ${topItem.name}!`,
+        message: `Complete your meal with our delicious selections!`,
         savings: 0,
-        suggestedItems: [topItem],
+        suggestedItems: crossSellSuggestions,
         socialProof: topItem.socialProof,
       });
     }
@@ -506,7 +512,28 @@ export default function CartPage() {
     return list.sort((a, b) => b.savings - a.savings).slice(0, 2);
   }, [evaluationResult, crossSellSuggestions]);
 
-  const handleAddUpsell = (item: MenuItem) => {
+  // Log nudge views (newly added for tracking)
+  useEffect(() => {
+    const restaurantId = cart.restaurantId;
+    if (nudgesToShow.length > 0 && restaurantId) {
+      nudgesToShow.forEach((nudge) => {
+        let apiType: 'cross_sell' | 'threshold_discount' | 'combo_freebie' = 'cross_sell';
+        if (nudge.type === 'discount') apiType = 'threshold_discount';
+        if (nudge.type === 'combo') apiType = 'combo_freebie';
+
+        let ruleId = nudge.id || '';
+        if (ruleId.startsWith('cross_sell_')) {
+          ruleId = ruleId.replace('cross_sell_', '');
+        }
+
+        logEvent(restaurantId, 'nudge_show', ruleId, apiType).catch((err) =>
+          console.error('Error logging nudge show event:', err)
+        );
+      });
+    }
+  }, [nudgesToShow, cart.restaurantId]);
+
+  const handleAddUpsell = (item: MenuItem, nudgeType: 'cross_sell' | 'threshold_discount' | 'combo_freebie', nudgeRuleId?: string) => {
     if (cart.restaurantId) {
       dispatch(
         addItem({
@@ -516,6 +543,9 @@ export default function CartPage() {
             price: item.price,
             image: item.image,
             category: item.category,
+            originatedFromNudge: true,
+            nudgeType,
+            nudgeRuleId,
           },
           restaurantId: cart.restaurantId,
         })
@@ -668,7 +698,28 @@ export default function CartPage() {
       </div>
 
       {/* Colorful Appetite-Driven Nudges (Capped at 2, ranked by savings) */}
-      {nudgesToShow.length > 0 && (
+      {offersLoading ? (
+        <div className="border border-black p-5 bg-zinc-50 flex flex-col gap-3 shadow-sm select-none mb-6">
+          <div className="flex justify-between items-center">
+            <span className="font-bold text-[10px] tracking-wider uppercase text-zinc-500 flex items-center gap-1.5 font-mono-custom">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Personalizing offers...
+            </span>
+            <span className="text-[9px] font-black bg-zinc-200 text-zinc-650 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono-custom">
+              LOADING
+            </span>
+          </div>
+          <h3 className="font-extrabold text-xs uppercase leading-tight text-zinc-700 font-mono-custom">
+            Calculating best discount tier &amp; combo recommendations for you
+          </h3>
+          {/* Animated loading bar */}
+          <div className="w-full bg-zinc-200 h-2 border border-black/10 rounded-full overflow-hidden relative mt-1">
+            <div className="bg-black h-full rounded-full animate-pulse" style={{ width: '60%' }}></div>
+          </div>
+          <p className="text-[9px] font-bold text-zinc-450 uppercase font-mono-custom">
+            Scanning fresh chef specials...
+          </p>
+        </div>
+      ) : nudgesToShow.length > 0 ? (
         <div className="flex flex-col gap-4 mb-6">
           {nudgesToShow.map((nudge) => {
             if (nudge.type === 'discount') {
@@ -736,7 +787,7 @@ export default function CartPage() {
                             </div>
                           </div>
                           <button
-                            onClick={() => handleAddUpsell(item)}
+                            onClick={() => handleAddUpsell(item, 'combo_freebie', nudge.id)}
                             className="w-full border border-white bg-white text-black py-1.5 text-[9px] font-bold uppercase hover:bg-black hover:text-white hover:border-black transition-all cursor-pointer text-center rounded"
                           >
                             [ + ADD COMBO ]
@@ -768,11 +819,11 @@ export default function CartPage() {
                   </div>
 
                   {nudge.suggestedItems && nudge.suggestedItems.length > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                    <div className="flex gap-4 overflow-x-auto pb-3 snap-x snap-mandatory mt-2 scrollbar-none">
                       {nudge.suggestedItems.map((item) => (
                         <div
                           key={item._id}
-                          className="border border-white/20 p-3 bg-black/20 flex flex-col justify-between gap-3 rounded hover:bg-black/30 transition-all"
+                          className="flex-shrink-0 w-64 snap-start border border-white/20 p-3 bg-black/20 flex flex-col justify-between gap-3 rounded hover:bg-black/30 transition-all"
                         >
                           <div className="flex gap-2.5 items-start">
                             {item.image && (
@@ -791,7 +842,7 @@ export default function CartPage() {
                             </div>
                           </div>
                           <button
-                            onClick={() => handleAddUpsell(item)}
+                            onClick={() => handleAddUpsell(item, 'cross_sell', nudge.id)}
                             className="w-full border border-white bg-white text-black py-1.5 text-[9px] font-bold uppercase hover:bg-black hover:text-white hover:border-black transition-all cursor-pointer text-center rounded"
                           >
                             [ + ADD ITEM ]
@@ -805,7 +856,7 @@ export default function CartPage() {
             }
           })}
         </div>
-      )}
+      ) : null}
 
       {/* Book Order Button */}
       <div className="mt-2">

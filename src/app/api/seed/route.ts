@@ -6,6 +6,7 @@ import PairingRule from '@/models/PairingRule';
 import DiscountTier from '@/models/DiscountTier';
 import ComboRule from '@/models/ComboRule';
 import Order from '@/models/Order';
+import Event from '@/models/Event';
 import { hashPassword } from '@/lib/auth';
 
 const SVG_MOMO = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjIiLz48dGV4dCB4PSI1MCUiIHk9IjU1JSIgZm9udC1mYW1pbHk9Im1vbm9zcGFjZSIgZm9udC1zaXplPSIzNCIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+8J+lnzwvdGV4dD48L3N2Zz4=`;
@@ -691,9 +692,197 @@ export async function GET() {
       }
     ];
 
+    // Map items to inject realistic detailed information dynamically
+    const detailedMenuItems = menuItems.map((item) => {
+      const name = item.name;
+      const category = item.category;
+      
+      // Determine preparation text
+      let prep = '';
+      if (category.includes('Momos')) {
+        if (name.includes('Fried') || name.includes('Crispy') || name.includes('Woksizzle')) {
+          prep = 'Crispy-fried in high-quality rice bran oil at 180°C, tossed with chef\'s secret seasoning and fresh herbs.';
+        } else if (name.includes('Tandoori')) {
+          prep = 'Marinated in spicy hung curd and hot spices, then slow-roasted in a traditional clay tandoor oven.';
+        } else {
+          prep = 'Hand-rolled daily from fresh dough, filled with spiced chicken or vegetable stuffing, and steamed in authentic bamboo baskets for exactly 12 minutes.';
+        }
+      } else if (category.includes('Rice') || category.includes('Noodles') || category.includes('Special')) {
+        prep = 'Stir-fried in a heavy wok over extreme high heat (wok-hei) with aromatic sesame oil, soy sauce, eggs, and freshly chopped scallions.';
+      } else if (category.includes('Salad') || category.includes('Fit Meals')) {
+        prep = 'Lean proteins seasoned with local herbs, garlic, and olive oil, and gently grilled over natural charcoal stones to lock in absolute juiciness.';
+      } else if (category.includes('Soups')) {
+        prep = 'Simmered slowly for over 4 hours with farm-fresh herbs, ginger root, garlic, and a rich vegetable broth reduction.';
+      } else if (category.includes('Rolls')) {
+        prep = 'Rolled inside a freshly baked, flaky paratha flatbread lined with egg, spread with custom mint-coriander mayonnaise and crisp red onions.';
+      } else {
+        prep = 'Freshly prepared to order using local organic ingredients and authentic Tibetan spices.';
+      }
+
+      // Determine ingredients list
+      let ingredients: string[] = [];
+      if (category.includes('Momos')) {
+        ingredients = ['Refined Wheat Flour Wrapper', 'Ginger-Garlic Paste', 'Sesame Oil', 'Soy Sauce', 'Sichuan Pepper', 'Spring Onion'];
+        if (name.toLowerCase().includes('chicken') || name.toLowerCase().includes('butter') || name.toLowerCase().includes('steam') || name.toLowerCase().includes('fried') || name.toLowerCase().includes('crispy')) {
+          ingredients.push('Minced Chicken Breast');
+        } else if (name.toLowerCase().includes('cheese')) {
+          ingredients.push('Processed Mozzarella Cheese');
+        } else {
+          ingredients.push('Cabbage & Carrot Medley');
+        }
+      } else if (category.includes('Rice') || category.includes('Noodles')) {
+        ingredients = ['Jasmine Rice / Hakka Noodles', 'Egg White', 'Toasted Garlic', 'Soy Sauce', 'Capsicum', 'Cabbage', 'Sesame Oil'];
+        if (name.toLowerCase().includes('chicken')) {
+          ingredients.push('Diced Roast Chicken');
+        }
+      } else if (category.includes('Salad') || category.includes('Fit Meals')) {
+        ingredients = ['Lean Grilled Chicken Breast', 'Iceberg Lettuce', 'Cucumber Slices', 'Red Bell Pepper', 'Cherry Tomatoes', 'Olive Oil', 'Lime Juice'];
+      } else if (category.includes('Rolls')) {
+        ingredients = ['Refined Wheat Flour Paratha', 'Spiced Tikka Filling', 'Sliced Red Onion', 'Mint-Mayo', 'Chilli Paste'];
+        if (name.toLowerCase().includes('cheese') || name.toLowerCase().includes('cheesy')) {
+          ingredients.push('Mozzarella Cheese');
+        }
+      } else if (category.includes('Soups')) {
+        ingredients = ['Vegetable Broth', 'Shredded Cabbage', 'Carrot Julienned', 'Vinegar', 'Garlic', 'White Pepper'];
+        if (name.toLowerCase().includes('chicken')) {
+          ingredients.push('Shredded Chicken');
+        }
+      } else {
+        ingredients = ['Local Farm Vegetables', 'Tibetan Spices', 'Garlic', 'Ginger', 'Sichuan Pepper'];
+      }
+
+      // Determine nutrition macros
+      let calories = 250;
+      let protein = 12;
+      let carbs = 35;
+      let fat = 6;
+
+      if (category.includes('Salad') || category.includes('Fit Meals')) {
+        // Match specific proteins
+        if (name.includes('24g')) {
+          protein = 24; calories = 210; carbs = 6; fat = 4;
+        } else if (name.includes('30g')) {
+          protein = 30; calories = 260; carbs = 8; fat = 5;
+        } else if (name.includes('40g')) {
+          protein = 40; calories = 310; carbs = 8; fat = 6;
+        } else if (name.includes('60g')) {
+          protein = 60; calories = 420; carbs = 10; fat = 8;
+        } else if (name.includes('100g')) {
+          protein = 28; calories = 220; carbs = 5; fat = 4;
+        } else {
+          protein = 25; calories = 240; carbs = 10; fat = 6;
+        }
+      } else if (category.includes('Momos')) {
+        calories = name.includes('Cheese') || name.includes('Butter') ? 380 : 280;
+        protein = name.includes('Cheese') ? 14 : 16;
+        carbs = 38;
+        fat = name.includes('Cheese') || name.includes('Butter') || name.includes('Fried') ? 14 : 6;
+      } else if (category.includes('Rice') || category.includes('Noodles')) {
+        calories = 520;
+        protein = name.toLowerCase().includes('chicken') ? 22 : 12;
+        carbs = 78;
+        fat = 12;
+      } else if (category.includes('Rolls')) {
+        calories = 420;
+        protein = 18;
+        carbs = 48;
+        fat = 16;
+      } else if (category.includes('Soups')) {
+        calories = 90;
+        protein = 4;
+        carbs = 10;
+        fat = 2;
+      }
+
+      // Generate dynamic slider image variations
+      let extraImages: string[] = [];
+      if (item.image && item.image.startsWith('data:image/svg+xml;base64,')) {
+        try {
+          const base64Data = item.image.split(',')[1];
+          const svgText = Buffer.from(base64Data, 'base64').toString('utf-8');
+          
+          const svgAlt1 = svgText.replace(/fill="#fff"/i, 'fill="#fef3c7"').replace(/fill="#zinc-50"/i, 'fill="#fef3c7"');
+          const svgAlt2 = svgText.replace(/fill="#fff"/i, 'fill="#ffe4e6"').replace(/fill="#zinc-50"/i, 'fill="#ffe4e6"');
+          
+          const base64Alt1 = 'data:image/svg+xml;base64,' + Buffer.from(svgAlt1).toString('base64');
+          const base64Alt2 = 'data:image/svg+xml;base64,' + Buffer.from(svgAlt2).toString('base64');
+          
+          extraImages = [base64Alt1, base64Alt2];
+        } catch (e) {
+          console.error('Error generating extra images:', e);
+        }
+      }
+
+      // Determine spice level
+      let spiceLevel = 0;
+      const lowerName = name.toLowerCase();
+      if (lowerName.includes('peri peri') || lowerName.includes('schezwan noodle') || lowerName.includes('chilli garlic noodle')) {
+        spiceLevel = 3;
+      } else if (lowerName.includes('schezwan') || lowerName.includes('chilli') || lowerName.includes('tandoori') || lowerName.includes('spicy')) {
+        spiceLevel = 2;
+      } else if (category.includes('Soups') && lowerName.includes('hot n sour')) {
+        spiceLevel = 2;
+      } else if (category.includes('Noodles') || category.includes('Rice') || category.includes('Soups')) {
+        spiceLevel = 1;
+      }
+
+      // Determine portion size
+      let portionSize = 'Good for 1';
+      if (category.includes('Momos') || category.includes('Rolls')) {
+        portionSize = 'Shareable starter for 2-3';
+      }
+
+      // Determine prep time min-max
+      let prepTimeMin = 10;
+      let prepTimeMax = 12;
+
+      if (category.includes('Momos') && !lowerName.includes('gravy')) {
+        prepTimeMin = 8; prepTimeMax = 10;
+      } else if (category.includes('Soups')) {
+        prepTimeMin = 8; prepTimeMax = 10;
+      } else if (category.includes('Rice') || category.includes('Noodles')) {
+        if (lowerName.includes('bowl')) {
+          prepTimeMin = 12; prepTimeMax = 15;
+        } else {
+          prepTimeMin = 10; prepTimeMax = 12;
+        }
+      } else if (lowerName.includes('gravy') || category.includes('Special')) {
+        prepTimeMin = 12; prepTimeMax = 15;
+      } else if (category.includes('Rolls')) {
+        prepTimeMin = 6; prepTimeMax = 8;
+      } else if (category.includes('Salad') || category.includes('Fit Meals')) {
+        prepTimeMin = 5; prepTimeMax = 7;
+      }
+
+      // Determine chef's note
+      let chefNote = '';
+      if (lowerName.includes('tandoori momos') || lowerName.includes('tandoori momo')) {
+        chefNote = 'Marinated overnight, char-grilled to order';
+      } else if (lowerName.includes('tokyo ramen')) {
+        chefNote = 'Our signature broth, simmered fresh daily';
+      } else if (lowerName.includes('butter chicken rice')) {
+        chefNote = "Tokyo Momos' most-loved gravy bowl";
+      } else if (lowerName.includes('honey chilli chicken')) {
+        chefNote = 'A guest favorite — sweet heat done right';
+      }
+
+      return {
+        ...item,
+        preparation: prep,
+        ingredients,
+        nutrition: { calories, protein, carbs, fat },
+        images: extraImages,
+        spiceLevel,
+        portionSize,
+        prepTimeMin,
+        prepTimeMax,
+        chefNote,
+      };
+    });
+
     // Seed Menu items
     await Menu.deleteMany({ restaurantId: restId });
-    const insertedMenu = await Menu.insertMany(menuItems);
+    const insertedMenu = await Menu.insertMany(detailedMenuItems);
 
     // 3. Seed default PairingRule configurations
     const defaultPairings = [
@@ -742,7 +931,7 @@ export async function GET() {
     ];
 
     await PairingRule.deleteMany({ restaurantId: restId });
-    await PairingRule.insertMany(defaultPairings);
+    const insertedPairings = await PairingRule.insertMany(defaultPairings);
 
     // 4. Seed default DiscountTier configurations
     const defaultDiscountTiers = [
@@ -752,7 +941,7 @@ export async function GET() {
     ];
 
     await DiscountTier.deleteMany({ restaurantId: restId });
-    await DiscountTier.insertMany(defaultDiscountTiers);
+    const insertedTiers = await DiscountTier.insertMany(defaultDiscountTiers);
 
     // 5. Seed default ComboRule configurations
     const defaultComboRules = [
@@ -795,24 +984,114 @@ export async function GET() {
     ];
 
     await ComboRule.deleteMany({ restaurantId: restId });
-    await ComboRule.insertMany(defaultComboRules);
+    const insertedCombos = await ComboRule.insertMany(defaultComboRules);
 
-    // 6. Seed dummy completed orders (60 completed orders to trigger computed affinity scores immediately)
-    await Order.deleteMany({ restaurantId: restId, status: 'completed' });
+    // 6. Seed dummy completed orders and events (staged for realistic analytics)
+    await Order.deleteMany({ restaurantId: restId });
+    await Event.deleteMany({ restaurantId: restId });
+
     const dummyOrders = [];
+    const dummyEvents = [];
 
-    // Let's create 40 orders containing Fried Rice (Classic Chicken Fried Rice) + Soup (Hot n Sour Soup)
-    // Classic Chicken Fried Rice price: 149
-    // Hot n Sour Soup price: 99
-    // Total: 248
+    // Seed 110 cart started events
+    for (let i = 0; i < 110; i++) {
+      dummyEvents.push({
+        restaurantId: restId,
+        type: 'cart_create',
+        itemId: '',
+        createdAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
+      });
+    }
+
+    // Seed nudge shown events
+    // 50 cross sell shows
+    for (let i = 0; i < 50; i++) {
+      const rule = insertedPairings[i % insertedPairings.length];
+      dummyEvents.push({
+        restaurantId: restId,
+        type: 'nudge_show',
+        itemId: rule._id.toString(),
+        nudgeType: 'cross_sell',
+        createdAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
+      });
+    }
+    // 40 threshold discount shows
     for (let i = 0; i < 40; i++) {
+      const tier = insertedTiers[i % insertedTiers.length];
+      dummyEvents.push({
+        restaurantId: restId,
+        type: 'nudge_show',
+        itemId: tier._id.toString(),
+        nudgeType: 'threshold_discount',
+        createdAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
+      });
+    }
+    // 30 combo freebie shows
+    for (let i = 0; i < 30; i++) {
+      const rule = insertedCombos[i % insertedCombos.length];
+      dummyEvents.push({
+        restaurantId: restId,
+        type: 'nudge_show',
+        itemId: rule._id.toString(),
+        nudgeType: 'combo_freebie',
+        createdAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
+      });
+    }
+
+    // Modal open events:
+    const steamMomo = insertedMenu.find(m => m.name === 'Steam Momos');
+    const chilliMomo = insertedMenu.find(m => m.name === 'Chilli Garlic Momos');
+
+    // 40 opens for Steam Momos (high interest)
+    if (steamMomo) {
+      for (let i = 0; i < 40; i++) {
+        dummyEvents.push({
+          restaurantId: restId,
+          type: 'modal_open',
+          itemId: steamMomo._id.toString(),
+          createdAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
+        });
+      }
+    }
+
+    // 15 opens for Chilli Garlic Momos
+    if (chilliMomo) {
+      for (let i = 0; i < 15; i++) {
+        dummyEvents.push({
+          restaurantId: restId,
+          type: 'modal_open',
+          itemId: chilliMomo._id.toString(),
+          createdAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
+        });
+      }
+    }
+
+    // Other items get random modal opens
+    insertedMenu.forEach(item => {
+      if (item.name !== 'Steam Momos' && item.name !== 'Chilli Garlic Momos') {
+        const count = Math.floor(Math.random() * 4) + 2;
+        for (let i = 0; i < count; i++) {
+          dummyEvents.push({
+            restaurantId: restId,
+            type: 'modal_open',
+            itemId: item._id.toString(),
+            createdAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
+          });
+        }
+      }
+    });
+
+    // Create 40 orders containing Fried Rice + Soup (15 with cross_sell nudge)
+    for (let i = 0; i < 40; i++) {
+      const hasNudge = i < 15;
+      const rule = insertedPairings[0];
       dummyOrders.push({
         restaurantId: restId,
         customerName: `Data Test ${i}`,
         customerPhone: `99999000${i.toString().padStart(2, '0')}`,
         items: [
           {
-            menuItemId: 'classic_chicken_fried_rice_dummy_id', // we don't strictly need a valid Mongo ID as long as names match
+            menuItemId: 'classic_chicken_fried_rice_dummy_id',
             name: 'Classic Chicken Fried Rice',
             price: 149,
             quantity: 1,
@@ -822,18 +1101,23 @@ export async function GET() {
             name: 'Hot n Sour Soup',
             price: 99,
             quantity: 1,
+            originatedFromNudge: hasNudge,
+            nudgeType: hasNudge ? 'cross_sell' as const : undefined,
+            nudgeRuleId: hasNudge ? rule._id.toString() : undefined,
           }
         ],
         subtotal: 248,
         total: 248,
         status: 'completed',
         estimatedTime: 15,
-        createdAt: new Date(Date.now() - (60 - i) * 60 * 60 * 1000), // staged in past hours
+        createdAt: new Date(Date.now() - (60 - i) * 60 * 60 * 1000),
       });
     }
 
-    // Create 10 orders containing Classic Chicken Noodle + Chilli Garlic Roll
+    // Create 10 orders containing Noodle + Roll (5 with combo nudge)
     for (let i = 0; i < 10; i++) {
+      const hasNudge = i < 5;
+      const rule = insertedCombos[1];
       dummyOrders.push({
         restaurantId: restId,
         customerName: `Data Test Noodle ${i}`,
@@ -850,6 +1134,9 @@ export async function GET() {
             name: 'Chilli Garlic Roll',
             price: 149,
             quantity: 1,
+            originatedFromNudge: hasNudge,
+            nudgeType: hasNudge ? 'combo_freebie' as const : undefined,
+            nudgeRuleId: hasNudge ? rule._id.toString() : undefined,
           }
         ],
         subtotal: 298,
@@ -860,16 +1147,23 @@ export async function GET() {
       });
     }
 
-    // Create 10 orders containing Steam Momos + Peri Peri Chicken Strips
+    // Create 10 orders containing Momos + Chicken (4 with threshold nudge)
+    // Steam Momos: 2 orders (total conversion rate = 2/40 = 5% -> triggers friction flag!)
+    // Chilli Garlic Momos: 8 orders (total conversion rate = 8/15 = 53%)
     for (let i = 0; i < 10; i++) {
+      const hasNudge = i < 4;
+      const tier = insertedTiers[0];
+      const momoItemName = i < 2 ? 'Steam Momos' : 'Chilli Garlic Momos';
+      const momoItem = insertedMenu.find(m => m.name === momoItemName);
+      
       dummyOrders.push({
         restaurantId: restId,
         customerName: `Data Test Momo ${i}`,
         customerPhone: `77777000${i.toString().padStart(2, '0')}`,
         items: [
           {
-            menuItemId: 'steam_momos_dummy_id',
-            name: 'Steam Momos',
+            menuItemId: momoItem ? momoItem._id.toString() : 'steam_momos_dummy_id',
+            name: momoItemName,
             price: 139,
             quantity: 1,
           },
@@ -878,6 +1172,9 @@ export async function GET() {
             name: 'Peri Peri Chicken Strips',
             price: 139,
             quantity: 1,
+            originatedFromNudge: hasNudge,
+            nudgeType: hasNudge ? 'threshold_discount' as const : undefined,
+            nudgeRuleId: hasNudge ? tier._id.toString() : undefined,
           }
         ],
         subtotal: 278,
@@ -889,10 +1186,11 @@ export async function GET() {
     }
 
     await Order.insertMany(dummyOrders);
+    await Event.insertMany(dummyEvents);
 
     return NextResponse.json({
       success: true,
-      message: 'Seeding completed successfully with default rules and 60 test orders.',
+      message: 'Seeding completed successfully with default rules, 60 test orders, and analytical events.',
       admin: {
         email: admin.email,
         restaurantId: admin.restaurantId,
@@ -903,6 +1201,7 @@ export async function GET() {
       discountTiersCount: defaultDiscountTiers.length,
       comboRulesCount: defaultComboRules.length,
       completedOrdersSeededCount: dummyOrders.length,
+      eventsCount: dummyEvents.length,
     });
   } catch (error) {
     console.error('Seeding error:', error);

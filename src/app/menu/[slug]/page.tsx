@@ -1,7 +1,7 @@
 import React from 'react';
 import dbConnect from '@/lib/mongodb';
 import Admin from '@/models/Admin';
-import { getMenuItems } from '@/actions/menu';
+import { getUpsellConfig } from '@/actions/upsell';
 import MenuList from '@/components/menu/MenuList';
 import Link from 'next/link';
 
@@ -18,6 +18,20 @@ interface MenuItem {
   image: string;
   price: number;
   available: boolean;
+  images?: string[];
+  preparation?: string;
+  ingredients?: string[];
+  nutrition?: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
+  spiceLevel?: number;
+  portionSize?: string;
+  prepTimeMin?: number;
+  prepTimeMax?: number;
+  chefNote?: string;
 }
 
 export default async function MenuPage({ params }: PageProps) {
@@ -27,11 +41,13 @@ export default async function MenuPage({ params }: PageProps) {
   let menuItems: MenuItem[] = [];
   let restaurantName = 'Tokyo Momos';
   let hasError = false;
+  let upsellDataResult: any = null;
 
   try {
     await dbConnect();
     const admin = await Admin.findOne({ restaurantId: slug });
-    menuItems = await getMenuItems(slug);
+    upsellDataResult = await getUpsellConfig(slug);
+    menuItems = upsellDataResult.menuItems;
     restaurantName = admin ? admin.restaurantName : 'Tokyo Momos';
   } catch (error) {
     console.error('Error loading menu page:', error);
@@ -89,6 +105,12 @@ export default async function MenuPage({ params }: PageProps) {
       initialItems={menuItems}
       restaurantName={restaurantName}
       restaurantId={slug}
+      upsellData={upsellDataResult ? {
+        pairingRules: upsellDataResult.pairingRules,
+        computedAffinity: upsellDataResult.computedAffinity,
+        completedCount: upsellDataResult.completedCount,
+        menuItems: upsellDataResult.menuItems
+      } : undefined}
     />
   );
 }
