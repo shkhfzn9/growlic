@@ -1,10 +1,10 @@
-import * as adminRepo from '@/repositories/adminRepository';
-import * as menuItemRepo from '@/repositories/menuItemRepository';
-import * as pairingRuleRepo from '@/repositories/pairingRuleRepository';
-import * as discountTierRepo from '@/repositories/discountTierRepository';
-import * as comboRuleRepo from '@/repositories/comboRuleRepository';
-import * as orderRepo from '@/repositories/orderRepository';
-import * as eventRepo from '@/repositories/eventRepository';
+import * as adminRepo from '@/features/auth/repository';
+import * as menuItemRepo from '@/features/menu/repositories/menuRepository';
+import * as pairingRuleRepo from '@/features/menu/repositories/pairingRuleRepository';
+import * as discountTierRepo from '@/features/menu/repositories/discountTierRepository';
+import * as comboRuleRepo from '@/features/menu/repositories/comboRuleRepository';
+import * as orderRepo from '@/features/order/repository';
+import * as eventRepo from '@/features/analytics/eventRepository';
 import { hashPassword } from '@/lib/auth';
 
 const SVG_MOMO = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjIiLz48dGV4dCB4PSI1MCUiIHk9IjU1JSIgZm9udC1mYW1pbHk9Im1vbm9zcGFjZSIgZm9udC1zaXplPSIzNCIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+8J+lnzwvdGV4dD48L3N2Zz4=`;

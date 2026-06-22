@@ -1,5 +1,5 @@
 import * as orderRepo from './repository';
-import * as customerRepo from '@/repositories/customerRepository';
+import * as customerRepo from '@/features/customer/repository';
 import { NotFoundError } from '@/shared/errors';
 import { IOrder } from './types';
 import { validateCreateOrderPayload, validateOrderId, validateRestaurantId } from './validation';

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { seedDatabase } from '@/services/seedService';
-import { handleRouteError } from '@/lib/errors';
+import { seedDatabase } from '@/shared/seedService';
+import { handleRouteError } from '@/shared/errors';
 
 /**
  * REST API Endpoint to clear the database rules/transactions and insert a default seeded dataset.

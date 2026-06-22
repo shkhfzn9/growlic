@@ -2,7 +2,7 @@ import * as menuItemRepo from '../repositories/menuRepository';
 import * as pairingRuleRepo from '../repositories/pairingRuleRepository';
 import * as discountTierRepo from '../repositories/discountTierRepository';
 import * as comboRuleRepo from '../repositories/comboRuleRepository';
-import * as orderRepo from '@/repositories/orderRepository';
+import * as orderRepo from '@/features/order/repository';
 import { ValidationError } from '@/shared/errors';
 
 let cachedAffinity: {

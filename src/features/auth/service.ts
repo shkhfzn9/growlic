@@ -1,8 +1,8 @@
 import * as adminRepo from './repository';
-import * as menuItemRepo from '@/repositories/menuItemRepository';
-import * as discountTierRepo from '@/repositories/discountTierRepository';
-import * as comboRuleRepo from '@/repositories/comboRuleRepository';
-import * as pairingRuleRepo from '@/repositories/pairingRuleRepository';
+import * as menuItemRepo from '@/features/menu/repositories/menuRepository';
+import * as discountTierRepo from '@/features/menu/repositories/discountTierRepository';
+import * as comboRuleRepo from '@/features/menu/repositories/comboRuleRepository';
+import * as pairingRuleRepo from '@/features/menu/repositories/pairingRuleRepository';
 import { hashPassword, comparePassword, signToken } from '@/lib/auth';
 import { AuthenticationError, ConflictError } from '@/shared/errors';
 import { IAdmin } from './types';
