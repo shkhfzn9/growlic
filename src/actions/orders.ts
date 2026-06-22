@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
-import * as orderService from '@/services/orderService';
+import * as orderService from '@/features/order';
 import * as analyticsService from '@/services/analyticsService';
 import * as eventService from '@/services/eventService';
 
