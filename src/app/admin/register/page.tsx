@@ -129,7 +129,7 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-white font-mono-custom">
-      <div className="w-full max-w-md border border-black p-8 bg-white shadow-sm">
+      <div className="w-full max-w-md border border-black p-5 sm:p-8 bg-white shadow-sm">
         {/* Header */}
         <div className="border-b border-black pb-4 mb-6 text-center">
           <h1 className="text-xl font-bold uppercase tracking-tighter">Register Restaurant</h1>

@@ -734,14 +734,16 @@ export default function CartPage() {
               return (
                 <div
                   key={nudge.id}
-                  className="bg-gradient-to-br from-amber-500 via-orange-500 to-red-500 text-white border border-black p-5 rounded-lg shadow-sm flex flex-col gap-3 relative select-none"
+                  className="bg-gradient-to-br from-amber-500 via-orange-500 to-red-500 text-white border border-black p-5 rounded-lg shadow-sm flex flex-col gap-3 select-none"
                 >
-                  <div className="absolute top-3 right-3 bg-white text-black font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
-                    {nudge.percentOff}% OFF GOAL
-                  </div>
-                  <div className="flex flex-col gap-1.5 pr-20">
-                    <span className="font-bold text-[10px] tracking-wider uppercase opacity-90">⭐ DISCOUNT BOOSTER</span>
-                    <h3 className="font-extrabold text-sm uppercase leading-tight">{nudge.message}</h3>
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
+                    <div className="flex flex-col gap-1.5">
+                      <span className="font-bold text-[10px] tracking-wider uppercase opacity-90">⭐ DISCOUNT BOOSTER</span>
+                      <h3 className="font-extrabold text-sm uppercase leading-tight">{nudge.message}</h3>
+                    </div>
+                    <div className="self-start bg-white text-black font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm shrink-0">
+                      {nudge.percentOff}% OFF GOAL
+                    </div>
                   </div>
                   {/* Progress Bar */}
                   <div className="w-full bg-black/30 h-3 border border-white/20 rounded-full overflow-hidden relative mt-1">
@@ -760,15 +762,17 @@ export default function CartPage() {
               return (
                 <div
                   key={nudge.id}
-                  className="bg-gradient-to-br from-orange-500 via-amber-500 to-red-500 text-white border border-black p-5 rounded-lg shadow-sm flex flex-col gap-3 relative select-none animate-fade-in"
+                  className="bg-gradient-to-br from-orange-500 via-amber-500 to-red-500 text-white border border-black p-5 rounded-lg shadow-sm flex flex-col gap-3 select-none animate-fade-in"
                 >
-                  <div className="absolute top-3 right-3 bg-yellow-400 text-black font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm animate-pulse">
-                    FREEBIE UNLOCK
-                  </div>
-                  <div className="flex flex-col gap-1 pr-24">
-                    <span className="font-bold text-[10px] tracking-wider uppercase opacity-90">🎁 COMBO DEAL</span>
-                    <h3 className="font-extrabold text-sm uppercase leading-tight">{nudge.message}</h3>
-                    <span className="text-[10px] uppercase font-bold text-yellow-200">Value of Reward: ₹{nudge.savings}!</span>
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
+                    <div className="flex flex-col gap-1">
+                      <span className="font-bold text-[10px] tracking-wider uppercase opacity-90">🎁 COMBO DEAL</span>
+                      <h3 className="font-extrabold text-sm uppercase leading-tight">{nudge.message}</h3>
+                      <span className="text-[10px] uppercase font-bold text-yellow-200">Value of Reward: ₹{nudge.savings}!</span>
+                    </div>
+                    <div className="self-start bg-yellow-400 text-black font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm animate-pulse shrink-0">
+                      FREEBIE UNLOCK
+                    </div>
                   </div>
 
                   {nudge.suggestedItems && nudge.suggestedItems.length > 0 && (
@@ -811,19 +815,21 @@ export default function CartPage() {
               return (
                 <div
                   key={nudge.id}
-                  className="bg-gradient-to-br from-amber-500 via-orange-500 to-red-500 text-white border border-black p-5 rounded-lg shadow-sm flex flex-col gap-3 relative select-none animate-fade-in"
+                  className="bg-gradient-to-br from-amber-500 via-orange-500 to-red-500 text-white border border-black p-5 rounded-lg shadow-sm flex flex-col gap-3 select-none animate-fade-in"
                 >
-                  <div className="absolute top-3 right-3 bg-black text-white font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
-                    RECOMMENDED
-                  </div>
-                  <div className="flex flex-col gap-1 pr-24">
-                    <span className="font-bold text-[10px] tracking-wider uppercase opacity-90">🔥 POPULAR PAIRING</span>
-                    <h3 className="font-extrabold text-sm uppercase leading-tight">Complete your meal</h3>
-                    {nudge.socialProof && (
-                      <span className="text-[10px] uppercase font-bold text-yellow-200 mt-0.5">
-                        📈 {nudge.socialProof}
-                      </span>
-                    )}
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
+                    <div className="flex flex-col gap-1">
+                      <span className="font-bold text-[10px] tracking-wider uppercase opacity-90">🔥 POPULAR PAIRING</span>
+                      <h3 className="font-extrabold text-sm uppercase leading-tight">Complete your meal</h3>
+                      {nudge.socialProof && (
+                        <span className="text-[10px] uppercase font-bold text-yellow-200 mt-0.5">
+                          📈 {nudge.socialProof}
+                        </span>
+                      )}
+                    </div>
+                    <div className="self-start bg-black text-white font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm shrink-0">
+                      RECOMMENDED
+                    </div>
                   </div>
 
                   {nudge.suggestedItems && nudge.suggestedItems.length > 0 && (
@@ -879,7 +885,7 @@ export default function CartPage() {
       {/* Book Order Details Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="border border-black bg-white p-6 w-full max-w-sm flex flex-col gap-4 font-mono-custom shadow-2xl relative">
+          <div className="border border-black bg-white p-4 sm:p-6 w-full max-w-sm flex flex-col gap-4 font-mono-custom shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-baseline border-b border-black pb-2 mb-2">
               <h3 className="font-bold text-sm uppercase">Enter Booking Details</h3>
               <button 
