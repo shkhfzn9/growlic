@@ -2,7 +2,7 @@
 
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth';
-import { getCustomersBySearch } from '@/services/customerService';
+import { getCustomersBySearch } from '@/features/customer';
 
 /**
  * Validates the admin's authentication cookie ('admin_token') and decodes its payload.
