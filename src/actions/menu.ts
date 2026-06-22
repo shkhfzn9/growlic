@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
-import * as menuItemService from '@/services/menuItemService';
+import * as menuService from '@/features/menu';
 
 /**
  * Validates the admin's authentication cookie ('admin_token') and decodes its payload.
@@ -34,7 +34,7 @@ async function checkAdminAuth() {
  */
 export async function getMenuItems(restaurantId: string) {
   try {
-    const items = await menuItemService.getMenuItems(restaurantId);
+    const items = await menuService.getMenuItems(restaurantId);
     return JSON.parse(JSON.stringify(items));
   } catch (error) {
     console.error('Error fetching menu items action:', error);
@@ -51,7 +51,7 @@ export async function getMenuItems(restaurantId: string) {
  */
 export async function getMenuItemById(id: string) {
   try {
-    const item = await menuItemService.getMenuItemById(id);
+    const item = await menuService.getMenuItemById(id);
     return JSON.parse(JSON.stringify(item));
   } catch (error) {
     console.error('Error fetching menu item by ID action:', error);
@@ -91,7 +91,7 @@ export async function createMenuItem(data: {
 }) {
   try {
     const admin = await checkAdminAuth();
-    const newItem = await menuItemService.createMenuItem(admin.restaurantId, data);
+    const newItem = await menuService.createMenuItem(admin.restaurantId, data);
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(newItem));
   } catch (error) {
@@ -136,7 +136,7 @@ export async function updateMenuItem(
 ) {
   try {
     const admin = await checkAdminAuth();
-    const updatedItem = await menuItemService.updateMenuItem(id, admin.restaurantId, data);
+    const updatedItem = await menuService.updateMenuItem(id, admin.restaurantId, data);
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(updatedItem));
   } catch (error) {
@@ -157,7 +157,7 @@ export async function updateMenuItem(
 export async function toggleMenuItemAvailability(id: string, available: boolean) {
   try {
     const admin = await checkAdminAuth();
-    const item = await menuItemService.toggleMenuItemAvailability(id, admin.restaurantId, available);
+    const item = await menuService.toggleMenuItemAvailability(id, admin.restaurantId, available);
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(item));
   } catch (error) {
@@ -177,7 +177,7 @@ export async function toggleMenuItemAvailability(id: string, available: boolean)
 export async function deleteMenuItem(id: string) {
   try {
     const admin = await checkAdminAuth();
-    await menuItemService.deleteMenuItem(id, admin.restaurantId);
+    await menuService.deleteMenuItem(id, admin.restaurantId);
     revalidatePath(`/menu/${admin.restaurantId}`);
     return { success: true };
   } catch (error) {

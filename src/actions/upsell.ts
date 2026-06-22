@@ -3,11 +3,7 @@
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
-import * as recommendationService from '@/services/recommendationService';
-import * as menuItemService from '@/services/menuItemService';
-import * as pairingRuleService from '@/services/pairingRuleService';
-import * as discountTierService from '@/services/discountTierService';
-import * as comboRuleService from '@/services/comboRuleService';
+import * as menuService from '@/features/menu';
 
 /**
  * Validates the admin's authentication cookie ('admin_token') and decodes its payload.
@@ -38,7 +34,7 @@ async function checkAdminAuth() {
  */
 export async function getUpsellConfig(restaurantId: string) {
   try {
-    const config = await recommendationService.getUpsellConfig(restaurantId);
+    const config = await menuService.getUpsellConfig(restaurantId);
     return JSON.parse(JSON.stringify(config));
   } catch (error) {
     console.error('Error fetching upsell config action:', error);
@@ -57,7 +53,7 @@ export async function getUpsellConfig(restaurantId: string) {
 export async function updateMenuItemCategory(itemId: string, category: string) {
   try {
     const admin = await checkAdminAuth();
-    const updated = await menuItemService.updateMenuItem(itemId, admin.restaurantId, { category: category.trim() });
+    const updated = await menuService.updateMenuItem(itemId, admin.restaurantId, { category: category.trim() });
     revalidatePath(`/admin/upsell`);
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(updated));
@@ -78,7 +74,7 @@ export async function updateMenuItemCategory(itemId: string, category: string) {
 export async function updateMenuItemPairsWith(itemId: string, pairsWithCategories: string[]) {
   try {
     const admin = await checkAdminAuth();
-    const updated = await menuItemService.updateMenuItem(itemId, admin.restaurantId, { pairsWithCategories });
+    const updated = await menuService.updateMenuItem(itemId, admin.restaurantId, { pairsWithCategories });
     revalidatePath(`/admin/upsell`);
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(updated));
@@ -89,7 +85,7 @@ export async function updateMenuItemPairsWith(itemId: string, pairsWithCategorie
 }
 
 /**
- * Server action to toggle a menu item's active/live visibility state.
+ * Server action to toggle a menu item's active/live availability state.
  * Triggers Next.js path revalidation.
  * 
  * @param itemId Target item database identifier.
@@ -99,7 +95,7 @@ export async function updateMenuItemPairsWith(itemId: string, pairsWithCategorie
 export async function updateMenuItemActive(itemId: string, active: boolean) {
   try {
     const admin = await checkAdminAuth();
-    const updated = await menuItemService.updateMenuItem(itemId, admin.restaurantId, { active, available: active });
+    const updated = await menuService.updateMenuItem(itemId, admin.restaurantId, { active, available: active });
     revalidatePath(`/admin/upsell`);
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(updated));
@@ -124,7 +120,7 @@ export async function savePairingRule(data: {
 }) {
   try {
     const admin = await checkAdminAuth();
-    const rule = await pairingRuleService.savePairingRule(admin.restaurantId, data);
+    const rule = await menuService.savePairingRule(admin.restaurantId, data);
     revalidatePath(`/admin/upsell`);
     return JSON.parse(JSON.stringify(rule));
   } catch (error) {
@@ -143,7 +139,7 @@ export async function savePairingRule(data: {
 export async function deletePairingRule(id: string) {
   try {
     const admin = await checkAdminAuth();
-    await pairingRuleService.deletePairingRule(id, admin.restaurantId);
+    await menuService.deletePairingRule(id, admin.restaurantId);
     revalidatePath(`/admin/upsell`);
     return { success: true };
   } catch (error) {
@@ -168,7 +164,7 @@ export async function saveDiscountTier(data: {
 }) {
   try {
     const admin = await checkAdminAuth();
-    const tier = await discountTierService.saveDiscountTier(admin.restaurantId, data);
+    const tier = await menuService.saveDiscountTier(admin.restaurantId, data);
     revalidatePath(`/admin/upsell`);
     return JSON.parse(JSON.stringify(tier));
   } catch (error) {
@@ -187,7 +183,7 @@ export async function saveDiscountTier(data: {
 export async function deleteDiscountTier(id: string) {
   try {
     const admin = await checkAdminAuth();
-    await discountTierService.deleteDiscountTier(id, admin.restaurantId);
+    await menuService.deleteDiscountTier(id, admin.restaurantId);
     revalidatePath(`/admin/upsell`);
     return { success: true };
   } catch (error) {
@@ -214,7 +210,7 @@ export async function saveComboRule(data: {
 }) {
   try {
     const admin = await checkAdminAuth();
-    const rule = await comboRuleService.saveComboRule(admin.restaurantId, data);
+    const rule = await menuService.saveComboRule(admin.restaurantId, data);
     revalidatePath(`/admin/upsell`);
     return JSON.parse(JSON.stringify(rule));
   } catch (error) {
@@ -233,7 +229,7 @@ export async function saveComboRule(data: {
 export async function deleteComboRule(id: string) {
   try {
     const admin = await checkAdminAuth();
-    await comboRuleService.deleteComboRule(id, admin.restaurantId);
+    await menuService.deleteComboRule(id, admin.restaurantId);
     revalidatePath(`/admin/upsell`);
     return { success: true };
   } catch (error) {
