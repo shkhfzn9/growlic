@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { authenticateAdmin } from '@/services/adminService';
-import { handleRouteError } from '@/lib/errors';
+import { authenticateAdmin } from '@/features/auth';
+import { handleRouteError } from '@/shared/errors';
 
 /**
  * REST API Endpoint to authenticate an admin using email/password.

@@ -1,5 +1,5 @@
 import React from 'react';
-import { getAdminByRestaurantId } from '@/services/adminService';
+import { getAdminByRestaurantId } from '@/features/auth';
 import { getUpsellConfig } from '@/actions/upsell';
 import MenuList from '@/components/menu/MenuList';
 import Link from 'next/link';

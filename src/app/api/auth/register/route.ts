@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { registerRestaurant } from '@/services/adminService';
-import { handleRouteError } from '@/lib/errors';
+import { registerRestaurant } from '@/features/auth';
+import { handleRouteError } from '@/shared/errors';
 
 /**
  * REST API Endpoint to register a new restaurant owner profile.

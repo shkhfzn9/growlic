@@ -100,6 +100,9 @@ const eslintConfig = defineConfig([
       "src/repositories/**/*.js",
       "src/models/**/*.ts",
       "src/models/**/*.js",
+      "src/features/**/model.ts",
+      "src/features/**/repository.ts",
+      "src/features/**/repositories/**/*.ts",
       "src/lib/mongodb.ts",
     ],
     rules: {

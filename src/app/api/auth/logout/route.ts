@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { handleRouteError } from '@/lib/errors';
+import { handleRouteError } from '@/shared/errors';
 
 /**
  * REST API Endpoint to clear the active admin's cookie session ('admin_token').
