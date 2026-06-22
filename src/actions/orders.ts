@@ -4,8 +4,8 @@ import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import * as orderService from '@/features/order';
-import * as analyticsService from '@/services/analyticsService';
-import * as eventService from '@/services/eventService';
+import * as analyticsService from '@/features/analytics';
+import * as eventService from '@/features/analytics';
 
 /**
  * Validates the admin's authentication cookie ('admin_token') and decodes its payload.
