@@ -29,8 +29,10 @@ export async function getDashboardMetrics(restaurantId: string, startDateStr?: s
   // Fetch raw dataset using analyticsRepository
   const rawData = await analyticsRepo.fetchRawDashboardData(restaurantId, start, end);
   const {
-    orders,
-    events,
+    eventAggregates,
+    orderAggregates,
+    recentCompletedOrders,
+    ordersTableRaw,
     menuItems,
     pairingRules,
     comboRules,
@@ -39,25 +41,30 @@ export async function getDashboardMetrics(restaurantId: string, startDateStr?: s
     totalCustomersCount
   } = rawData;
 
-  const ordersWithPhone = orders.filter(o => o.customerPhone && o.customerPhone.trim().length > 5);
-  const uniquePhones = Array.from(new Set(ordersWithPhone.map(o => o.customerPhone.trim())));
+  const phoneNumbers = (orderAggregates.customerPhones || [])
+    .map((c: any) => c._id)
+    .filter((phone: string) => phone && phone.trim().length > 5);
 
   // Fetch repeating customers from Customer database
-  const customers = uniquePhones.length > 0 
-    ? await customerRepo.findManyByPhones(restaurantId, uniquePhones)
+  const customers = phoneNumbers.length > 0 
+    ? await customerRepo.findManyByPhones(restaurantId, phoneNumbers)
     : [];
 
   return computeDashboardMetrics({
     start,
     end,
-    orders,
-    events,
+    eventAggregates,
+    orderAggregates,
+    recentCompletedOrders,
+    ordersTableRaw,
     menuItems,
     pairingRules,
     comboRules,
     discountTiers,
     pendingOrdersCount,
     totalCustomersCount,
+    discountTierAchievement: rawData.discountTierAchievement,
+    avgOrderValueNoTier: rawData.avgOrderValueNoTier,
     customersByPhone: customers,
   });
 }

@@ -42,8 +42,7 @@ export async function getUpsellConfig(restaurantId: string) {
     computedAffinity = cachedAffinity.computedAffinity;
     completedCount = cachedAffinity.completedCount;
   } else {
-    const allOrders = await orderRepo.findAll(restaurantId);
-    const completedOrders = allOrders.filter(o => o.status === 'completed');
+    const completedOrders = await orderRepo.findRecentCompleted(restaurantId, 1000);
     completedCount = completedOrders.length;
 
     // Association rule mining algorithm (requires at least 50 historical orders to run)

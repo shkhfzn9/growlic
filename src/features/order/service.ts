@@ -83,15 +83,23 @@ export async function getOrderById(id: string, restaurantId?: string): Promise<I
 }
 
 /**
- * Retrieves all order histories associated with a specific restaurant tenant.
+ * Retrieves order histories associated with a specific restaurant tenant, paginated and optionally filtered.
  * Throws a ValidationError if the restaurantId argument is missing.
  * 
  * @param restaurantId The unique identifier slug of the restaurant tenant.
- * @returns An array of normalized IOrder objects.
+ * @param limit Maximum number of orders to fetch.
+ * @param skip Number of orders to skip.
+ * @param status Optional order status filter.
+ * @returns An object containing normalized IOrder objects and totalCount.
  */
-export async function getAdminOrders(restaurantId: string): Promise<IOrder[]> {
+export async function getAdminOrders(
+  restaurantId: string,
+  limit?: number,
+  skip?: number,
+  status?: string
+): Promise<{ orders: IOrder[]; totalCount: number }> {
   validateRestaurantId(restaurantId);
-  return orderRepo.findAll(restaurantId);
+  return orderRepo.findAll(restaurantId, limit, skip, status);
 }
 
 /**

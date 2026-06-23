@@ -78,6 +78,22 @@ export async function create(data: {
 }
 
 /**
+ * Retrieves the most recent completed orders for a restaurant, up to a limit.
+ * Used by the recommendation engine to optimize memory and query sizing.
+ * 
+ * @param restaurantId Scope parameter enforcing tenant isolation.
+ * @param limitCount Maximum number of orders to fetch (default: 1000).
+ * @returns Array of normalized completed orders.
+ */
+export async function findRecentCompleted(restaurantId: string, limitCount = 1000): Promise<IOrder[]> {
+  await dbConnect();
+  const docs = await Order.find({ restaurantId, status: 'completed' })
+                          .sort({ createdAt: -1 })
+                          .limit(limitCount);
+  return docs.map(normalizeOrder);
+}
+
+/**
  * Retrieves a single order by its database identifier ID within a specific restaurant scope.
  * 
  * @param restaurantId Scope parameter enforcing multi-tenant isolation.
@@ -97,15 +113,38 @@ export async function findById(restaurantId: string | undefined, id: string): Pr
 }
 
 /**
- * Retrieves all orders associated with a specific restaurant tenant, sorted descending by creation time.
+ * Retrieves orders associated with a specific restaurant tenant, paginated and optionally filtered.
  * 
  * @param restaurantId The restaurant slug ID.
- * @returns An array of normalized IOrder objects.
+ * @param limit Maximum number of orders to fetch.
+ * @param skip Number of orders to skip.
+ * @param status Optional order status filter.
+ * @returns An object containing normalized IOrder objects and totalCount.
  */
-export async function findAll(restaurantId: string): Promise<IOrder[]> {
+export async function findAll(
+  restaurantId: string,
+  limit?: number,
+  skip?: number,
+  status?: string
+): Promise<{ orders: IOrder[]; totalCount: number }> {
   await dbConnect();
-  const docs = await Order.find({ restaurantId }).sort({ createdAt: -1 });
-  return docs.map(normalizeOrder);
+  const query: any = { restaurantId };
+  if (status && status !== 'all') {
+    query.status = status;
+  }
+  const totalCount = await Order.countDocuments(query);
+  const findQuery = Order.find(query).sort({ createdAt: -1 });
+  if (skip !== undefined) {
+    findQuery.skip(skip);
+  }
+  if (limit !== undefined) {
+    findQuery.limit(limit);
+  }
+  const docs = await findQuery;
+  return {
+    orders: docs.map(normalizeOrder),
+    totalCount
+  };
 }
 
 /**

@@ -1,5 +1,3 @@
-import { IOrder } from '@/features/order/types';
-import { IEvent } from './types';
 import { IMenuItem, IPairingRule, IComboRule, IDiscountTier } from '@/features/menu/types';
 import { ICustomer } from '@/features/customer/types';
 
@@ -31,32 +29,57 @@ export function getItemAllergens(ingredients: string[]): string[] {
 export function computeDashboardMetrics(params: {
   start: Date;
   end: Date;
-  orders: IOrder[];
-  events: IEvent[];
+  eventAggregates: {
+    cartsStarted: Array<{ count: number }>;
+    nudgeShownCounts: Array<{ _id: string; count: number }>;
+    ruleStatsTriggers: Array<{ _id: string; count: number }>;
+    modalOpenCounts: Array<{ _id: string; count: number }>;
+  };
+  orderAggregates: {
+    kpis: Array<{ ordersCount: number; revenue: number; itemsCount: number }>;
+    upsellKPI: Array<{ revenue: number }>;
+    heatmap: Array<{ _id: { dayOfWeek: number; hour: number }; count: number; revenue: number; nonCancelledCount: number }>;
+    trends: Array<{ _id: string; orders: number; revenue: number; itemsCount: number }>;
+    itemSales: Array<{ _id: string; itemId: string; quantity: number; revenue: number }>;
+    ruleConversions: Array<{ _id: string; count: number; revenue: number }>;
+    customerPhones: Array<{ _id: string; orderCount: number }>;
+  };
+  recentCompletedOrders: Array<{ items: Array<{ name: string }> }>;
+  ordersTableRaw: any[];
   menuItems: IMenuItem[];
   pairingRules: IPairingRule[];
   comboRules: IComboRule[];
   discountTiers: IDiscountTier[];
   pendingOrdersCount: number;
   totalCustomersCount: number;
+  discountTierAchievement: Array<{
+    tierId: string;
+    minSpend: number;
+    percentOff: number;
+    ordersReached: number;
+    avgOrderValueReached: number;
+  }>;
+  avgOrderValueNoTier: number;
   customersByPhone: ICustomer[];
 }) {
   const {
     start,
     end,
-    orders,
-    events,
+    eventAggregates,
+    orderAggregates,
+    recentCompletedOrders,
+    ordersTableRaw,
     menuItems,
     pairingRules,
     comboRules,
-    discountTiers,
     pendingOrdersCount,
     totalCustomersCount,
+    discountTierAchievement,
+    avgOrderValueNoTier,
     customersByPhone
   } = params;
 
   const menuItemsMap = new Map(menuItems.map(item => [item.name, item]));
-  const menuItemsIdMap = new Map(menuItems.map(item => [item._id, item]));
 
   // 1. Time Intelligence Day x Hour Heatmap (7 days x 24 hours matrix)
   const dayHourHeatmap: number[][] = Array(7).fill(null).map(() => Array(24).fill(0));
@@ -77,40 +100,36 @@ export function computeDashboardMetrics(params: {
     { name: 'Late Night', label: 'Late Night (23:00 - 06:00)', hours: [23, 0, 1, 2, 3, 4, 5], orders: 0, revenue: 0 },
   ];
 
-  let totalRevenue = 0;
-  let totalOrders = 0;
-  let totalItemsCount = 0;
+  (orderAggregates.heatmap || []).forEach(item => {
+    const day = item._id.dayOfWeek - 1; // 1-7 (Sun-Sat) to 0-6
+    const hour = item._id.hour;
 
-  for (const order of orders) {
-    const date = new Date(order.createdAt!);
-    const day = date.getDay();
-    const hour = date.getHours();
+    if (day >= 0 && day < 7 && hour >= 0 && hour < 24) {
+      dayHourHeatmap[day][hour] = item.count;
 
-    dayHourHeatmap[day][hour]++;
-
-    if (order.status !== 'cancelled') {
-      totalOrders++;
-      totalRevenue += order.total;
-      totalItemsCount += order.items.reduce((sum, item) => sum + item.quantity, 0);
-
-      bestDaysMap[day].totalOrders++;
-      bestDaysMap[day].totalRevenue += order.total;
+      bestDaysMap[day].totalOrders += item.nonCancelledCount;
+      bestDaysMap[day].totalRevenue += item.revenue;
 
       const period = periods.find(p => p.hours.includes(hour));
       if (period) {
-        period.orders++;
-        period.revenue += order.total;
+        period.orders += item.nonCancelledCount;
+        period.revenue += item.revenue;
       }
     }
-  }
+  });
 
   const bestDays = [...bestDaysMap].sort((a, b) => b.totalRevenue - a.totalRevenue);
   const bestTimeOfDay = periods
     .map(p => ({ period: p.name, label: p.label, orders: p.orders, revenue: p.revenue }))
     .sort((a, b) => b.orders - a.orders);
 
+  // KPIs
+  const kpi = orderAggregates.kpis[0] || { ordersCount: 0, revenue: 0, itemsCount: 0 };
+  const totalOrders = kpi.ordersCount;
+  const totalRevenue = kpi.revenue;
   const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-  const averageItemsPerOrder = totalOrders > 0 ? totalItemsCount / totalOrders : 0;
+  const averageItemsPerOrder = totalOrders > 0 ? kpi.itemsCount / totalOrders : 0;
+  const upsellRevenue = orderAggregates.upsellKPI[0]?.revenue || 0;
 
   // 2. Revenue Trends
   const trendsMap: Record<string, { date: string; revenue: number; orders: number; itemsCount: number }> = {};
@@ -121,16 +140,14 @@ export function computeDashboardMetrics(params: {
     currentDate.setDate(currentDate.getDate() + 1);
   }
 
-  for (const order of orders) {
-    if (order.status === 'cancelled') continue;
-    const dStr = new Date(order.createdAt!).toISOString().split('T')[0];
-    if (!trendsMap[dStr]) {
-      trendsMap[dStr] = { date: dStr, revenue: 0, orders: 0, itemsCount: 0 };
+  (orderAggregates.trends || []).forEach(item => {
+    const dStr = item._id;
+    if (trendsMap[dStr]) {
+      trendsMap[dStr].revenue = item.revenue;
+      trendsMap[dStr].orders = item.orders;
+      trendsMap[dStr].itemsCount = item.itemsCount;
     }
-    trendsMap[dStr].revenue += order.total;
-    trendsMap[dStr].orders++;
-    trendsMap[dStr].itemsCount += order.items.reduce((sum, item) => sum + item.quantity, 0);
-  }
+  });
 
   const trends = Object.values(trendsMap)
     .map(t => ({
@@ -143,18 +160,18 @@ export function computeDashboardMetrics(params: {
     .sort((a, b) => a.date.localeCompare(b.date));
 
   // Sortable order list
-  const ordersTable = orders.map(order => {
-    const itemsSummary = order.items.map(item => `${item.name} x${item.quantity}`).join(', ');
+  const ordersTable = (ordersTableRaw || []).map(order => {
+    const itemsSummary = (order.items || []).map((item: any) => `${item.name} x${item.quantity}`).join(', ');
     const discountApplied = Math.max(0, order.subtotal - order.total);
-    const upsellAccepted = order.items.some(item => item.originatedFromNudge);
+    const upsellAccepted = (order.items || []).some((item: any) => item.originatedFromNudge);
     return {
-      _id: order._id,
+      _id: order._id.toString(),
       customerName: order.customerName,
       customerPhone: order.customerPhone,
       subtotal: order.subtotal,
       total: order.total,
       status: order.status,
-      createdAt: order.createdAt,
+      createdAt: order.createdAt instanceof Date ? order.createdAt.toISOString() : new Date(order.createdAt).toISOString(),
       discountApplied,
       upsellAccepted,
       itemsSummary,
@@ -164,30 +181,57 @@ export function computeDashboardMetrics(params: {
 
   // 3. Upsell Engine Performance
   const nudgeShownCounts = { cross_sell: 0, threshold_discount: 0, combo_freebie: 0 };
-  for (const ev of events) {
-    if (ev.type === 'nudge_show') {
-      const nt = ev.nudgeType;
-      if (nt === 'cross_sell' || nt === 'threshold_discount' || nt === 'combo_freebie') {
-        nudgeShownCounts[nt as 'cross_sell' | 'threshold_discount' | 'combo_freebie']++;
-      }
+  (eventAggregates.nudgeShownCounts || []).forEach(item => {
+    const nt = item._id;
+    if (nt in nudgeShownCounts) {
+      nudgeShownCounts[nt as keyof typeof nudgeShownCounts] = item.count;
     }
-  }
+  });
 
   const nudgeAcceptedCounts = { cross_sell: 0, threshold_discount: 0, combo_freebie: 0 };
-  let upsellAttributedRevenue = 0;
 
-  for (const order of orders) {
-    if (order.status === 'cancelled') continue;
-    for (const item of order.items) {
-      if (item.originatedFromNudge && item.nudgeType) {
-        const nt = item.nudgeType;
-        if (nt === 'cross_sell' || nt === 'threshold_discount' || nt === 'combo_freebie') {
-          nudgeAcceptedCounts[nt as 'cross_sell' | 'threshold_discount' | 'combo_freebie']++;
-          upsellAttributedRevenue += item.price * item.quantity;
-        }
-      }
-    }
+  const ruleMap = new Map<string, { description: string; type: 'pairing' | 'combo' }>();
+  for (const rule of pairingRules) {
+    ruleMap.set(rule._id.toString(), {
+      description: `Pairing Rule: Category ${rule.triggerCategory} ➔ ${rule.suggestCategories.join(', ')}`,
+      type: 'pairing',
+    });
   }
+  for (const rule of comboRules) {
+    ruleMap.set(rule._id.toString(), {
+      description: `Combo Rule: ${rule.customerMessage}`,
+      type: 'combo',
+    });
+  }
+
+  const ruleStats: Record<string, { triggers: number; conversions: number; revenue: number }> = {};
+  (eventAggregates.ruleStatsTriggers || []).forEach(item => {
+    const ruleId = item._id;
+    ruleStats[ruleId] = { triggers: item.count, conversions: 0, revenue: 0 };
+  });
+
+  (orderAggregates.ruleConversions || []).forEach(item => {
+    const ruleId = item._id;
+    if (!ruleStats[ruleId]) {
+      ruleStats[ruleId] = { triggers: 0, conversions: 0, revenue: 0 };
+    }
+    ruleStats[ruleId].conversions = item.count;
+    ruleStats[ruleId].revenue = item.revenue;
+
+    // Track accepted counts by type
+    const ruleInfo = ruleMap.get(ruleId);
+    if (ruleInfo) {
+      if (ruleInfo.type === 'pairing') {
+        nudgeAcceptedCounts.cross_sell += item.count;
+      } else {
+        // combos and discounts
+        nudgeAcceptedCounts.combo_freebie += item.count;
+      }
+    } else {
+      // Fallback cross_sell
+      nudgeAcceptedCounts.cross_sell += item.count;
+    }
+  });
 
   const upsellPerformance = {
     conversionRateByType: {
@@ -207,53 +251,11 @@ export function computeDashboardMetrics(params: {
         rate: nudgeShownCounts.combo_freebie > 0 ? (nudgeAcceptedCounts.combo_freebie / nudgeShownCounts.combo_freebie) * 100 : 0,
       },
     },
-    attributedRevenue: upsellAttributedRevenue,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    attributedRevenue: upsellRevenue,
     topRules: [] as any[],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     discountTierAchievement: [] as any[],
-    avgOrderValueNoTier: 0,
+    avgOrderValueNoTier: avgOrderValueNoTier,
   };
-
-  const ruleMap = new Map<string, { description: string; type: 'pairing' | 'combo' }>();
-  
-  for (const rule of pairingRules) {
-    ruleMap.set(rule._id, {
-      description: `Pairing Rule: Category ${rule.triggerCategory} ➔ ${rule.suggestCategories.join(', ')}`,
-      type: 'pairing',
-    });
-  }
-  for (const rule of comboRules) {
-    ruleMap.set(rule._id, {
-      description: `Combo Rule: ${rule.customerMessage}`,
-      type: 'combo',
-    });
-  }
-
-  const ruleStats: Record<string, { triggers: number; conversions: number; revenue: number }> = {};
-  for (const ev of events) {
-    if (ev.type === 'nudge_show' && ev.itemId) {
-      const ruleId = ev.itemId;
-      if (!ruleStats[ruleId]) {
-        ruleStats[ruleId] = { triggers: 0, conversions: 0, revenue: 0 };
-      }
-      ruleStats[ruleId].triggers++;
-    }
-  }
-
-  for (const order of orders) {
-    if (order.status === 'cancelled') continue;
-    for (const item of order.items) {
-      if (item.originatedFromNudge && item.nudgeRuleId) {
-        const ruleId = item.nudgeRuleId;
-        if (!ruleStats[ruleId]) {
-          ruleStats[ruleId] = { triggers: 0, conversions: 0, revenue: 0 };
-        }
-        ruleStats[ruleId].conversions++;
-        ruleStats[ruleId].revenue += item.price * item.quantity;
-      }
-    }
-  }
 
   upsellPerformance.topRules = Object.entries(ruleStats).map(([ruleId, stats]) => {
     const info = ruleMap.get(ruleId) || { description: `Rule #${ruleId.substring(ruleId.length - 6).toUpperCase()}`, type: 'pairing' as const };
@@ -268,61 +270,34 @@ export function computeDashboardMetrics(params: {
     };
   }).sort((a, b) => b.revenue - a.revenue);
 
-  // Discount Tiers achievement rates
-  upsellPerformance.discountTierAchievement = discountTiers.map((tier) => {
-    const reachedOrders = orders.filter(o => o.status !== 'cancelled' && o.subtotal >= tier.minSpend);
-    const count = reachedOrders.length;
-    const avgAov = count > 0 ? reachedOrders.reduce((sum, o) => sum + o.total, 0) / count : 0;
-    return {
-      tierId: tier._id,
-      minSpend: tier.minSpend,
-      percentOff: tier.percentOff,
-      ordersReached: count,
-      percentReached: totalOrders > 0 ? (count / totalOrders) * 100 : 0,
-      avgOrderValueReached: avgAov,
-    };
-  });
-
-  const ordersNoTier = orders.filter(o => {
-    if (o.status === 'cancelled') return false;
-    const lowestMin = discountTiers.length > 0 ? discountTiers[0].minSpend : 0;
-    return o.subtotal < lowestMin;
-  });
-  upsellPerformance.avgOrderValueNoTier = ordersNoTier.length > 0
-    ? ordersNoTier.reduce((sum, o) => sum + o.total, 0) / ordersNoTier.length
-    : 0;
+  upsellPerformance.discountTierAchievement = discountTierAchievement.map(tier => ({
+    ...tier,
+    percentReached: totalOrders > 0 ? (tier.ordersReached / totalOrders) * 100 : 0,
+  }));
 
   // 4. Menu Intelligence
-  const itemSales: Record<string, { itemId: string; name: string; quantity: number; revenue: number }> = {};
-  for (const item of menuItems) {
-    itemSales[item.name] = {
-      itemId: item._id,
-      name: item.name,
-      quantity: 0,
-      revenue: 0,
-    };
-  }
+  const itemSalesList = (orderAggregates.itemSales || []).map(item => ({
+    itemId: item.itemId ? item.itemId.toString() : '',
+    name: item._id,
+    quantity: item.quantity,
+    revenue: item.revenue
+  }));
 
-  for (const order of orders) {
-    if (order.status === 'cancelled') continue;
-    for (const item of order.items) {
-      if (!itemSales[item.name]) {
-        itemSales[item.name] = {
-          itemId: item.menuItemId || '',
-          name: item.name,
-          quantity: 0,
-          revenue: 0,
-        };
-      }
-      itemSales[item.name].quantity += item.quantity;
-      itemSales[item.name].revenue += item.price * item.quantity;
+  // Ensure menu items with 0 sales are also in sales list for underperforming item evaluation
+  menuItems.forEach(item => {
+    if (!itemSalesList.some(s => s.name === item.name)) {
+      itemSalesList.push({
+        itemId: item._id.toString(),
+        name: item.name,
+        quantity: 0,
+        revenue: 0
+      });
     }
-  }
+  });
 
-  const salesList = Object.values(itemSales);
-  const bestSellersQty = [...salesList].sort((a, b) => b.quantity - a.quantity).slice(0, 10);
-  const bestSellersRev = [...salesList].sort((a, b) => b.revenue - a.revenue).slice(0, 10);
-  const worstSellers = [...salesList]
+  const bestSellersQty = [...itemSalesList].sort((a, b) => b.quantity - a.quantity).slice(0, 10);
+  const bestSellersRev = [...itemSalesList].sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+  const worstSellers = [...itemSalesList]
     .sort((a, b) => a.quantity - b.quantity)
     .slice(0, 10)
     .map(item => ({
@@ -330,12 +305,11 @@ export function computeDashboardMetrics(params: {
       flagReview: item.quantity === 0,
     }));
 
-  // Computed co-occurrence pairs from real order data
+  // Computed co-occurrence pairs from limited completed orders (last 1,000)
   const itemCountMap: Record<string, number> = {};
   const coOccurrenceMap: Record<string, Record<string, number>> = {};
-  const completedOrders = orders.filter(o => o.status === 'completed');
 
-  completedOrders.forEach((order) => {
+  recentCompletedOrders.forEach((order) => {
     const uniqueItems = Array.from(new Set(order.items.map((i) => i.name)));
     uniqueItems.forEach((item) => {
       itemCountMap[item] = (itemCountMap[item] || 0) + 1;
@@ -363,7 +337,7 @@ export function computeDashboardMetrics(params: {
     matchingManualRule: boolean;
   }> = [];
 
-  const minCoCount = completedOrders.length >= 50 ? 5 : 2;
+  const minCoCount = recentCompletedOrders.length >= 50 ? 5 : 2;
 
   Object.keys(coOccurrenceMap).forEach((itemA) => {
     const countA = itemCountMap[itemA] || 0;
@@ -399,36 +373,23 @@ export function computeDashboardMetrics(params: {
   });
   frequentlyBoughtTogether.sort((a, b) => b.coOccurrenceCount - a.coOccurrenceCount || b.confidence - a.confidence);
 
-  // Modal views vs add-to-cart conversion (Menu Friction)
-  const modalOpenCounts: Record<string, number> = {};
-  for (const ev of events) {
-    if (ev.type === 'nudge_show' && ev.itemId) {
-      const ruleId = ev.itemId;
-      const ruleInfo = ruleMap.get(ruleId);
-      if (ruleInfo && ruleInfo.type === 'pairing') {
-        // Find triggering categories or suggestions if needed, but wait!
-        // In the legacy code, modal conversion checks modal_open type of events.
-      }
-    }
-    if (ev.type === 'modal_open' && ev.itemId) {
-      const menuItem = menuItemsIdMap.get(ev.itemId);
-      if (menuItem) {
-        modalOpenCounts[menuItem.name] = (modalOpenCounts[menuItem.name] || 0) + 1;
-      }
-    }
-  }
+  // Modal converted conversions mapping (Menu Friction)
+  const modalOpenMap = new Map<string, number>();
+  (eventAggregates.modalOpenCounts || []).forEach(item => {
+    modalOpenMap.set(item._id, item.count);
+  });
 
   const menuFriction = menuItems.map(item => {
-    const name = item.name;
-    const modalOpens = modalOpenCounts[name] || 0;
-    const salesObj = itemSales[name];
+    const itemIdStr = item._id.toString();
+    const modalOpens = modalOpenMap.get(itemIdStr) || 0;
+    const salesObj = itemSalesList.find(s => s.name === item.name);
     const conversions = salesObj ? salesObj.quantity : 0;
     const rate = modalOpens > 0 ? (conversions / modalOpens) * 100 : 0;
     const flagReview = modalOpens >= 10 && rate < 15;
 
     return {
-      itemId: item._id,
-      name,
+      itemId: itemIdStr,
+      name: item.name,
       modalOpens,
       conversions,
       conversionRate: rate,
@@ -446,8 +407,7 @@ export function computeDashboardMetrics(params: {
   };
 
   // 5. Customer Behavior
-  const ordersWithPhone = orders.filter(o => o.customerPhone && o.customerPhone.trim().length > 5);
-  const hasPhoneNumbers = ordersWithPhone.length > 0;
+  const hasPhoneNumbers = (orderAggregates.customerPhones || []).length > 0;
   let newVsRepeat = null;
 
   if (hasPhoneNumbers && customersByPhone.length > 0) {
@@ -455,18 +415,20 @@ export function computeDashboardMetrics(params: {
 
     let newOrdersCount = 0;
     let repeatOrdersCount = 0;
+    let repeatCustomersCount = 0;
+    let newCustomersCount = 0;
 
-    for (const order of ordersWithPhone) {
-      if (repeatPhones.has(order.customerPhone.trim())) {
-        repeatOrdersCount++;
+    (orderAggregates.customerPhones || []).forEach(item => {
+      const phone = item._id.trim();
+      const isRepeat = repeatPhones.has(phone);
+      if (isRepeat) {
+        repeatOrdersCount += item.orderCount;
+        repeatCustomersCount++;
       } else {
-        newOrdersCount++;
+        newOrdersCount += item.orderCount;
+        newCustomersCount++;
       }
-    }
-
-    const totalUniqueCustomers = Array.from(new Set(ordersWithPhone.map(o => o.customerPhone.trim()))).length;
-    const repeatCustomersCount = repeatPhones.size;
-    const newCustomersCount = Math.max(0, totalUniqueCustomers - repeatCustomersCount);
+    });
 
     newVsRepeat = {
       newCustomers: newCustomersCount,
@@ -476,7 +438,7 @@ export function computeDashboardMetrics(params: {
     };
   }
 
-  const cartsStarted = events.filter(e => e.type === 'cart_create').length;
+  const cartsStarted = eventAggregates.cartsStarted[0]?.count || 0;
   const abandonmentRate = cartsStarted > 0 ? Math.max(0, ((cartsStarted - totalOrders) / cartsStarted) * 100) : 0;
 
   const customerBehavior = {
@@ -492,20 +454,17 @@ export function computeDashboardMetrics(params: {
 
   // 6. Operational Signals
   const spiceDistribution = { mild: 0, medium: 0, hot: 0 };
-  for (const order of orders) {
-    if (order.status === 'cancelled') continue;
-    for (const item of order.items) {
-      const menuItem = menuItemsMap.get(item.name);
-      const level = menuItem ? menuItem.spiceLevel : 0;
-      if (level <= 1) {
-        spiceDistribution.mild += item.quantity;
-      } else if (level === 2) {
-        spiceDistribution.medium += item.quantity;
-      } else {
-        spiceDistribution.hot += item.quantity;
-      }
+  itemSalesList.forEach(item => {
+    const menuItem = menuItemsMap.get(item.name);
+    const level = menuItem ? menuItem.spiceLevel : 0;
+    if (level <= 1) {
+      spiceDistribution.mild += item.quantity;
+    } else if (level === 2) {
+      spiceDistribution.medium += item.quantity;
+    } else {
+      spiceDistribution.hot += item.quantity;
     }
-  }
+  });
 
   const allergenFrequency: Record<string, number> = {
     nuts: 0,
@@ -523,17 +482,14 @@ export function computeDashboardMetrics(params: {
     itemAllergenMap.set(item.name, getItemAllergens(item.ingredients));
   }
 
-  for (const order of orders) {
-    if (order.status === 'cancelled') continue;
-    for (const item of order.items) {
-      const allergens = itemAllergenMap.get(item.name) || [];
-      for (const allergen of allergens) {
-        if (allergenFrequency[allergen] !== undefined) {
-          allergenFrequency[allergen] += item.quantity;
-        }
+  itemSalesList.forEach(item => {
+    const allergens = itemAllergenMap.get(item.name) || [];
+    for (const allergen of allergens) {
+      if (allergenFrequency[allergen] !== undefined) {
+        allergenFrequency[allergen] += item.quantity;
       }
     }
-  }
+  });
 
   const operationalSignals = {
     spiceDistribution,
@@ -545,7 +501,7 @@ export function computeDashboardMetrics(params: {
     revenue: totalRevenue,
     aov: averageOrderValue,
     itemsPerOrder: averageItemsPerOrder,
-    upsellRevenue: upsellAttributedRevenue,
+    upsellRevenue: upsellRevenue,
     pendingOrders: pendingOrdersCount,
     customers: totalCustomersCount,
     dayHourHeatmap,

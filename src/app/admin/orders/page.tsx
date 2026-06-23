@@ -40,24 +40,34 @@ function OrdersContent() {
   const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
 
-  const loadOrders = async (showLoading = false) => {
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const limit = 50;
+
+  const loadOrders = async (showLoading = false, pageNum = 1) => {
     if (showLoading) setLoading(true);
     try {
-      const data = await getAdminOrders();
-      setOrders(data);
+      const skipNum = (pageNum - 1) * limit;
+      const data = await getAdminOrders(limit, skipNum, filter);
+      const fetchedOrders = data.orders || [];
+      const total = data.totalCount || 0;
+
+      setOrders(fetchedOrders);
+      setTotalCount(total);
+      setCurrentPage(pageNum);
 
       // Handle highlight from URL if selectOrder is not manually set yet
       if (highlightId && showLoading) {
-        const found = data.find((o: Order) => o._id === highlightId);
+        const found = fetchedOrders.find((o: Order) => o._id === highlightId);
         if (found) {
           setSelectedOrder(found);
           setViewMode('detail');
         }
-      } else if (!selectedOrder && data.length > 0 && showLoading) {
-        setSelectedOrder(data[0]);
+      } else if (!selectedOrder && fetchedOrders.length > 0 && showLoading) {
+        setSelectedOrder(fetchedOrders[0]);
       } else if (selectedOrder) {
         // Keep selected order updated with new status if polled
-        const updated = data.find((o: Order) => o._id === selectedOrder._id);
+        const updated = fetchedOrders.find((o: Order) => o._id === selectedOrder._id);
         if (updated) {
           setSelectedOrder(updated);
         }
@@ -73,16 +83,21 @@ function OrdersContent() {
   };
 
   useEffect(() => {
-    Promise.resolve().then(() => loadOrders(true));
+    loadOrders(true, 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter]);
+
+  useEffect(() => {
+    Promise.resolve().then(() => loadOrders(true, currentPage));
 
     // Poll orders every 10 seconds
     const interval = setInterval(() => {
-      loadOrders(false);
+      loadOrders(false, currentPage);
     }, 10000);
 
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [highlightId]);
+  }, [highlightId, currentPage]);
 
   const handleStatusChange = async (orderId: string, nextStatus: Order['status']) => {
     setActionLoading((prev) => ({ ...prev, [orderId]: true }));
@@ -129,7 +144,7 @@ function OrdersContent() {
     }
   };
 
-  const filteredOrders = orders.filter((o) => (filter === 'all' ? true : o.status === filter));
+  const filteredOrders = orders;
 
   const getStatusLabel = (status: Order['status']) => {
     return status.toUpperCase();
@@ -192,58 +207,83 @@ function OrdersContent() {
         </div>
       ) : (
         /* Split-Pane Layout */
-        <div className="flex flex-col lg:flex-row gap-6 items-start">
-          {/* Left pane: Orders list */}
-          <div className={`w-full lg:w-1/2 border border-black bg-white max-h-[600px] overflow-y-auto ${viewMode === 'detail' ? 'hidden lg:block' : 'block'}`}>
-            {filteredOrders.length === 0 ? (
-              <div className="p-8 text-center text-xs uppercase text-zinc-400">
-                No orders matching filter.
-              </div>
-            ) : (
-              <div className="divide-y divide-black">
-                {filteredOrders.map((order) => {
-                  const displayId = order._id.substring(order._id.length - 6).toUpperCase();
-                  const isSelected = selectedOrder?._id === order._id;
-                  const itemNames = order.items.map((i) => i.name).join(', ');
-                  const dateStr = new Date(order.createdAt).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  });
+        <div className="flex flex-col lg:flex-row gap-6 items-start w-full">
+          {/* Left pane: Orders list container */}
+          <div className={`w-full lg:w-1/2 flex flex-col gap-3 ${viewMode === 'detail' ? 'hidden lg:block' : 'block'}`}>
+            <div className="border border-black bg-white max-h-[600px] overflow-y-auto">
+              {filteredOrders.length === 0 ? (
+                <div className="p-8 text-center text-xs uppercase text-zinc-400">
+                  No orders matching filter.
+                </div>
+              ) : (
+                <div className="divide-y divide-black">
+                  {filteredOrders.map((order) => {
+                    const displayId = order._id.substring(order._id.length - 6).toUpperCase();
+                    const isSelected = selectedOrder?._id === order._id;
+                    const itemNames = order.items.map((i) => i.name).join(', ');
+                    const dateStr = new Date(order.createdAt).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    });
 
-                  return (
-                    <div
-                      key={order._id}
-                      onClick={() => {
-                        setSelectedOrder(order);
-                        setViewMode('detail');
-                      }}
-                      className={`p-4 flex flex-col gap-1 cursor-pointer hover:bg-zinc-50 transition-colors ${
-                        isSelected ? 'bg-zinc-100 border-l-4 border-black font-bold' : ''
-                      }`}
-                    >
-                      <div className="flex justify-between items-baseline">
-                        <span className="text-sm font-bold">#{displayId}</span>
-                        <span className="text-[10px] text-zinc-500">{dateStr}</span>
+                    return (
+                      <div
+                        key={order._id}
+                        onClick={() => {
+                          setSelectedOrder(order);
+                          setViewMode('detail');
+                        }}
+                        className={`p-4 flex flex-col gap-1 cursor-pointer hover:bg-zinc-50 transition-colors ${
+                          isSelected ? 'bg-zinc-100 border-l-4 border-black font-bold' : ''
+                        }`}
+                      >
+                        <div className="flex justify-between items-baseline">
+                          <span className="text-sm font-bold">#{displayId}</span>
+                          <span className="text-[10px] text-zinc-500">{dateStr}</span>
+                        </div>
+                        <div className="text-xs uppercase flex justify-between">
+                          <span>{order.customerName} {order.tableId ? `(Table ${order.tableId})` : ''}</span>
+                          <span className="font-bold">₹{order.total}</span>
+                        </div>
+                        <div className="text-[10px] text-zinc-500 truncate mt-1">
+                          ITEMS: {itemNames}
+                        </div>
+                        <div className="mt-2 flex justify-start">
+                          <span
+                            className={`text-[9px] font-bold px-1.5 py-0.5 border ${getStatusColorClass(
+                              order.status
+                            )}`}
+                          >
+                            {getStatusLabel(order.status)}
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-xs uppercase flex justify-between">
-                        <span>{order.customerName} {order.tableId ? `(Table ${order.tableId})` : ''}</span>
-                        <span className="font-bold">₹{order.total}</span>
-                      </div>
-                      <div className="text-[10px] text-zinc-500 truncate mt-1">
-                        ITEMS: {itemNames}
-                      </div>
-                      <div className="mt-2 flex justify-start">
-                        <span
-                          className={`text-[9px] font-bold px-1.5 py-0.5 border ${getStatusColorClass(
-                            order.status
-                          )}`}
-                        >
-                          {getStatusLabel(order.status)}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Pagination Controls */}
+            {totalCount > limit && (
+              <div className="flex justify-between items-center px-4 py-2 border border-black bg-white text-xs uppercase font-bold">
+                <button
+                  disabled={currentPage <= 1}
+                  onClick={() => loadOrders(true, currentPage - 1)}
+                  className="px-3 py-1 border border-black hover:bg-zinc-100 disabled:opacity-50 disabled:hover:bg-white cursor-pointer"
+                >
+                  PREV
+                </button>
+                <span>
+                  PAGE {currentPage} OF {Math.ceil(totalCount / limit)} ({totalCount} total)
+                </span>
+                <button
+                  disabled={currentPage >= Math.ceil(totalCount / limit)}
+                  onClick={() => loadOrders(true, currentPage + 1)}
+                  className="px-3 py-1 border border-black hover:bg-zinc-100 disabled:opacity-50 disabled:hover:bg-white cursor-pointer"
+                >
+                  NEXT
+                </button>
               </div>
             )}
           </div>

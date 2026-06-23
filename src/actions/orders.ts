@@ -100,7 +100,7 @@ export async function getOrderById(id: string, restaurantId?: string) {
  * 
  * @returns Serialized, plain array of order history.
  */
-export async function getAdminOrders() {
+export async function getAdminOrders(limit?: number, skip?: number, status?: string) {
   try {
     const admin = await checkAdminAuth();
     const isAllowed = (await can('manage_orders', admin.token, admin.restaurantId)) ||
@@ -109,8 +109,8 @@ export async function getAdminOrders() {
       throw new Error('Forbidden: Insufficient permissions to view orders');
     }
 
-    const orders = await orderService.getAdminOrders(admin.restaurantId);
-    return JSON.parse(JSON.stringify(orders));
+    const result = await orderService.getAdminOrders(admin.restaurantId, limit, skip, status);
+    return JSON.parse(JSON.stringify(result));
   } catch (error) {
     console.error('Error fetching admin orders action:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch orders';
