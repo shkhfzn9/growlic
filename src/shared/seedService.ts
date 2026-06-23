@@ -26,7 +26,7 @@ const SVG_SNACKS = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My
 export async function seedDatabase() {
   // 1. Seed default admin
   const defaultEmail = 'admin@growlic.com';
-  let admin = await adminRepo.findByEmail(defaultEmail);
+  let admin = await adminRepo.findByEmail('tokyo-momos', defaultEmail);
   
   if (!admin) {
     const hashedPassword = await hashPassword('password123');
@@ -43,7 +43,7 @@ export async function seedDatabase() {
     if (!admin.phone || !admin.designation) {
       const phone = admin.phone || '9876543210';
       const designation = admin.designation || 'owner';
-      admin = await adminRepo.updatePhoneAndDesignation(admin._id, phone, designation) || admin;
+      admin = await adminRepo.updatePhoneAndDesignation('tokyo-momos', admin._id, phone, designation) || admin;
     }
   }
 
@@ -892,7 +892,7 @@ export async function seedDatabase() {
 
   // Seed Menu items
   await menuItemRepo.deleteByRestaurantId(restId);
-  const insertedMenu = await menuItemRepo.insertMany(detailedMenuItems);
+  const insertedMenu = await menuItemRepo.insertMany(restId, detailedMenuItems);
 
   // 3. Seed default PairingRule configurations
   const defaultPairings = [
@@ -941,7 +941,7 @@ export async function seedDatabase() {
   ];
 
   await pairingRuleRepo.deleteByRestaurantId(restId);
-  const insertedPairings = await pairingRuleRepo.insertMany(defaultPairings);
+  const insertedPairings = await pairingRuleRepo.insertMany(restId, defaultPairings);
 
   // 4. Seed default DiscountTier configurations
   const defaultDiscountTiers = [
@@ -951,7 +951,7 @@ export async function seedDatabase() {
   ];
 
   await discountTierRepo.deleteByRestaurantId(restId);
-  const insertedTiers = await discountTierRepo.insertMany(defaultDiscountTiers);
+  const insertedTiers = await discountTierRepo.insertMany(restId, defaultDiscountTiers);
 
   // 5. Seed default ComboRule configurations
   const defaultComboRules = [
@@ -994,7 +994,7 @@ export async function seedDatabase() {
   ];
 
   await comboRuleRepo.deleteByRestaurantId(restId);
-  const insertedCombos = await comboRuleRepo.insertMany(defaultComboRules);
+  const insertedCombos = await comboRuleRepo.insertMany(restId, defaultComboRules);
 
   // 6. Seed dummy completed orders and events (staged for realistic analytics)
   await orderRepo.deleteByRestaurantId(restId);
@@ -1187,8 +1187,8 @@ export async function seedDatabase() {
     });
   }
 
-  await orderRepo.insertMany(dummyOrders);
-  await eventRepo.insertMany(dummyEvents);
+  await orderRepo.insertMany(restId, dummyOrders);
+  await eventRepo.insertMany(restId, dummyEvents);
 
   return {
     success: true,

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
-import { addItem, updateQuantity, removeItem } from '@/redux/cartSlice';
+import { addItem, updateQuantity, removeItem, setTableId } from '@/redux/cartSlice';
 import Link from 'next/link';
 import { logEvent } from '@/actions/orders';
 
@@ -134,6 +134,10 @@ interface MenuListProps {
   initialItems: MenuItem[];
   restaurantName: string;
   restaurantId: string;
+  table?: string;
+  logoUrl?: string;
+  primaryColor?: string;
+  welcomeMessage?: string;
   upsellData?: {
     pairingRules: any[];
     computedAffinity: Record<string, Array<{ name: string; confidence: number }>>;
@@ -142,9 +146,22 @@ interface MenuListProps {
   };
 }
 
-export default function MenuList({ initialItems, restaurantName, restaurantId, upsellData }: MenuListProps) {
+export default function MenuList({
+  initialItems,
+  restaurantName,
+  restaurantId,
+  table,
+  logoUrl,
+  primaryColor,
+  welcomeMessage,
+  upsellData,
+}: MenuListProps) {
   const dispatch = useDispatch();
   const cart = useSelector((state: RootState) => state.cart);
+
+  React.useEffect(() => {
+    dispatch(setTableId(table || null));
+  }, [table, dispatch]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -287,16 +304,67 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
 
   return (
     <div className="flex flex-col min-h-screen pb-24">
+      {/* Brand custom styles */}
+      <style>{`
+        .brand-bg-primary { background-color: ${primaryColor || '#000000'} !important; }
+        .brand-border-primary { border-color: ${primaryColor || '#000000'} !important; }
+        .brand-text-primary { color: ${primaryColor || '#000000'} !important; }
+        
+        .brand-btn-primary {
+          border-color: ${primaryColor || '#000000'} !important;
+          color: ${primaryColor || '#000000'} !important;
+          background-color: transparent !important;
+        }
+        .brand-btn-primary:hover {
+          background-color: ${primaryColor || '#000000'} !important;
+          color: #ffffff !important;
+        }
+        
+        .brand-btn-solid {
+          background-color: ${primaryColor || '#000000'} !important;
+          color: #ffffff !important;
+          border-color: ${primaryColor || '#000000'} !important;
+        }
+        .brand-btn-solid:hover {
+          background-color: transparent !important;
+          color: ${primaryColor || '#000000'} !important;
+        }
+        .hover\\:text-brand-primary:hover {
+          color: ${primaryColor || '#000000'} !important;
+        }
+        .divide-brand-primary > :not([hidden]) ~ :not([hidden]) {
+          border-color: ${primaryColor || '#000000'} !important;
+        }
+      `}</style>
+
       {/* Header */}
-      <header className="border-b-2 border-black py-6 px-4 bg-white sticky top-0 z-10">
+      <header className="border-b-2 py-6 px-4 bg-white sticky top-0 z-10 brand-border-primary">
         <div className="max-w-2xl mx-auto flex flex-col gap-4">
-          <div className="flex justify-between items-baseline flex-wrap gap-2">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tighter uppercase font-mono-custom break-words max-w-[75%]">
-              {restaurantName}
-            </h1>
-            <span className="text-xs uppercase border border-black px-2 py-0.5 font-mono-custom shrink-0">
-              QR Menu
-            </span>
+          <div className="flex items-center gap-4">
+            {logoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={logoUrl}
+                alt={restaurantName}
+                className="w-14 h-14 object-cover border-2 brand-border-primary shrink-0"
+                style={{ borderRadius: '0px' }}
+              />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex justify-between items-baseline flex-wrap gap-2">
+                <h1 className="text-2xl sm:text-3xl font-black tracking-tighter uppercase font-mono-custom break-words max-w-[75%]">
+                  {restaurantName}
+                </h1>
+                <span className="text-xs uppercase border px-2 py-0.5 font-mono-custom shrink-0 brand-border-primary brand-text-primary font-bold">
+                  {table ? `Table ${table}` : 'QR Menu'}
+                </span>
+              </div>
+              {welcomeMessage && (
+                <p className="text-[11px] text-zinc-500 font-sans italic mt-1 leading-tight">
+                  {welcomeMessage}
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Search */}
@@ -305,17 +373,17 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
             placeholder="Search menu items..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full text-sm font-mono-custom"
+            className="w-full text-sm font-mono-custom border brand-border-primary focus:ring-0 focus:outline-none"
           />
 
           {/* Categories */}
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none font-mono-custom">
             <button
               onClick={() => setSelectedCategory(null)}
-              className={`px-3 py-1 text-xs border border-black cursor-pointer transition-colors ${
+              className={`px-3 py-1 text-xs border cursor-pointer transition-colors ${
                 selectedCategory === null
-                  ? 'bg-black text-white font-bold'
-                  : 'bg-white text-black hover:bg-black hover:text-white'
+                  ? 'brand-btn-solid font-bold'
+                  : 'brand-btn-primary'
               }`}
             >
               ALL
@@ -324,10 +392,10 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-3 py-1 text-xs border border-black uppercase cursor-pointer transition-colors whitespace-nowrap ${
+                className={`px-3 py-1 text-xs border uppercase cursor-pointer transition-colors whitespace-nowrap ${
                   selectedCategory === cat
-                    ? 'bg-black text-white font-bold'
-                    : 'bg-white text-black hover:bg-black hover:text-white'
+                    ? 'brand-btn-solid font-bold'
+                    : 'brand-btn-primary'
                 }`}
               >
                 {cat}
@@ -340,7 +408,7 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
       {/* Menu List */}
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-6">
         {filteredItems.length === 0 ? (
-          <div className="border border-dashed border-black p-8 text-center font-mono-custom text-sm">
+          <div className="border border-dashed p-8 text-center font-mono-custom text-sm brand-border-primary">
             NO ITEMS FOUND MATCHING YOUR SEARCH.
           </div>
         ) : (
@@ -350,13 +418,13 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
               return (
                 <div
                   key={item._id}
-                  className="border border-black p-4 flex gap-4 bg-white transition-colors duration-100"
+                  className="border p-4 flex gap-4 bg-white transition-colors duration-100 brand-border-primary"
                 >
                   {/* Image/Emoji */}
                   {item.image && (
                     <div 
                       onClick={() => openDetailedModal(item)}
-                      className="w-20 h-20 border border-black flex-shrink-0 flex items-center justify-center bg-zinc-50 select-none cursor-pointer hover:opacity-80 transition-opacity"
+                      className="w-20 h-20 border flex-shrink-0 flex items-center justify-center bg-zinc-50 select-none cursor-pointer hover:opacity-80 transition-opacity brand-border-primary"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
@@ -400,22 +468,22 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
                       {qty === 0 ? (
                         <button
                           onClick={() => handleAddOne(item)}
-                          className="px-4 py-1 text-xs border border-black font-bold uppercase bg-white text-black hover:bg-black hover:text-white font-mono-custom transition-all"
+                          className="px-4 py-1 text-xs border font-bold uppercase font-mono-custom transition-all brand-btn-primary"
                         >
                           [ ADD ]
                         </button>
                       ) : (
-                        <div className="flex items-center border border-black font-mono-custom text-xs">
+                        <div className="flex items-center border font-mono-custom text-xs brand-border-primary">
                           <button
                             onClick={() => handleRemoveOne(item._id, qty)}
-                            className="px-3 py-1 font-bold border-r border-black hover:bg-zinc-100"
+                            className="px-3 py-1 font-bold border-r hover:bg-zinc-100 brand-border-primary"
                           >
                             -
                           </button>
-                          <span className="px-4 py-1 font-bold">{qty}</span>
+                          <span className="px-4 py-1 font-bold brand-text-primary">{qty}</span>
                           <button
                             onClick={() => handleAddMore(item._id, qty)}
-                            className="px-3 py-1 font-bold border-l border-black hover:bg-zinc-100"
+                            className="px-3 py-1 font-bold border-l hover:bg-zinc-100 brand-border-primary"
                           >
                             +
                           </button>
@@ -432,17 +500,17 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
 
       {/* Floating Bottom Cart Bar */}
       {totalItemsCount > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-black text-white py-4 px-6 border-t-2 border-black z-20">
+        <div className="fixed bottom-0 left-0 right-0 py-4 px-6 border-t-2 z-20 brand-bg-primary brand-border-primary text-white">
           <div className="max-w-2xl mx-auto flex justify-between items-center font-mono-custom">
             <div className="flex flex-col">
-              <span className="text-xs text-zinc-400">
+              <span className="text-xs text-zinc-300">
                 {totalItemsCount} ITEM{totalItemsCount > 1 ? 'S' : ''} IN CART
               </span>
               <span className="text-lg font-bold">Total: ₹{cart.total}</span>
             </div>
             <Link
               href="/cart"
-              className="border border-white bg-white text-black hover:bg-black hover:text-white hover:border-white px-5 py-2 text-sm font-bold uppercase transition-all"
+              className="border border-white bg-white px-5 py-2 text-sm font-bold uppercase transition-all brand-text-primary hover:bg-transparent hover:text-white"
             >
               [ VIEW CART → ]
             </Link>
@@ -457,13 +525,13 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
           onClick={() => setSelectedDetailedItem(null)}
         >
           <div 
-            className="bg-white border-2 border-black max-w-md w-full max-h-[85vh] flex flex-col overflow-hidden relative shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+            className="bg-white border-2 max-w-md w-full max-h-[85vh] flex flex-col overflow-hidden relative shadow-2xl animate-in fade-in zoom-in-95 duration-150 brand-border-primary"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="border-b-2 border-black p-4 flex justify-between items-center bg-black text-white">
+            <div className="border-b-2 p-4 flex justify-between items-center text-white brand-bg-primary brand-border-primary">
               <div>
-                <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-mono-custom">
+                <span className="text-[10px] uppercase tracking-wider text-zinc-300 font-mono-custom">
                   {selectedDetailedItem.category}
                 </span>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -483,7 +551,7 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
               </div>
               <button 
                 onClick={() => setSelectedDetailedItem(null)}
-                className="px-2 py-1 text-xs border border-white font-mono-custom hover:bg-white hover:text-black transition-all cursor-pointer font-bold"
+                className="px-2 py-1 text-xs border border-white font-mono-custom hover:bg-white hover:text-brand-primary transition-all cursor-pointer font-bold"
               >
                 [ CLOSE ]
               </button>
@@ -491,7 +559,7 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
 
             {/* Slider */}
             {slides.length > 0 && (
-              <div className="relative w-full h-56 border-b border-black bg-zinc-50 overflow-hidden group">
+              <div className="relative w-full h-56 border-b bg-zinc-50 overflow-hidden group brand-border-primary">
                 <div 
                   className="flex h-full transition-transform duration-300 ease-out"
                   style={{ transform: `translate3d(-${activeImageIndex * 100}%, 0, 0)` }}
@@ -512,28 +580,28 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
                   <>
                     <button
                       onClick={() => setActiveImageIndex((prev) => (prev - 1 + slides.length) % slides.length)}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 bg-white border border-black w-8 h-8 flex items-center justify-center text-sm font-bold font-mono-custom hover:bg-black hover:text-white transition-colors cursor-pointer shadow-md z-10"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 bg-white border w-8 h-8 flex items-center justify-center text-sm font-bold font-mono-custom transition-colors cursor-pointer shadow-md z-10 brand-border-primary hover:brand-bg-primary hover:text-white"
                     >
                       &lt;
                     </button>
                     <button
                       onClick={() => setActiveImageIndex((prev) => (prev + 1) % slides.length)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 bg-white border border-black w-8 h-8 flex items-center justify-center text-sm font-bold font-mono-custom hover:bg-black hover:text-white transition-colors cursor-pointer shadow-md z-10"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 bg-white border w-8 h-8 flex items-center justify-center text-sm font-bold font-mono-custom transition-colors cursor-pointer shadow-md z-10 brand-border-primary hover:brand-bg-primary hover:text-white"
                     >
                       &gt;
                     </button>
-                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1 z-10 bg-white border border-black px-2 py-1">
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1 z-10 bg-white border px-2 py-1 brand-border-primary">
                       {slides.map((_, idx) => (
                         <button
                           key={idx}
                           onClick={() => setActiveImageIndex(idx)}
-                          className={`w-1.5 h-1.5 rounded-full border border-black transition-all cursor-pointer ${
-                            activeImageIndex === idx ? 'bg-black scale-110' : 'bg-white hover:bg-black/50'
+                          className={`w-1.5 h-1.5 rounded-full border transition-all cursor-pointer brand-border-primary ${
+                            activeImageIndex === idx ? 'brand-bg-primary scale-110' : 'bg-white hover:bg-black/50'
                           }`}
                         />
                       ))}
                     </div>
-                    <div className="absolute top-3 right-3 bg-white border border-black px-2 py-0.5 text-[9px] font-bold font-mono-custom z-10">
+                    <div className="absolute top-3 right-3 bg-white border px-2 py-0.5 text-[9px] font-bold font-mono-custom z-10 brand-border-primary">
                       {activeImageIndex + 1} / {slides.length}
                     </div>
                   </>
@@ -544,7 +612,7 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
             {/* Modal Body / Scrollable Content */}
             <div className="p-5 flex-1 overflow-y-auto space-y-4">
               {/* Portion, Price, Spice, Prep Info Box */}
-              <div className="border border-black p-3 bg-zinc-50 space-y-1.5 font-mono-custom">
+              <div className="border p-3 bg-zinc-50 space-y-1.5 font-mono-custom brand-border-primary">
                 <div className="flex justify-between items-baseline">
                   <span className="font-bold text-sm text-black">₹{selectedDetailedItem.price}</span>
                   {selectedDetailedItem.spiceLevel !== undefined && selectedDetailedItem.spiceLevel > 0 && (
@@ -573,7 +641,7 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
 
               {/* Chef's Note */}
               {selectedDetailedItem.chefNote && (
-                <div className="border-l-2 border-black pl-3 py-0.5 italic text-xs font-medium text-zinc-700 font-sans leading-relaxed">
+                <div className="border-l-2 pl-3 py-0.5 italic text-xs font-medium text-zinc-700 font-sans leading-relaxed brand-border-primary">
                   &ldquo;{selectedDetailedItem.chefNote}&rdquo; &mdash; Chef
                 </div>
               )}
@@ -597,7 +665,7 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
                 <div>
                   <h4 className="text-[10px] font-bold uppercase text-zinc-400 font-mono-custom mb-1.5">Ingredients &amp; Allergens</h4>
                   <ul className="text-xs font-sans space-y-1">
-                    {selectedDetailedItem.ingredients.map((ing, idx) => {
+                     {selectedDetailedItem.ingredients.map((ing, idx) => {
                       const allergen = isAllergen(ing);
                       return (
                         <li key={idx} className="text-zinc-700 flex items-start gap-1.5">
@@ -634,7 +702,7 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
                     <h4 className="text-[10px] font-bold uppercase text-zinc-400 font-mono-custom mb-1.5">
                       Nutrition Facts {hasCustomNutrition ? '' : '(Approx)'}
                     </h4>
-                    <div className="grid grid-cols-4 border border-black text-center divide-x divide-black bg-zinc-50 font-mono-custom text-xs">
+                    <div className="grid grid-cols-4 border text-center bg-zinc-50 font-mono-custom text-xs brand-border-primary divide-brand-primary">
                       <div className="p-2">
                         <div className="text-zinc-500 text-[9px] uppercase">Cal</div>
                         <div className="font-bold text-sm text-black">{displayNutrition.calories}</div>
@@ -667,7 +735,7 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
                 const pairedQty = getItemQuantity(pairedItem._id);
 
                 return (
-                  <div className="border-t border-dashed border-black pt-4 mt-2">
+                  <div className="border-t border-dashed pt-4 mt-2 brand-border-primary">
                     <h4 className="text-[10px] font-bold uppercase text-zinc-400 font-mono-custom mb-2">
                       Goes Well With
                     </h4>
@@ -682,9 +750,9 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
                       </p>
                     )}
 
-                    <div className="border border-black p-3 bg-zinc-50 flex gap-3 items-center">
+                    <div className="border p-3 bg-zinc-50 flex gap-3 items-center brand-border-primary">
                       {pairedItem.image && (
-                        <div className="w-12 h-12 border border-black flex-shrink-0 flex items-center justify-center bg-white select-none">
+                        <div className="w-12 h-12 border flex-shrink-0 flex items-center justify-center bg-white select-none brand-border-primary">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={pairedItem.image} alt={pairedItem.name} className="w-full h-full object-cover" />
                         </div>
@@ -692,29 +760,29 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
                       
                       <div className="flex-1 min-w-0">
                         <h5 className="font-bold text-xs uppercase truncate">{pairedItem.name}</h5>
-                        <span className="font-mono-custom text-[10px] font-bold text-zinc-600">₹{pairedItem.price}</span>
+                        <span className="font-mono-custom text-[10px] font-bold text-zinc-650">₹{pairedItem.price}</span>
                       </div>
 
                       <div>
                         {pairedQty === 0 ? (
                           <button
                             onClick={() => handleAddOne(pairedItem, true, 'cross_sell', pairedItem._id)}
-                            className="px-3 py-1.5 border border-black text-[10px] font-bold uppercase bg-white text-black hover:bg-black hover:text-white transition-all cursor-pointer font-mono-custom"
+                            className="px-3 py-1.5 border text-[10px] font-bold uppercase transition-all cursor-pointer font-mono-custom brand-btn-primary"
                           >
                             + Add
                           </button>
                         ) : (
-                          <div className="flex items-center border border-black text-[10px] font-mono-custom bg-white">
+                          <div className="flex items-center border text-[10px] font-mono-custom bg-white brand-border-primary">
                             <button
                               onClick={() => handleRemoveOne(pairedItem._id, pairedQty)}
-                              className="px-2 py-1 font-bold border-r border-black hover:bg-zinc-100"
+                              className="px-2 py-1 font-bold border-r hover:bg-zinc-100 brand-border-primary"
                             >
                               -
                             </button>
-                            <span className="px-3 py-1 font-bold text-black">{pairedQty}</span>
+                            <span className="px-3 py-1 font-bold brand-text-primary">{pairedQty}</span>
                             <button
                               onClick={() => handleAddMore(pairedItem._id, pairedQty)}
-                              className="px-2 py-1 font-bold border-l border-black hover:bg-zinc-100"
+                              className="px-2 py-1 font-bold border-l hover:bg-zinc-100 brand-border-primary"
                             >
                               +
                             </button>
@@ -728,32 +796,32 @@ export default function MenuList({ initialItems, restaurantName, restaurantId, u
             </div>
 
             {/* Bottom Bar: Price & Add to Cart */}
-            <div className="border-t-2 border-black p-4 bg-white flex justify-between items-center font-mono-custom">
+            <div className="border-t-2 p-4 bg-white flex justify-between items-center font-mono-custom brand-border-primary">
               <div className="flex flex-col">
                 <span className="text-[9px] text-zinc-400 uppercase">Total Price</span>
-                <span className="font-bold text-lg text-black">₹{selectedDetailedItem.price}</span>
+                <span className="font-bold text-lg brand-text-primary">₹{selectedDetailedItem.price}</span>
               </div>
               
               <div>
                 {getItemQuantity(selectedDetailedItem._id) === 0 ? (
                   <button
                     onClick={() => handleAddOne(selectedDetailedItem)}
-                    className="px-5 py-2 border border-black font-bold uppercase bg-black text-white hover:bg-white hover:text-black transition-all text-xs cursor-pointer"
+                    className="px-5 py-2 border font-bold uppercase transition-all text-xs cursor-pointer brand-btn-solid"
                   >
                     [ Add to Cart ]
                   </button>
                 ) : (
-                  <div className="flex items-center border border-black text-xs">
+                  <div className="flex items-center border text-xs brand-border-primary">
                     <button
                       onClick={() => handleRemoveOne(selectedDetailedItem._id, getItemQuantity(selectedDetailedItem._id))}
-                      className="px-3.5 py-2 font-bold border-r border-black hover:bg-zinc-100 cursor-pointer"
+                      className="px-3.5 py-2 font-bold border-r hover:bg-zinc-100 cursor-pointer brand-border-primary"
                     >
                       -
                     </button>
-                    <span className="px-5 py-2 font-bold text-black">{getItemQuantity(selectedDetailedItem._id)}</span>
+                    <span className="px-5 py-2 font-bold brand-text-primary">{getItemQuantity(selectedDetailedItem._id)}</span>
                     <button
                       onClick={() => handleAddMore(selectedDetailedItem._id, getItemQuantity(selectedDetailedItem._id))}
-                      className="px-3.5 py-2 font-bold border-l border-black hover:bg-zinc-100 cursor-pointer"
+                      className="px-3.5 py-2 font-bold border-l hover:bg-zinc-100 cursor-pointer brand-border-primary"
                     >
                       +
                     </button>

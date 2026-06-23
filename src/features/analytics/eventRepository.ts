@@ -67,15 +67,17 @@ export async function findInRange(
 }
 
 /**
- * Performs a bulk insert of event log documents.
+ * Performs a bulk insert of event log documents scoped to a specific restaurant.
  * 
+ * @param restaurantId The restaurant slug ID.
  * @param items Array of raw event parameters.
  * @returns An array of newly created, normalized event records.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function insertMany(items: any[]): Promise<IEvent[]> {
+export async function insertMany(restaurantId: string, items: any[]): Promise<IEvent[]> {
   await dbConnect();
-  const docs = await Event.insertMany(items);
+  const itemsWithTenant = items.map(item => ({ ...item, restaurantId }));
+  const docs = await Event.insertMany(itemsWithTenant);
   return docs.map(normalizeEvent);
 }
 

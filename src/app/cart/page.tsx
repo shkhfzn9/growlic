@@ -588,6 +588,7 @@ export default function CartPage() {
         restaurantId: cart.restaurantId,
         customerName: name.trim(),
         customerPhone: phone.trim(),
+        tableId: cart.tableId || undefined,
         items: cart.items.map((item) => ({
           menuItemId: item.id,
           name: item.name,
@@ -603,7 +604,7 @@ export default function CartPage() {
       
       dispatch(clearCart());
       setShowModal(false);
-      router.push(`/track/${createdOrder._id}`);
+      router.push(`/track/${createdOrder._id}?restaurantId=${cart.restaurantId}`);
     } catch (err) {
       console.error(err);
       const message = err instanceof Error ? err.message : 'Failed to place order. Please try again.';
@@ -640,7 +641,7 @@ export default function CartPage() {
           <h1 className="text-2xl font-bold uppercase">Your Cart</h1>
           {cart.restaurantName && (
             <span className="text-[10px] uppercase text-zinc-500 font-bold block mt-1">
-              Ordering from: {cart.restaurantName}
+              Ordering from: {cart.restaurantName} {cart.tableId ? `| Table ${cart.tableId}` : ''}
             </span>
           )}
         </div>

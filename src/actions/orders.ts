@@ -6,12 +6,14 @@ import { revalidatePath } from 'next/cache';
 import * as orderService from '@/features/order';
 import * as analyticsService from '@/features/analytics';
 import * as eventService from '@/features/analytics';
+import { validateSession, can, getAdminByRestaurantId } from '@/features/auth';
+import { logAction } from '@/features/audit';
 
 /**
  * Validates the admin's authentication cookie ('admin_token') and decodes its payload.
  * Throws an Error if the token is missing or invalid.
  * 
- * @returns The decoded admin session JWT token object.
+ * @returns The decoded admin session JWT token object, raw token, and userId.
  */
 async function checkAdminAuth() {
   const cookieStore = await cookies();
@@ -25,7 +27,17 @@ async function checkAdminAuth() {
     throw new Error('Unauthorized: Invalid token');
   }
 
-  return decoded;
+  const isValid = await validateSession(decoded.restaurantId, token);
+  if (!isValid) {
+    throw new Error('Unauthorized: Session has expired or been revoked');
+  }
+
+  const admin = await getAdminByRestaurantId(decoded.restaurantId);
+  if (!admin) {
+    throw new Error('Unauthorized: Admin account not found');
+  }
+
+  return { ...decoded, token, userId: admin._id };
 }
 
 /**
@@ -39,6 +51,7 @@ export async function createOrder(data: {
   restaurantId: string;
   customerName: string;
   customerPhone: string;
+  tableId?: string;
   items: Array<{
     menuItemId: string;
     name: string;
@@ -70,9 +83,9 @@ export async function createOrder(data: {
  * @param id The target order ID string.
  * @returns Serialized, plain order record, or null.
  */
-export async function getOrderById(id: string) {
+export async function getOrderById(id: string, restaurantId?: string) {
   try {
-    const order = await orderService.getOrderById(id);
+    const order = await orderService.getOrderById(id, restaurantId);
     if (!order) return null;
     return JSON.parse(JSON.stringify(order));
   } catch (error) {
@@ -90,6 +103,12 @@ export async function getOrderById(id: string) {
 export async function getAdminOrders() {
   try {
     const admin = await checkAdminAuth();
+    const isAllowed = (await can('manage_orders', admin.token, admin.restaurantId)) ||
+                      (await can('update_order_status', admin.token, admin.restaurantId));
+    if (!isAllowed) {
+      throw new Error('Forbidden: Insufficient permissions to view orders');
+    }
+
     const orders = await orderService.getAdminOrders(admin.restaurantId);
     return JSON.parse(JSON.stringify(orders));
   } catch (error) {
@@ -110,7 +129,17 @@ export async function getAdminOrders() {
 export async function updateOrderStatus(id: string, status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled') {
   try {
     const admin = await checkAdminAuth();
+    const isAllowed = await can('update_order_status', admin.token, admin.restaurantId);
+    if (!isAllowed) {
+      throw new Error('Forbidden: Insufficient permissions to update orders');
+    }
+
+    const existing = await orderService.getOrderById(id, admin.restaurantId);
     const order = await orderService.updateOrderStatus(id, admin.restaurantId, status);
+
+    // Audit log order status change
+    await logAction(admin.restaurantId, admin.userId, 'ORDER_STATUS_CHANGED', existing, order);
+
     revalidatePath(`/admin/dashboard`);
     revalidatePath(`/admin/orders`);
     return JSON.parse(JSON.stringify(order));
@@ -132,7 +161,17 @@ export async function updateOrderStatus(id: string, status: 'received' | 'accept
 export async function updateOrderEstimatedTime(id: string, minutes: number) {
   try {
     const admin = await checkAdminAuth();
+    const isAllowed = await can('update_order_status', admin.token, admin.restaurantId);
+    if (!isAllowed) {
+      throw new Error('Forbidden: Insufficient permissions to update orders');
+    }
+
+    const existing = await orderService.getOrderById(id, admin.restaurantId);
     const order = await orderService.updateOrderEstimatedTime(id, admin.restaurantId, minutes);
+
+    // Audit log order status change (ETA change)
+    await logAction(admin.restaurantId, admin.userId, 'ORDER_STATUS_CHANGED', existing, order);
+
     revalidatePath(`/admin/dashboard`);
     revalidatePath(`/admin/orders`);
     return JSON.parse(JSON.stringify(order));
@@ -154,6 +193,11 @@ export async function updateOrderEstimatedTime(id: string, minutes: number) {
 export async function getDashboardMetrics(startDateStr?: string, endDateStr?: string) {
   try {
     const admin = await checkAdminAuth();
+    const isAllowed = await can('view_analytics', admin.token, admin.restaurantId);
+    if (!isAllowed) {
+      throw new Error('Forbidden: Insufficient permissions to view dashboard analytics');
+    }
+
     const metrics = await analyticsService.getDashboardMetrics(admin.restaurantId, startDateStr, endDateStr);
     return JSON.parse(JSON.stringify(metrics));
   } catch (error) {
@@ -187,3 +231,4 @@ export async function logEvent(
     return { success: false };
   }
 }
+

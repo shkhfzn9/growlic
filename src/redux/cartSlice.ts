@@ -18,6 +18,7 @@ export interface CartState {
   total: number;
   restaurantId: string | null;
   restaurantName: string | null;
+  tableId?: string | null;
 }
 
 const initialState: CartState = {
@@ -26,6 +27,7 @@ const initialState: CartState = {
   total: 0,
   restaurantId: null,
   restaurantName: null,
+  tableId: null,
 };
 
 const calculateTotals = (state: CartState) => {
@@ -39,6 +41,7 @@ const persistCartToStorage = (state: CartState) => {
       items: state.items,
       restaurantId: state.restaurantId,
       restaurantName: state.restaurantName,
+      tableId: state.tableId,
     }));
   }
 };
@@ -99,6 +102,10 @@ const cartSlice = createSlice({
       state.restaurantName = null;
       persistCartToStorage(state);
     },
+    setTableId: (state, action: PayloadAction<string | null>) => {
+      state.tableId = action.payload;
+      persistCartToStorage(state);
+    },
     hydrateCart: (state) => {
       if (typeof window !== 'undefined') {
         const stored = localStorage.getItem('qr_cart');
@@ -109,6 +116,7 @@ const cartSlice = createSlice({
               state.items = parsed.items;
               state.restaurantId = parsed.restaurantId || null;
               state.restaurantName = parsed.restaurantName || null;
+              state.tableId = parsed.tableId || null;
               calculateTotals(state);
             }
           } catch (e) {
@@ -120,5 +128,5 @@ const cartSlice = createSlice({
   },
 });
 
-export const { addItem, removeItem, updateQuantity, clearCart, hydrateCart } = cartSlice.actions;
+export const { addItem, removeItem, updateQuantity, clearCart, setTableId, hydrateCart } = cartSlice.actions;
 export default cartSlice.reducer;

@@ -14,6 +14,7 @@ export interface IOrder {
   restaurantId: string;
   customerName: string;
   customerPhone: string;
+  tableId?: string;
   items: IOrderItem[];
   subtotal: number;
   total: number;
@@ -22,3 +23,4 @@ export interface IOrder {
   createdAt?: string;
   updatedAt?: string;
 }
+

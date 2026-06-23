@@ -17,6 +17,7 @@ export function normalizeOrder(doc: any): IOrder {
     restaurantId: plain.restaurantId,
     customerName: plain.customerName,
     customerPhone: plain.customerPhone,
+    tableId: plain.tableId || '',
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     items: (plain.items || []).map((item: any) => ({
       menuItemId: item.menuItemId,
@@ -47,6 +48,7 @@ export async function create(data: {
   restaurantId: string;
   customerName: string;
   customerPhone: string;
+  tableId?: string;
   items: Array<{
     menuItemId: string;
     name: string;
@@ -66,6 +68,7 @@ export async function create(data: {
     restaurantId: data.restaurantId,
     customerName: data.customerName,
     customerPhone: data.customerPhone,
+    tableId: data.tableId || undefined,
     items: data.items,
     subtotal: data.subtotal,
     total: data.total,
@@ -75,14 +78,21 @@ export async function create(data: {
 }
 
 /**
- * Retrieves a single order by its database identifier ID.
+ * Retrieves a single order by its database identifier ID within a specific restaurant scope.
  * 
+ * @param restaurantId Scope parameter enforcing multi-tenant isolation.
  * @param id The order ID string.
  * @returns The normalized IOrder record if found, or null otherwise.
  */
-export async function findById(id: string): Promise<IOrder | null> {
+export async function findById(restaurantId: string | undefined, id: string): Promise<IOrder | null> {
   await dbConnect();
-  const doc = await Order.findById(id);
+  const query: any = { _id: id };
+  if (restaurantId) {
+    query.restaurantId = restaurantId.toLowerCase();
+  } else {
+    query.restaurantId = { $exists: true };
+  }
+  const doc = await Order.findOne(query);
   return doc ? normalizeOrder(doc) : null;
 }
 
@@ -99,16 +109,17 @@ export async function findAll(restaurantId: string): Promise<IOrder[]> {
 }
 
 /**
- * Updates the cooking/completion status of a specific order.
+ * Updates the cooking/completion status of a specific order inside a specific restaurant scope.
  * 
+ * @param restaurantId Scope parameter enforcing multi-tenant isolation.
  * @param id The database ID string of the target order.
  * @param status The updated status state (received, accepted, preparing, ready, completed, cancelled).
  * @returns The updated, normalized IOrder document, or null if not found.
  */
-export async function updateStatus(id: string, status: IOrder['status']): Promise<IOrder | null> {
+export async function updateStatus(restaurantId: string, id: string, status: IOrder['status']): Promise<IOrder | null> {
   await dbConnect();
-  const doc = await Order.findByIdAndUpdate(
-    id,
+  const doc = await Order.findOneAndUpdate(
+    { _id: id, restaurantId },
     { status },
     { new: true }
   );
@@ -116,21 +127,23 @@ export async function updateStatus(id: string, status: IOrder['status']): Promis
 }
 
 /**
- * Updates the estimated preparation time (ETA minutes) and optionally shifts status to 'accepted'.
+ * Updates the estimated preparation time (ETA minutes) and optionally shifts status to 'accepted' inside a specific restaurant scope.
  * 
+ * @param restaurantId Scope parameter enforcing multi-tenant isolation.
  * @param id The database ID string of the target order.
  * @param minutes The preparation duration estimate in minutes.
  * @param status The status state to apply (normally 'accepted').
  * @returns The updated, normalized IOrder document, or null.
  */
 export async function updateEstimatedTime(
+  restaurantId: string,
   id: string,
   minutes: number,
   status: IOrder['status']
 ): Promise<IOrder | null> {
   await dbConnect();
-  const doc = await Order.findByIdAndUpdate(
-    id,
+  const doc = await Order.findOneAndUpdate(
+    { _id: id, restaurantId },
     { estimatedTime: minutes, status },
     { new: true }
   );
@@ -170,15 +183,17 @@ export async function countPending(restaurantId: string): Promise<number> {
 }
 
 /**
- * Performs a bulk insert of order documents.
+ * Performs a bulk insert of order documents scoped to a specific restaurant.
  * 
+ * @param restaurantId The restaurant slug ID.
  * @param items Array of raw order parameters.
  * @returns An array of newly created, normalized order records.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function insertMany(items: any[]): Promise<IOrder[]> {
+export async function insertMany(restaurantId: string, items: any[]): Promise<IOrder[]> {
   await dbConnect();
-  const docs = await Order.insertMany(items);
+  const itemsWithTenant = items.map(item => ({ ...item, restaurantId }));
+  const docs = await Order.insertMany(itemsWithTenant);
   return docs.map(normalizeOrder);
 }
 

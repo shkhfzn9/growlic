@@ -113,15 +113,17 @@ export async function deleteRule(id: string, restaurantId: string): Promise<bool
 }
 
 /**
- * Performs a bulk insert of pairing rules.
+ * Performs a bulk insert of pairing rules scoped to a specific restaurant.
  * 
+ * @param restaurantId The restaurant slug ID.
  * @param items Array of pairing rule raw parameters.
  * @returns An array of newly created, normalized pairing rules.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function insertMany(items: any[]): Promise<IPairingRule[]> {
+export async function insertMany(restaurantId: string, items: any[]): Promise<IPairingRule[]> {
   await dbConnect();
-  const docs = await PairingRule.insertMany(items);
+  const itemsWithTenant = items.map(item => ({ ...item, restaurantId }));
+  const docs = await PairingRule.insertMany(itemsWithTenant);
   return docs.map(normalizePairingRule);
 }
 

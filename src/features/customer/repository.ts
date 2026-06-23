@@ -73,13 +73,14 @@ export async function create(data: {
  * @returns The updated, normalized ICustomer document, or null.
  */
 export async function updateStats(
+  restaurantId: string,
   id: string,
   totalOrders: number,
   totalSpent: number
 ): Promise<ICustomer | null> {
   await dbConnect();
-  const doc = await Customer.findByIdAndUpdate(
-    id,
+  const doc = await Customer.findOneAndUpdate(
+    { _id: id, restaurantId },
     { totalOrders, totalSpent },
     { new: true }
   );

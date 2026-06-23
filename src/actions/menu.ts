@@ -4,12 +4,14 @@ import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import * as menuService from '@/features/menu';
+import { validateSession, can, getAdminByRestaurantId } from '@/features/auth';
+import { logAction } from '@/features/audit';
 
 /**
  * Validates the admin's authentication cookie ('admin_token') and decodes its payload.
  * Throws an Error if the token is missing or invalid.
  * 
- * @returns The decoded admin session JWT token object.
+ * @returns The decoded admin session JWT token object, raw token, and userId.
  */
 async function checkAdminAuth() {
   const cookieStore = await cookies();
@@ -23,7 +25,17 @@ async function checkAdminAuth() {
     throw new Error('Unauthorized: Invalid token');
   }
 
-  return decoded;
+  const isValid = await validateSession(decoded.restaurantId, token);
+  if (!isValid) {
+    throw new Error('Unauthorized: Session has expired or been revoked');
+  }
+
+  const admin = await getAdminByRestaurantId(decoded.restaurantId);
+  if (!admin) {
+    throw new Error('Unauthorized: Admin account not found');
+  }
+
+  return { ...decoded, token, userId: admin._id };
 }
 
 /**
@@ -51,7 +63,8 @@ export async function getMenuItems(restaurantId: string) {
  */
 export async function getMenuItemById(id: string) {
   try {
-    const item = await menuService.getMenuItemById(id);
+    const admin = await checkAdminAuth();
+    const item = await menuService.getMenuItemById(admin.restaurantId, id);
     return JSON.parse(JSON.stringify(item));
   } catch (error) {
     console.error('Error fetching menu item by ID action:', error);
@@ -91,6 +104,11 @@ export async function createMenuItem(data: {
 }) {
   try {
     const admin = await checkAdminAuth();
+    const isAllowed = await can('edit_menu', admin.token, admin.restaurantId);
+    if (!isAllowed) {
+      throw new Error('Forbidden: Insufficient permissions to edit menu');
+    }
+
     const newItem = await menuService.createMenuItem(admin.restaurantId, data);
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(newItem));
@@ -136,7 +154,25 @@ export async function updateMenuItem(
 ) {
   try {
     const admin = await checkAdminAuth();
+    const isAllowed = await can('edit_menu', admin.token, admin.restaurantId);
+    if (!isAllowed) {
+      throw new Error('Forbidden: Insufficient permissions to edit menu');
+    }
+
+    const existing = await menuService.getMenuItemById(admin.restaurantId, id);
+    if (existing && existing.price !== data.price) {
+      const isPriceAllowed = await can('change_pricing', admin.token, admin.restaurantId);
+      if (!isPriceAllowed) {
+        throw new Error('Forbidden: Only owners are allowed to change pricing');
+      }
+    }
+
     const updatedItem = await menuService.updateMenuItem(id, admin.restaurantId, data);
+
+    // Audit log menu update/pricing change
+    const action = (existing && updatedItem && existing.price !== updatedItem.price) ? 'MENU_PRICE_CHANGED' : 'MENU_UPDATED';
+    await logAction(admin.restaurantId, admin.userId, action, existing, updatedItem);
+
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(updatedItem));
   } catch (error) {
@@ -157,7 +193,17 @@ export async function updateMenuItem(
 export async function toggleMenuItemAvailability(id: string, available: boolean) {
   try {
     const admin = await checkAdminAuth();
+    const isAllowed = await can('edit_menu', admin.token, admin.restaurantId);
+    if (!isAllowed) {
+      throw new Error('Forbidden: Insufficient permissions to edit menu');
+    }
+
+    const existing = await menuService.getMenuItemById(admin.restaurantId, id);
     const item = await menuService.toggleMenuItemAvailability(id, admin.restaurantId, available);
+
+    // Audit log menu update
+    await logAction(admin.restaurantId, admin.userId, 'MENU_UPDATED', existing, item);
+
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(item));
   } catch (error) {
@@ -177,6 +223,11 @@ export async function toggleMenuItemAvailability(id: string, available: boolean)
 export async function deleteMenuItem(id: string) {
   try {
     const admin = await checkAdminAuth();
+    const isAllowed = await can('edit_menu', admin.token, admin.restaurantId);
+    if (!isAllowed) {
+      throw new Error('Forbidden: Insufficient permissions to edit menu');
+    }
+
     await menuService.deleteMenuItem(id, admin.restaurantId);
     revalidatePath(`/menu/${admin.restaurantId}`);
     return { success: true };
@@ -186,3 +237,4 @@ export async function deleteMenuItem(id: string) {
     throw new Error(message);
   }
 }
+

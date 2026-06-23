@@ -49,7 +49,7 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
 
     const interval = setInterval(async () => {
       try {
-        const latestOrder = await getOrderById(orderId);
+        const latestOrder = await getOrderById(orderId, order.restaurantId);
         if (latestOrder) {
           setOrder(latestOrder);
         }
@@ -59,7 +59,7 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [orderId, order.status]);
+  }, [orderId, order.status, order.restaurantId]);
 
   // Set up 1-second active ticking clock for prep ETA
   useEffect(() => {

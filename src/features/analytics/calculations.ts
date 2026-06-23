@@ -158,6 +158,7 @@ export function computeDashboardMetrics(params: {
       discountApplied,
       upsellAccepted,
       itemsSummary,
+      tableId: order.tableId,
     };
   });
 

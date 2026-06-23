@@ -6,6 +6,7 @@ import Link from 'next/link';
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ table?: string }>;
 }
 
 interface MenuItem {
@@ -33,20 +34,32 @@ interface MenuItem {
   chefNote?: string;
 }
 
-export default async function MenuPage({ params }: PageProps) {
-  // Await the async route params in Next.js 16
+export default async function MenuPage({ params, searchParams }: PageProps) {
+  // Await the async parameters in Next.js 16
   const { slug } = await params;
+  const searchParamsResolved = await searchParams;
+  const table = searchParamsResolved?.table || '';
 
   let menuItems: MenuItem[] = [];
   let restaurantName = 'Tokyo Momos';
   let hasError = false;
   let upsellDataResult: any = null;
 
+  let logoUrl = '';
+  let primaryColor = '#000000';
+  let welcomeMessage = 'Welcome to our restaurant!';
+
   try {
     const admin = await getAdminByRestaurantId(slug);
     upsellDataResult = await getUpsellConfig(slug);
     menuItems = upsellDataResult.menuItems;
-    restaurantName = admin ? admin.restaurantName : 'Tokyo Momos';
+    
+    if (admin) {
+      restaurantName = admin.restaurantName;
+      logoUrl = admin.logoUrl || '';
+      primaryColor = admin.primaryColor || '#000000';
+      welcomeMessage = admin.welcomeMessage || 'Welcome to our restaurant!';
+    }
   } catch (error) {
     console.error('Error loading menu page:', error);
     hasError = true;
@@ -103,6 +116,10 @@ export default async function MenuPage({ params }: PageProps) {
       initialItems={menuItems}
       restaurantName={restaurantName}
       restaurantId={slug}
+      table={table}
+      logoUrl={logoUrl}
+      primaryColor={primaryColor}
+      welcomeMessage={welcomeMessage}
       upsellData={upsellDataResult ? {
         pairingRules: upsellDataResult.pairingRules,
         computedAffinity: upsellDataResult.computedAffinity,

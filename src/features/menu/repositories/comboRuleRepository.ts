@@ -125,15 +125,17 @@ export async function deleteRule(id: string, restaurantId: string): Promise<bool
 }
 
 /**
- * Performs a bulk insert of combo rules.
+ * Performs a bulk insert of combo rules scoped to a specific restaurant.
  * 
+ * @param restaurantId The restaurant slug ID.
  * @param items Array of combo rule raw parameters.
  * @returns An array of newly created, normalized combo rules.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function insertMany(items: any[]): Promise<IComboRule[]> {
+export async function insertMany(restaurantId: string, items: any[]): Promise<IComboRule[]> {
   await dbConnect();
-  const docs = await ComboRule.insertMany(items);
+  const itemsWithTenant = items.map(item => ({ ...item, restaurantId }));
+  const docs = await ComboRule.insertMany(itemsWithTenant);
   return docs.map(normalizeComboRule);
 }
 

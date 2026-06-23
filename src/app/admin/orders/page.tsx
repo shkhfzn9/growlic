@@ -22,6 +22,7 @@ interface Order {
   status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
   estimatedTime?: number;
   createdAt: string;
+  tableId?: string;
 }
 
 type FilterStatus = 'all' | Order['status'];
@@ -225,7 +226,7 @@ function OrdersContent() {
                         <span className="text-[10px] text-zinc-500">{dateStr}</span>
                       </div>
                       <div className="text-xs uppercase flex justify-between">
-                        <span>{order.customerName}</span>
+                        <span>{order.customerName} {order.tableId ? `(Table ${order.tableId})` : ''}</span>
                         <span className="font-bold">₹{order.total}</span>
                       </div>
                       <div className="text-[10px] text-zinc-500 truncate mt-1">
@@ -290,6 +291,11 @@ function OrdersContent() {
                   </h3>
                   <p className="text-xs font-bold">{selectedOrder.customerName.toUpperCase()}</p>
                   <p className="text-xs text-zinc-600 mt-1">{selectedOrder.customerPhone}</p>
+                  {selectedOrder.tableId && (
+                    <p className="text-[10px] text-black font-bold uppercase mt-1 bg-yellow-100 px-2 py-0.5 w-fit border border-dashed border-black">
+                      Table: {selectedOrder.tableId}
+                    </p>
+                  )}
                 </div>
 
                 {/* Receipt Details */}

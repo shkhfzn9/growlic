@@ -124,15 +124,17 @@ export async function deleteTier(id: string, restaurantId: string): Promise<bool
 }
 
 /**
- * Performs a bulk insert of discount tiers.
+ * Performs a bulk insert of discount tiers scoped to a specific restaurant.
  * 
+ * @param restaurantId The restaurant slug ID.
  * @param items Array of discount tier raw parameters.
  * @returns An array of newly created, normalized discount tiers.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function insertMany(items: any[]): Promise<IDiscountTier[]> {
+export async function insertMany(restaurantId: string, items: any[]): Promise<IDiscountTier[]> {
   await dbConnect();
-  const docs = await DiscountTier.insertMany(items);
+  const itemsWithTenant = items.map(item => ({ ...item, restaurantId }));
+  const docs = await DiscountTier.insertMany(itemsWithTenant);
   return docs.map(normalizeDiscountTier);
 }
 

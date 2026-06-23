@@ -5,17 +5,19 @@ import Link from 'next/link';
 
 interface PageProps {
   params: Promise<{ orderId: string }>;
+  searchParams: Promise<{ restaurantId?: string }>;
 }
 
-export default async function TrackPage({ params }: PageProps) {
+export default async function TrackPage({ params, searchParams }: PageProps) {
   // Await async page params in Next.js 16
   const { orderId } = await params;
+  const { restaurantId } = await searchParams;
 
   let order = null;
   let hasError = false;
 
   try {
-    order = await getOrderById(orderId);
+    order = await getOrderById(orderId, restaurantId);
   } catch (error) {
     console.error('Error loading track page:', error);
     hasError = true;

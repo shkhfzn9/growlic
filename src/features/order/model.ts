@@ -15,6 +15,7 @@ export interface IOrderDocument extends Document {
   restaurantId: string;
   customerName: string;
   customerPhone: string;
+  tableId?: string;
   items: IOrderItem[];
   subtotal: number;
   total: number;
@@ -40,6 +41,7 @@ const OrderSchema: Schema = new Schema<IOrderDocument>(
     restaurantId: { type: String, required: true, index: true },
     customerName: { type: String, required: true },
     customerPhone: { type: String, required: true, index: true },
+    tableId: { type: String, default: null },
     items: { type: [OrderItemSchema], required: true },
     subtotal: { type: Number, required: true },
     total: { type: Number, required: true },
@@ -53,6 +55,8 @@ const OrderSchema: Schema = new Schema<IOrderDocument>(
   },
   { timestamps: true }
 );
+
+OrderSchema.index({ restaurantId: 1, createdAt: -1 });
 
 const Order: Model<IOrderDocument> = mongoose.models.Order || mongoose.model<IOrderDocument>('Order', OrderSchema);
 

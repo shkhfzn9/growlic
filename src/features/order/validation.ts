@@ -4,6 +4,7 @@ export function validateCreateOrderPayload(data: {
   restaurantId: string;
   customerName: string;
   customerPhone: string;
+  tableId?: string;
   items: Array<{
     menuItemId: string;
     name: string;

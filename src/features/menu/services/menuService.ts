@@ -23,11 +23,14 @@ export async function getMenuItems(restaurantId: string): Promise<IMenuItem[]> {
  * @param id The database ID string.
  * @returns The matching, normalized IMenuItem record.
  */
-export async function getMenuItemById(id: string): Promise<IMenuItem> {
+export async function getMenuItemById(restaurantId: string, id: string): Promise<IMenuItem> {
+  if (!restaurantId) {
+    throw new ValidationError('Restaurant ID is required');
+  }
   if (!id) {
     throw new ValidationError('Item ID is required');
   }
-  const item = await menuRepo.findById(id);
+  const item = await menuRepo.findById(restaurantId, id);
   if (!item) {
     throw new NotFoundError('Menu item not found');
   }
@@ -67,11 +70,11 @@ export async function updateMenuItem(id: string, restaurantId: string, data: Par
   if (!id) {
     throw new ValidationError('Item ID is required');
   }
-  const item = await menuRepo.findById(id);
+  const item = await menuRepo.findById(restaurantId, id);
   if (!item || item.restaurantId !== restaurantId) {
     throw new NotFoundError('Unauthorized or item not found');
   }
-  return menuRepo.update(id, data);
+  return menuRepo.update(restaurantId, id, data);
 }
 
 /**
@@ -86,11 +89,11 @@ export async function toggleMenuItemAvailability(id: string, restaurantId: strin
   if (!id) {
     throw new ValidationError('Item ID is required');
   }
-  const item = await menuRepo.findById(id);
+  const item = await menuRepo.findById(restaurantId, id);
   if (!item || item.restaurantId !== restaurantId) {
     throw new NotFoundError('Unauthorized or item not found');
   }
-  return menuRepo.update(id, { available });
+  return menuRepo.update(restaurantId, id, { available });
 }
 
 /**
@@ -104,9 +107,9 @@ export async function deleteMenuItem(id: string, restaurantId: string) {
   if (!id) {
     throw new ValidationError('Item ID is required');
   }
-  const item = await menuRepo.findById(id);
+  const item = await menuRepo.findById(restaurantId, id);
   if (!item || item.restaurantId !== restaurantId) {
     throw new NotFoundError('Unauthorized or item not found');
   }
-  return menuRepo.deleteItem(id);
+  return menuRepo.deleteItem(restaurantId, id);
 }

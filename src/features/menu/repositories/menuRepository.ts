@@ -56,14 +56,15 @@ export async function findAll(restaurantId: string): Promise<IMenuItem[]> {
 }
 
 /**
- * Retrieves a single menu item by its database ID.
+ * Retrieves a single menu item by its database ID within a specific restaurant scope.
  * 
+ * @param restaurantId Scope parameter enforcing multi-tenant isolation.
  * @param id The menu item database ID string.
  * @returns The normalized IMenuItem object if found, or null otherwise.
  */
-export async function findById(id: string): Promise<IMenuItem | null> {
+export async function findById(restaurantId: string, id: string): Promise<IMenuItem | null> {
   await dbConnect();
-  const doc = await Menu.findById(id);
+  const doc = await Menu.findOne({ _id: id, restaurantId });
   return doc ? normalizeMenuItem(doc) : null;
 }
 
@@ -99,32 +100,38 @@ export async function create(data: Partial<IMenuItem> & { restaurantId: string; 
 }
 
 /**
- * Updates properties of an existing menu item.
+ * Updates properties of an existing menu item inside a specific restaurant scope.
  * 
+ * @param restaurantId Scope parameter enforcing multi-tenant isolation.
  * @param id The database ID string of the target menu item.
  * @param data Partial item settings containing fields to overwrite.
  * @returns The modified, normalized IMenuItem record, or null if matching document doesn't exist.
  */
-export async function update(id: string, data: Partial<IMenuItem>): Promise<IMenuItem | null> {
+export async function update(restaurantId: string, id: string, data: Partial<IMenuItem>): Promise<IMenuItem | null> {
   await dbConnect();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updatePayload: any = { ...data };
   if (data.price !== undefined) {
     updatePayload.price = Number(data.price);
   }
-  const doc = await Menu.findByIdAndUpdate(id, updatePayload, { new: true });
+  const doc = await Menu.findOneAndUpdate(
+    { _id: id, restaurantId },
+    updatePayload,
+    { new: true }
+  );
   return doc ? normalizeMenuItem(doc) : null;
 }
 
 /**
- * Deletes a menu item from the database.
+ * Deletes a menu item from the database within a specific restaurant scope.
  * 
+ * @param restaurantId Scope parameter enforcing multi-tenant isolation.
  * @param id The target menu item ID string.
  * @returns A promise resolving to true if deleted, false otherwise.
  */
-export async function deleteItem(id: string): Promise<boolean> {
+export async function deleteItem(restaurantId: string, id: string): Promise<boolean> {
   await dbConnect();
-  const result = await Menu.findByIdAndDelete(id);
+  const result = await Menu.findOneAndDelete({ _id: id, restaurantId });
   return !!result;
 }
 
@@ -183,15 +190,17 @@ export async function updateActive(id: string, active: boolean, restaurantId: st
 }
 
 /**
- * Performs a bulk insert of menu item documents.
+ * Performs a bulk insert of menu item documents scoped to a specific restaurant.
  * 
+ * @param restaurantId The restaurant slug ID.
  * @param items Array of menu item raw parameters.
  * @returns An array of newly created, normalized menu items.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function insertMany(items: any[]): Promise<IMenuItem[]> {
+export async function insertMany(restaurantId: string, items: any[]): Promise<IMenuItem[]> {
   await dbConnect();
-  const docs = await Menu.insertMany(items);
+  const itemsWithTenant = items.map(item => ({ ...item, restaurantId }));
+  const docs = await Menu.insertMany(itemsWithTenant);
   return docs.map(normalizeMenuItem);
 }
 

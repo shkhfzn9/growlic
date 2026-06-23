@@ -18,6 +18,8 @@ const EventSchema: Schema = new Schema<IEventDocument>(
   }
 );
 
+EventSchema.index({ restaurantId: 1, createdAt: -1 });
+
 const Event: Model<IEventDocument> = mongoose.models.Event || mongoose.model<IEventDocument>('Event', EventSchema);
 
 export default Event;

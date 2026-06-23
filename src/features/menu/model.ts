@@ -56,6 +56,8 @@ const MenuSchema: Schema = new Schema<IMenu>(
   { timestamps: true }
 );
 
+MenuSchema.index({ restaurantId: 1, category: 1 });
+
 export const Menu: Model<IMenu> = mongoose.models.Menu || mongoose.model<IMenu>('Menu', MenuSchema);
 
 // 2. Combo Rule Schema

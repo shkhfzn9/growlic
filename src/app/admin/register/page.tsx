@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Eye, EyeOff } from 'lucide-react';
 
@@ -16,6 +16,37 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  const [slugChecking, setSlugChecking] = useState(false);
+  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (slug.length < 3) {
+      setSlugAvailable(null);
+      return;
+    }
+
+    const checkSlugAvailability = async () => {
+      setSlugChecking(true);
+      try {
+        const res = await fetch(`/api/auth/register/check-slug?slug=${slug}`);
+        const data = await res.json();
+        if (data.success) {
+          setSlugAvailable(data.available);
+        }
+      } catch (err) {
+        console.error('Error checking slug:', err);
+      } finally {
+        setSlugChecking(false);
+      }
+    };
+
+    const delayDebounceFn = setTimeout(() => {
+      checkSlugAvailability();
+    }, 400);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [slug]);
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -43,6 +74,11 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
 
+    if (slugAvailable === false) {
+      setError('The selected Restaurant ID is already taken. Please choose another one.');
+      return;
+    }
+
     if (!name.trim() || !slug.trim() || !email.trim() || !password.trim() || !phone.trim() || !designation) {
       setError('Please fill in all fields.');
       return;
@@ -59,6 +95,7 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
+
 
     try {
       const res = await fetch('/api/auth/register', {
@@ -161,14 +198,30 @@ export default function RegisterPage() {
 
           {/* Restaurant ID (Slug) */}
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold uppercase">Restaurant ID / URL Slug</label>
+            <div className="flex justify-between items-center">
+              <label className="text-[10px] font-bold uppercase">Restaurant ID / URL Slug</label>
+              {slug.length >= 3 && (
+                <span className="text-[9px] font-bold uppercase">
+                  {slugChecking ? (
+                    <span className="text-zinc-500">Checking...</span>
+                  ) : slugAvailable === true ? (
+                    <span className="text-green-600">✔ Available</span>
+                  ) : slugAvailable === false ? (
+                    <span className="text-red-650">❌ Already Taken</span>
+                  ) : null}
+                </span>
+              )}
+            </div>
             <input
               type="text"
               placeholder="e.g. srinagar-dumplings"
               value={slug}
               onChange={handleSlugChange}
               disabled={loading}
-              className="w-full text-xs font-mono-custom lowercase"
+              className={`w-full text-xs font-mono-custom lowercase ${
+                slugAvailable === true ? 'border-green-600 focus:border-green-600' :
+                slugAvailable === false ? 'border-red-650 focus:border-red-650' : ''
+              }`}
               required
             />
             <span className="text-[9px] text-zinc-400 uppercase leading-normal">

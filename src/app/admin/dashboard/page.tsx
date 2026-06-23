@@ -37,6 +37,7 @@ interface MetricOrderTable {
   discountApplied: number;
   upsellAccepted: boolean;
   itemsSummary: string;
+  tableId?: string;
 }
 
 interface RuleStat {
@@ -754,6 +755,7 @@ export default function DashboardPage() {
                         <tr className="border-b border-black bg-zinc-50 font-bold text-xs uppercase">
                           <th className="p-3 border-r border-black">Time / Date</th>
                           <th className="p-3 border-r border-black">Order ID</th>
+                          <th className="p-3 border-r border-black">Table</th>
                           <th className="p-3 border-r border-black">Customer (Phone)</th>
                           <th className="p-3 border-r border-black">Items Ordered</th>
                           <th className="p-3 border-r border-black text-right">Subtotal</th>
@@ -781,6 +783,9 @@ export default function DashboardPage() {
                                 <Link href={`/admin/orders?highlight=${order._id}`} className="underline">
                                   #{displayId}
                                 </Link>
+                              </td>
+                              <td className="p-3 border-r border-black text-center font-bold text-[11px]">
+                                {order.tableId ? order.tableId : '—'}
                               </td>
                               <td className="p-3 border-r border-black">
                                 <span className="font-bold">{order.customerName}</span>

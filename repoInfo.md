@@ -77,6 +77,7 @@ f:\Myprojects\growlic
     │   ├── admin/           # Admin forms, dashboard layout elements.
     │   └── menu/            # MenuItem cards, cart drawers, trackers, item detail modals.
     ├── features/            # Self-contained modular features.
+        ├── audit/           # Stateful audit logging of administrative changes.
     │   ├── analytics/       # Heatmaps, conversions, event logging, metrics.
     │   ├── auth/            # Authenticated admin credentials and restaurant settings.
     │   ├── customer/        # Customer metrics, phone lookup, spending logs.
@@ -125,7 +126,34 @@ Translates raw order events into operational decisions:
 * **Menu Intelligence**: Identifies friction rates (items with high click rates but low checkout conversions) so owners can reprice, rephoto, or redesign underperforming meals.
 * **Upsell performance**: Measures discount tiers achievement rates and co-occurrence suggestions success ratios.
 
+### F. Tenant Isolation Hardening
+Enforces strict multi-tenant boundaries at the database query level to prevent accidental cross-tenant data leaks:
+* **Contextual Helpers**: `src/lib/tenant.ts` provides `requireTenant()` to ensure a `restaurantId` is always extracted from the path/context.
+* **Repository Validation**: Every repository query strictly accepts and filters by a validated `restaurantId`. Global lookups utilize fallback structures like `{ restaurantId: { $exists: true } }` so queries are structurally forced to contain the tenant key.
+* **Compound Indexes**: Applied database indexes like `{ restaurantId: 1, createdAt: -1 }` on `Order` and `Event` schemas to optimize tenant-isolated sorting.
+
+### G. Authentication Hardening (Sessions & RBAC)
+Establishes a database-backed stateful session verification system alongside role-based access control:
+* **Session Collection**: Stores active login state (`userId`, `restaurantId`, `tokenHash`, `expiresAt`, `revoked`). On login, token hashes are recorded; on logout or session check, token hashes are validated/revoked.
+* **Role Hierarchy**: Maps permissions dynamically:
+  - `owner`: full capabilities (`manage_users`, `change_pricing`, `view_analytics`, `edit_menu`, `manage_orders`, `update_order_status`).
+  - `manager`: menu and order adjustments (`edit_menu`, `manage_orders`, `update_order_status`).
+  - `staff`: order handling (`update_order_status`).
+* **Access Checks**: Server Actions validate credentials on each request using `validateSession` and checking permissions via the `can(permission)` context helper.
+
+### H. Audit Logging
+Tracks administrative actions to ensure accountability and structural logging:
+* **Audit Feature**: Dedicated modular folder `src/features/audit/` housing the Mongoose schema, repository layer, and logging service.
+* **Triggers**: Logs operations like `MENU_PRICE_CHANGED`, `MENU_UPDATED`, `LOGIN_SUCCESS`, `LOGIN_FAILED`, and `ORDER_STATUS_CHANGED` with `before` and `after` states.
+
+### I. Multi-Tenant Onboarding & Brand Customization
+Allows independent businesses to self-onboard:
+* **URL Slug Verification**: REST endpoint checks uniqueness of the restaurant slug dynamically using debounced frontend queries during registration.
+* **Dynamic Brand Customization**: Admin Settings offers customization parameters (logoUrl, primaryColor, welcomeMessage) and printing of table-scoped QR codes.
+* **Table Scoped Dining**: Client-side cart tracks `tableId` and maps orders to the specific table, which are then rendered as labels in the admin panel and order logging dashboard. The digital menu dynamically applies the restaurant logo, welcome message, and chosen brand color theme dynamically using inline styles.
+
 ---
+
 
 ## 6. Database Schema Summary
 
@@ -133,14 +161,17 @@ MongoDB handles relations implicitly using references:
 
 | Model | Schema Location | Field / Type | Description / Relationships |
 | :--- | :--- | :--- | :--- |
-| **Admin** | `src/features/auth/model.ts` | `email` (String)<br>`password` (String)<br>`restaurantId` (String)<br>`restaurantName` (String)<br>`phone` (String)<br>`designation` (String) | Represents tenant credentials and profile details. `restaurantId` acts as a unique slug parameter. |
+| **Admin** | `src/features/auth/model.ts` | `email` (String)<br>`password` (String)<br>`restaurantId` (String)<br>`restaurantName` (String)<br>`phone` (String)<br>`designation` (String)<br>`logoUrl` (String/optional)<br>`primaryColor` (String/optional)<br>`welcomeMessage` (String/optional) | Represents tenant credentials and profile details. `restaurantId` acts as a unique slug parameter. Custom branding variables stored here are dynamically applied to consumer views. |
 | **Menu** | `src/features/menu/model.ts` | `restaurantId` (String)<br>`category` (String)<br>`name` (String)<br>`price` (Number)<br>`available` (Boolean)<br>`pairsWithCategories` (String[])<br>`nutrition` (Subdocument)<br>`spiceLevel` (Number)<br>`prepTimeMin`/`prepTimeMax` (Number) | Individual menu items. `restaurantId` relates items to an Admin profile. |
-| **Order** | `src/features/order/model.ts` | `restaurantId` (String)<br>`customerName`/`customerPhone` (String)<br>`items` (Subdocument[])<br>`subtotal`/`total` (Number)<br>`status` (String)<br>`estimatedTime` (Number) | Individual transactions. Subdocument `items.menuItemId` references `Menu._id`. `items.nudgeRuleId` references `PairingRule._id` or `ComboRule._id`. |
+| **Order** | `src/features/order/model.ts` | `restaurantId` (String)<br>`customerName`/`customerPhone` (String)<br>`tableId` (String/optional)<br>`items` (Subdocument[])<br>`subtotal`/`total` (Number)<br>`status` (String)<br>`estimatedTime` (Number) | Individual transactions. Subdocument `items.menuItemId` references `Menu._id`. `items.nudgeRuleId` references `PairingRule._id` or `ComboRule._id`. `tableId` maps transactions to restaurant tables. |
 | **Customer** | `src/features/customer/model.ts` | `restaurantId` (String)<br>`phone` (String)<br>`name` (String)<br>`totalSpent` (Number)<br>`orderCount` (Number)<br>`lastOrderDate` (Date) | Tracks diner profiles across orders. Uniquely identified by `restaurantId` + `phone`. |
 | **PairingRule** | `src/features/menu/model.ts` | `restaurantId` (String)<br>`triggerCategory` (String)<br>`suggestCategories` (String[])<br>`active` (Boolean)<br>`triggerCount` (Number) | Rule-based cross-sell configurations. `triggerCategory` and `suggestCategories` correspond to `Menu.category` strings. |
 | **DiscountTier** | `src/features/menu/model.ts` | `restaurantId` (String)<br>`minSpend` (Number)<br>`percentOff` (Number)<br>`categoryScope` (String/null)<br>`active` (Boolean) | Configures threshold-based discounts. `categoryScope` optionally restricts the discount to a specific `Menu.category` string. |
 | **ComboRule** | `src/features/menu/model.ts` | `restaurantId` (String)<br>`conditionCategory` (String)<br>`conditionExcludeCategory` (String)<br>`rewardType` (String)<br>`rewardTarget` (String)<br>`customerMessage` (String)<br>`active` (Boolean) | Configures complex promotions (e.g. BOGO). `rewardTarget` references a category string, specific item name, or value percent. |
 | **Event** | `src/features/analytics/model.ts` | `restaurantId` (String)<br>`type` (String)<br>`itemId` (String)<br>`nudgeType` (String)<br>`createdAt` (Date) | Analytical log tracking client-side events (`cart_create`, `nudge_show`, `modal_open`) for metric calculation. |
+| **Session** | `src/features/auth/model.ts` | `userId` (String)<br>`restaurantId` (String)<br>`tokenHash` (String)<br>`createdAt` (Date)<br>`expiresAt` (Date)<br>`revoked` (Boolean) | Represents active admin login sessions. Compound indexed on `{ restaurantId: 1, tokenHash: 1 }` and `{ userId: 1, revoked: 1 }`. |
+| **AuditLog** | `src/features/audit/model.ts` | `restaurantId` (String)<br>`userId` (String/null)<br>`action` (String)<br>`before` (Mixed/null)<br>`after` (Mixed/null)<br>`createdAt` (Date) | Tracks critical administrative actions (`MENU_PRICE_CHANGED`, `MENU_UPDATED`, `LOGIN_SUCCESS`, `LOGIN_FAILED`, `ORDER_STATUS_CHANGED`). |
+
 
 ---
 
@@ -180,6 +211,11 @@ MongoDB handles relations implicitly using references:
 * **Why**: Keeps the multi-tenant architecture self-contained and avoids costly external SaaS subscriptions. Leveraging MongoDB aggregations allows querying tenant-specific analytics on-the-fly without complex synchronization logic.
 * **Improvement vs. Before**: Replaced simple static counters with rich, contextual analytics (e.g., hourly activity heatmaps and menu item conversion/friction rates).
 * **Tradeoff**: Puts higher load on the database for aggregate queries, requiring efficient indexing on `restaurantId`, `type`, and `createdAt` fields to avoid performance degradation.
+
+### G. Architectural Choice: Multi-Tenant Dynamic Theme Injection
+* **Built/Changed**: Implemented dynamic branding configurations (primaryColor, logoUrl, welcomeMessage) at runtime. The consumer menu page uses an injected style block to map custom colors into button borders, active states, backgrounds, and text styling dynamically.
+* **Why**: Prevents code compiling overhead or spawning separate tenant containers. Using CSS variable-based dynamic injections renders custom theme overrides instantaneously at zero performance cost.
+* **Tradeoff**: Restricts the tenant customizations to logo, banner, and primary brand color palette to preserve clean alignment and system design coherence.
 
 ---
 

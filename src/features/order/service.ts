@@ -15,6 +15,7 @@ export async function createOrder(data: {
   restaurantId: string;
   customerName: string;
   customerPhone: string;
+  tableId?: string;
   items: Array<{
     menuItemId: string;
     name: string;
@@ -29,13 +30,14 @@ export async function createOrder(data: {
   total: number;
 }): Promise<IOrder> {
   validateCreateOrderPayload(data);
-  const { restaurantId, customerName, customerPhone, items, subtotal, total } = data;
+  const { restaurantId, customerName, customerPhone, tableId, items, subtotal, total } = data;
 
   // 1. Create order
   const order = await orderRepo.create({
     restaurantId,
     customerName,
     customerPhone,
+    tableId,
     items,
     subtotal,
     total,
@@ -49,6 +51,7 @@ export async function createOrder(data: {
   const customer = await customerRepo.findByPhone(restaurantId, trimmedPhone);
   if (customer) {
     await customerRepo.updateStats(
+      restaurantId,
       customer._id,
       customer.totalOrders + 1,
       customer.totalSpent + total
@@ -71,11 +74,12 @@ export async function createOrder(data: {
  * Throws a ValidationError if the ID is missing.
  * 
  * @param id The target order database identifier.
+ * @param restaurantId Scope parameter enforcing multi-tenant isolation.
  * @returns The normalized IOrder record if found, or null otherwise.
  */
-export async function getOrderById(id: string): Promise<IOrder | null> {
+export async function getOrderById(id: string, restaurantId?: string): Promise<IOrder | null> {
   validateOrderId(id);
-  return orderRepo.findById(id);
+  return orderRepo.findById(restaurantId, id);
 }
 
 /**
@@ -101,12 +105,12 @@ export async function getAdminOrders(restaurantId: string): Promise<IOrder[]> {
  */
 export async function updateOrderStatus(id: string, restaurantId: string, status: IOrder['status']): Promise<IOrder> {
   validateOrderId(id);
-  const order = await orderRepo.findById(id);
+  const order = await orderRepo.findById(restaurantId, id);
   if (!order || order.restaurantId !== restaurantId) {
     throw new NotFoundError('Unauthorized or order not found');
   }
 
-  const updated = await orderRepo.updateStatus(id, status);
+  const updated = await orderRepo.updateStatus(restaurantId, id, status);
   if (!updated) {
     throw new NotFoundError('Order not found');
   }
@@ -124,12 +128,12 @@ export async function updateOrderStatus(id: string, restaurantId: string, status
  */
 export async function updateOrderEstimatedTime(id: string, restaurantId: string, minutes: number): Promise<IOrder> {
   validateOrderId(id);
-  const order = await orderRepo.findById(id);
+  const order = await orderRepo.findById(restaurantId, id);
   if (!order || order.restaurantId !== restaurantId) {
     throw new NotFoundError('Unauthorized or order not found');
   }
 
-  const updated = await orderRepo.updateEstimatedTime(id, minutes, 'accepted');
+  const updated = await orderRepo.updateEstimatedTime(restaurantId, id, minutes, 'accepted');
   if (!updated) {
     throw new NotFoundError('Order not found');
   }
