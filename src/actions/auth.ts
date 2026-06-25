@@ -78,5 +78,5 @@ export async function getRestaurantDetails() {
     const message = error instanceof Error ? error.message : 'Failed to retrieve settings details';
     throw new Error(message);
   }
-}
+};
 
