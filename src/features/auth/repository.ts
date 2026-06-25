@@ -116,6 +116,15 @@ export async function create(data: {
   role?: 'owner' | 'manager' | 'staff';
 }): Promise<IAdmin> {
   await dbConnect();
+
+  let resolvedRole: 'owner' | 'manager' | 'staff' = data.role || 'staff';
+  if (!data.role && data.designation) {
+    const des = data.designation.toLowerCase().trim();
+    if (des === 'owner') resolvedRole = 'owner';
+    else if (des === 'manager') resolvedRole = 'manager';
+    else if (des === 'staff') resolvedRole = 'staff';
+  }
+
   const doc = await Admin.create({
     email: data.email.toLowerCase(),
     password: data.password,
@@ -123,7 +132,7 @@ export async function create(data: {
     restaurantName: data.restaurantName.trim(),
     phone: data.phone.trim(),
     designation: data.designation.toLowerCase(),
-    role: data.role || 'staff',
+    role: resolvedRole,
   });
   return normalizeAdmin(doc);
 }
@@ -150,11 +159,21 @@ export async function deleteByEmail(restaurantId: string, email: string): Promis
  * @param designation The updated designation (e.g. owner, manager).
  * @returns The updated, normalized IAdmin record, or null if matching document doesn't exist.
  */
-export async function updatePhoneAndDesignation(restaurantId: string, id: string, phone: string, designation: string): Promise<IAdmin | null> {
+export async function updatePhoneAndDesignation(
+  restaurantId: string,
+  id: string,
+  phone: string,
+  designation: string,
+  role?: 'owner' | 'manager' | 'staff'
+): Promise<IAdmin | null> {
   await dbConnect();
+  const updateData: any = { phone: phone.trim(), designation: designation.toLowerCase() };
+  if (role) {
+    updateData.role = role;
+  }
   const doc = await Admin.findOneAndUpdate(
     { _id: id, restaurantId: restaurantId.toLowerCase() },
-    { phone: phone.trim(), designation: designation.toLowerCase() },
+    updateData,
     { new: true }
   );
   return doc ? normalizeAdmin(doc) : null;

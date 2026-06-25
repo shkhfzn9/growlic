@@ -1,5 +1,7 @@
+@import url('https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:ital,wght@0,400;0,700;1,400&family=Work+Sans:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
+<<<<<<< Updated upstream
 @theme {
   --color-primary: #C0181A;
   --color-bg-dark: #8B0000;
@@ -192,4 +194,94 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(192, 24, 26, 0.5);
+=======
+/* ============================================================
+   GOURMET DESIGN SYSTEM — Growlic Customer UI
+   Based on ui_inspiration screenshots
+   ============================================================ */
+
+:root {
+  --gourmet-bg:              #eef2fb;
+  --gourmet-surface:         #eef2fb;
+  --gourmet-card:            #ffffff;
+  --gourmet-primary:         #8b0021;
+  --gourmet-on-surface:      #111827;
+  --gourmet-on-surface-mid:  #374151;
+  --gourmet-on-surface-low:  #6b7280;
+  --gourmet-outline:         #e5e7eb;
+
+  --font-serif: var(--font-caslon), 'Libre Caslon Text', Georgia, serif;
+  --font-sans:  var(--font-work-sans), 'Work Sans', system-ui, sans-serif;
+}
+
+/* ─── RESETS ──────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--gourmet-bg);
+  color: var(--gourmet-on-surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,h2,h3,h4,.font-serif { font-family: var(--font-serif); }
+
+/* ─── SCROLLBAR ───────────────────────────────────────────── */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 9999px; }
+.hide-scrollbar::-webkit-scrollbar, .scrollbar-none::-webkit-scrollbar { display: none; }
+.hide-scrollbar, .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ─── INPUTS ──────────────────────────────────────────────── */
+input, textarea, select {
+  font-family: var(--font-sans);
+  outline: none;
+  box-sizing: border-box;
+}
+
+/* ─── ANIMATIONS ──────────────────────────────────────────── */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-slide-up  { animation: slideUp  0.28s cubic-bezier(0.34, 1.2, 0.64, 1) both; }
+.animate-scale-in  { animation: scaleIn  0.2s ease-out both; }
+.animate-fade-in   { animation: fadeIn   0.2s ease-out both; }
+
+/* ─── SAFE AREA ───────────────────────────────────────────── */
+.safe-pb { padding-bottom: max(1rem, env(safe-area-inset-bottom, 0)); }
+
+/* ─── BUTTON ACTIVE SCALE ─────────────────────────────────── */
+button { transition: opacity 0.1s ease, transform 0.1s ease; }
+button:active:not(:disabled) { transform: scale(0.93); opacity: 0.9; }
+
+/* ─── CARD SHADOW ─────────────────────────────────────────── */
+.gourmet-card {
+  background: #fff;
+  border-radius: 1.25rem;
+  box-shadow: 0 2px 14px rgba(0,0,0,0.06);
+}
+
+/* ─── PROGRESS BAR ────────────────────────────────────────── */
+.progress-bar-track {
+  width: 100%; height: 7px;
+  background: rgba(0,0,0,0.15);
+  border-radius: 9999px; overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%; border-radius: 9999px;
+  background: linear-gradient(to right, #f0c12c, #fccc38);
+  transition: width 1s ease-out;
+>>>>>>> Stashed changes
 }

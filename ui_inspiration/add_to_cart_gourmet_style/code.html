@@ -1,0 +1,298 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Item Added to Cart</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:ital,wght@0,400;0,700;1,400&amp;family=Work+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary": "#2a2d30",
+                    "on-secondary-fixed": "#241a00",
+                    "surface-container-high": "#dee9fc",
+                    "outline": "#8d7070",
+                    "primary-container": "#8b0021",
+                    "on-surface-variant": "#594141",
+                    "on-tertiary-fixed": "#191c1f",
+                    "error": "#ba1a1a",
+                    "secondary-fixed": "#ffdf90",
+                    "on-tertiary-container": "#adb0b4",
+                    "on-tertiary": "#ffffff",
+                    "error-container": "#ffdad6",
+                    "background": "#f8f9ff",
+                    "surface-variant": "#d9e3f6",
+                    "surface-container-lowest": "#ffffff",
+                    "tertiary-fixed-dim": "#c4c7ca",
+                    "surface-container-low": "#eff4ff",
+                    "secondary": "#755b00",
+                    "on-error": "#ffffff",
+                    "inverse-on-surface": "#eaf1ff",
+                    "on-error-container": "#93000a",
+                    "surface-dim": "#d0dbed",
+                    "on-tertiary-fixed-variant": "#44474a",
+                    "on-primary-container": "#ff9094",
+                    "inverse-primary": "#ffb3b4",
+                    "tertiary-fixed": "#e0e2e6",
+                    "surface": "#f8f9ff",
+                    "surface-bright": "#f8f9ff",
+                    "tertiary-container": "#404346",
+                    "outline-variant": "#e1bebe",
+                    "on-secondary-fixed-variant": "#584400",
+                    "on-primary": "#ffffff",
+                    "on-surface": "#121c2a",
+                    "surface-container": "#e6eeff",
+                    "on-secondary-container": "#6f5600",
+                    "secondary-fixed-dim": "#f0c12c",
+                    "primary-fixed-dim": "#ffb3b4",
+                    "primary": "#610014",
+                    "on-secondary": "#ffffff",
+                    "surface-container-highest": "#d9e3f6",
+                    "surface-tint": "#b32739",
+                    "primary-fixed": "#ffdad9",
+                    "inverse-surface": "#27313f",
+                    "on-background": "#121c2a",
+                    "secondary-container": "#fccc38",
+                    "on-primary-fixed-variant": "#910624",
+                    "on-primary-fixed": "#40000a"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "xl": "32px",
+                    "md": "16px",
+                    "gutter": "16px",
+                    "margin-mobile": "20px",
+                    "margin-desktop": "40px",
+                    "sm": "8px",
+                    "xs": "4px",
+                    "lg": "24px",
+                    "unit": "4px"
+            },
+            "fontFamily": {
+                    "body-md": [
+                            "Work Sans"
+                    ],
+                    "display-lg": [
+                            "Libre Caslon Text"
+                    ],
+                    "price-display": [
+                            "Libre Caslon Text"
+                    ],
+                    "label-lg": [
+                            "Work Sans"
+                    ],
+                    "headline-sm": [
+                            "Libre Caslon Text"
+                    ],
+                    "label-md": [
+                            "Work Sans"
+                    ],
+                    "headline-md": [
+                            "Libre Caslon Text"
+                    ],
+                    "body-lg": [
+                            "Work Sans"
+                    ]
+            },
+            "fontSize": {
+                    "body-md": [
+                            "14px",
+                            {
+                                    "lineHeight": "22px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "display-lg": [
+                            "32px",
+                            {
+                                    "lineHeight": "40px",
+                                    "letterSpacing": "-0.02em",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "price-display": [
+                            "22px",
+                            {
+                                    "lineHeight": "28px",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "label-lg": [
+                            "14px",
+                            {
+                                    "lineHeight": "20px",
+                                    "letterSpacing": "0.01em",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "headline-sm": [
+                            "20px",
+                            {
+                                    "lineHeight": "28px",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "label-md": [
+                            "12px",
+                            {
+                                    "lineHeight": "16px",
+                                    "fontWeight": "500"
+                            }
+                    ],
+                    "headline-md": [
+                            "24px",
+                            {
+                                    "lineHeight": "32px",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "body-lg": [
+                            "16px",
+                            {
+                                    "lineHeight": "24px",
+                                    "fontWeight": "400"
+                            }
+                    ]
+            }
+          }
+        }
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+          font-variation-settings:
+          'FILL' 1,
+          'wght' 400,
+          'GRAD' 0,
+          'opsz' 24
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md antialiased pb-32">
+<!-- Top Navigation -->
+<header class="w-full sticky top-0 z-50 bg-background flex items-center justify-between px-margin-mobile h-16 w-full">
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors active:scale-95 duration-150 text-on-surface-variant">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+</button>
+<div class="text-primary font-headline-md text-headline-md">Item Added</div>
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors active:scale-95 duration-150 text-on-surface-variant relative">
+<span class="material-symbols-outlined" data-icon="shopping_cart">shopping_cart</span>
+<span class="absolute top-1 right-1 w-2.5 h-2.5 bg-primary rounded-full border-2 border-background"></span>
+</button>
+</header>
+<main class="max-w-screen-md mx-auto px-margin-mobile pt-lg pb-xl flex flex-col gap-xl">
+<!-- Confirmation Header -->
+<section class="flex flex-col items-center text-center mt-md">
+<div class="w-16 h-16 rounded-full bg-[#E5F5E9] text-[#1E7D3C] flex items-center justify-center mb-md shadow-sm">
+<span class="material-symbols-outlined text-display-lg" data-icon="check_circle">check_circle</span>
+</div>
+<h1 class="font-display-lg text-display-lg text-on-background mb-xs">Added to Bag!</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">Great choice. Let's finish your order or add more treats.</p>
+</section>
+<!-- Product Summary Card -->
+<section class="bg-surface-container-lowest rounded-xl p-md flex items-center gap-md shadow-[0_4px_12px_rgba(0,0,0,0.03)] border border-surface-variant">
+<div class="w-24 h-24 rounded-lg overflow-hidden shrink-0 bg-surface">
+<img alt="Gourmet Beef Burger" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida/AP1WRLu0D0Tral4gFI6h5Jolb2Qmm9xhESx-V8JWAGlbMO8xpWCzVcpkWzIa0ORx_oiBtRvS_v51iRLILG7HokNOBqNJ_0bQJtTHolDAEazAQxpuOwd6FLcI0zINalk3Xj_PBr0qK-iAqzPmGz7B0Lj1Ngluu2zjozEZEa3qEyQof3YiCAf6qvhXrgICpi8zQhszziENhq1IWu6TSWeUGIro1gVc0zCd7gDKycFWasEX2x-B-RH7cBs7Q4QrBfU">
+</div>
+<div class="flex-1 flex flex-col justify-between py-xs">
+<div>
+<h3 class="font-label-lg text-label-lg text-on-background mb-unit">Gourmet Beef Burger</h3>
+<p class="font-body-md text-body-md text-on-surface-variant">Customized</p>
+</div>
+<div class="flex items-center justify-between mt-sm">
+<span class="font-price-display text-price-display text-on-background">$18.50</span>
+<!-- Quantity Selector Pill -->
+<div class="flex items-center bg-surface-variant rounded-full h-8 px-1">
+<button class="w-6 h-6 flex items-center justify-center text-primary rounded-full active:bg-surface-dim transition-colors">
+<span class="material-symbols-outlined text-[16px]" data-icon="remove">remove</span>
+</button>
+<span class="font-label-md text-label-md text-on-background w-6 text-center">1</span>
+<button class="w-6 h-6 flex items-center justify-center text-primary rounded-full active:bg-surface-dim transition-colors">
+<span class="material-symbols-outlined text-[16px]" data-icon="add">add</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Upsell Section -->
+<section class="flex flex-col gap-md">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-sm text-headline-sm text-on-background">Add more &amp; Save</h2>
+<a class="font-label-md text-label-md text-primary active:opacity-70 transition-opacity" href="#">See all</a>
+</div>
+<div class="flex overflow-x-auto gap-md pb-md -mx-margin-mobile px-margin-mobile snap-x scrollbar-hide">
+<!-- Upsell Item 1 -->
+<div class="w-36 shrink-0 snap-start bg-surface-container-lowest rounded-xl p-sm shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-surface-variant flex flex-col gap-sm">
+<div class="w-full aspect-square rounded-lg bg-surface overflow-hidden relative">
+<img alt="Extra Large Fries" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida/AP1WRLuw0rv5g-AmcTGcjq27E6_1179_rQjDkqLvvde8W_oA7FUUjqj2T_nz9uRYebTp_pJqjfWSudZT7ZG8jTHLpSGV-YPvf4uX9yvS60_d6sccfr565YL-_AQd5ZDFNRur38gKcWaS_goxBxRS4MzmNW98oSY25Ygykk3baTSpD1euEXzI1owbqQEAaidI0kHqFiVj9UjL0K8BbftxuLf9324fvvN0MqQcnJXGVi3agTuqI4rMzjsY2G9H9u0">
+</div>
+<div class="flex flex-col flex-1">
+<h4 class="font-label-md text-label-md text-on-background line-clamp-2 min-h-[32px]">Extra Large Fries</h4>
+<div class="flex items-center justify-between mt-sm">
+<span class="font-label-lg text-label-lg text-on-surface-variant">+$4.50</span>
+<button class="h-8 px-3 bg-surface-variant text-on-background font-label-md text-label-md rounded-full hover:bg-surface-dim transition-colors">Add</button>
+</div>
+</div>
+</div>
+<!-- Upsell Item 2 -->
+<div class="w-36 shrink-0 snap-start bg-surface-container-lowest rounded-xl p-sm shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-surface-variant flex flex-col gap-sm">
+<div class="w-full aspect-square rounded-lg bg-surface overflow-hidden relative">
+<img alt="Flat White Coffee" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida/AP1WRLsgLVi_zlwqBZeKOnNdayUtq-bZ3NJRzxZlf80vUKZnc8vfWUDkTa6FNWbTa8d0G6zvdsAkN3GFG6VP4ib1RkWLh-1-Tpn-98LWoLpk7D25x5O5no21plHFHm7983y61i96LParGZF4Nyopq_ZIPMOp6aQgSrXuCICpbmU9xQNgFqexVyZhVdGWHCv_sV0lwn7MgEV7DxiKHVF-8pylSq4FH7nztQwaUsm-RRUWfCLtGuR9OKY4l8g6aA">
+</div>
+<div class="flex flex-col flex-1">
+<h4 class="font-label-md text-label-md text-on-background line-clamp-2 min-h-[32px]">Flat White</h4>
+<div class="flex items-center justify-between mt-sm">
+<span class="font-label-lg text-label-lg text-on-surface-variant">+$5.00</span>
+<button class="h-8 px-3 bg-surface-variant text-on-background font-label-md text-label-md rounded-full hover:bg-surface-dim transition-colors">Add</button>
+</div>
+</div>
+</div>
+<!-- Upsell Item 3 -->
+<div class="w-36 shrink-0 snap-start bg-surface-container-lowest rounded-xl p-sm shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-surface-variant flex flex-col gap-sm">
+<div class="w-full aspect-square rounded-lg bg-surface overflow-hidden relative flex items-center justify-center bg-[#FFF8E7]">
+<img class="w-3/4 h-3/4 object-contain" data-alt="Small white ceramic ramekin filled with creamy garlic dipping sauce, warm studio lighting, highly detailed food photography, isolated on a light neutral background, emphasizing the smooth texture of the sauce." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCzjcnRiCdgEGmg_WsQWwITGCg-NAiebv6nsQ1q4gabBaSlXzepuScKREsfFe0fHuqaHCqE5I-9Os_E43otw0-QMeqlo_CDm8HiihI-SutE266Wv29nZdPYVIlmGS-8PjJ6LItS3shuGZM8HamBsUl2ouEaHDlmD46bNPaL8VgWH_dkENY8jOiyfXcGJkgoBZOB7bmcaoQihMXLZxsGpKfAwl6y1794ecwxQpWd5sHORzE3MQS6VvXQfX2blBHP-kKiW6NvonJRKqk">
+</div>
+<div class="flex flex-col flex-1">
+<h4 class="font-label-md text-label-md text-on-background line-clamp-2 min-h-[32px]">Garlic Dip</h4>
+<div class="flex items-center justify-between mt-sm">
+<span class="font-label-lg text-label-lg text-on-surface-variant">+$1.50</span>
+<button class="h-8 px-3 bg-surface-variant text-on-background font-label-md text-label-md rounded-full hover:bg-surface-dim transition-colors">Add</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Action Area -->
+<div class="fixed bottom-0 left-0 w-full bg-surface-container-lowest pt-md pb-lg px-margin-mobile shadow-[0_-4px_24px_rgba(0,0,0,0.06)] z-50 rounded-t-xl md:pb-md">
+<div class="max-w-screen-md mx-auto flex flex-col gap-sm">
+<button class="w-full h-14 bg-primary text-on-primary rounded-xl font-label-lg text-label-lg flex items-center justify-between px-lg active:scale-[0.98] transition-transform shadow-md shadow-primary/20">
+<span>Go to Checkout</span>
+<span class="font-price-display text-[18px]">$18.50</span>
+</button>
+<button class="w-full h-12 bg-transparent text-primary border border-primary rounded-xl font-label-lg text-label-lg flex items-center justify-center active:bg-primary/5 transition-colors">
+                Continue Shopping
+            </button>
+</div>
+</div>
+<style>
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        /* Hide scrollbar for IE, Edge and Firefox */
+        .scrollbar-hide {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+    </style>
+</body></html>

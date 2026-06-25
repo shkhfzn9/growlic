@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Gourmet Product Detail</title>
+<!-- Font Setup -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind Setup -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            maroon: '#8b0021',
+            'surface': '#f8f9ff',
+            'surface-dim': '#d0dbed',
+            'surface-bright': '#f8f9ff',
+            'surface-container-lowest': '#ffffff',
+            'surface-container-low': '#eff4ff',
+            'surface-container': '#e7eeff',
+            'surface-container-high': '#dfe8ff',
+            'surface-container-highest': '#d8e2ff',
+            'on-surface': '#081630',
+            'on-surface-variant': '#44474e',
+            'outline': '#74777f',
+            'outline-variant': '#c4c6cf',
+            'primary': '#8b0021',
+            'on-primary': '#ffffff',
+            'primary-container': '#ffdadb',
+            'on-primary-container': '#3b000a',
+          },
+          fontFamily: {
+            'serif': ['"Libre Caslon Text"', 'serif'],
+          },
+          borderRadius: {
+            '4xl': '2rem',
+            '5xl': '2.5rem',
+            '6xl': '3rem',
+          }
+        }
+      }
+    }
+  </script>
+<!-- Phosphor Icons -->
+<script src="https://unpkg.com/@phosphor-icons/web"></script>
+<style data-purpose="custom-layout">
+    body {
+      font-family: 'Libre Caslon Text', serif;
+      background-color: #ffffff;
+      color: #081630;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    
+    .hero-image-container {
+      position: relative;
+      width: 100%;
+      height: 380px;
+      overflow: hidden;
+      border-bottom-left-radius: 4rem;
+      border-bottom-right-radius: 4rem;
+      background-color: #b0b0b0; /* Placeholder color */
+    }
+    
+    .hero-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .bottom-bar {
+      box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.05), 0 -2px 4px -1px rgba(0, 0, 0, 0.03);
+    }
+  </style>
+</head>
+<body class="min-h-screen relative pb-28">
+<!-- BEGIN: Hero Section -->
+<section class="hero-image-container">
+<!-- Image Placeholder -->
+<div class="absolute inset-0 flex items-center justify-center text-sm text-gray-700 font-sans">
+      img
+    </div>
+<!-- Top Navigation Overlay -->
+<div class="absolute top-0 left-0 right-0 p-6 flex justify-between items-center z-10 pt-12">
+<!-- Back Button -->
+<button aria-label="Go back" class="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-md text-maroon">
+<i class="ph ph-arrow-left text-xl"></i>
+</button>
+<!-- Favorite Button -->
+<button aria-label="Add to favorites" class="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-md text-maroon">
+<i class="ph-fill ph-heart text-xl"></i>
+</button>
+</div>
+</section>
+<!-- END: Hero Section -->
+<!-- BEGIN: Main Content -->
+<main class="px-6 pt-6 space-y-6">
+<!-- Header: Title and Price -->
+<header class="flex justify-between items-start">
+<div>
+<h1 class="text-3xl font-bold tracking-tight text-on-surface">Teriyaki Chicken</h1>
+<p class="text-on-surface-variant mt-1 text-sm">with Broccoli</p>
+</div>
+<div class="text-right">
+<p class="text-on-surface-variant line-through text-sm">Rp 60.000</p>
+<p class="text-2xl font-bold text-maroon">Rp 59.000</p>
+</div>
+</header>
+<!-- Quick Info Stats -->
+<div class="flex items-center space-x-6 text-sm font-medium">
+<div class="flex items-center space-x-1.5">
+<i class="ph-fill ph-star text-yellow-400 text-lg"></i>
+<span>4.9</span>
+</div>
+<div class="flex items-center space-x-1.5">
+<i class="ph ph-map-pin text-on-surface-variant text-lg"></i>
+<span>1.2 km</span>
+</div>
+<div class="flex items-center space-x-1.5">
+<i class="ph ph-clock text-on-surface-variant text-lg"></i>
+<span>30 mins</span>
+</div>
+</div>
+<!-- Ingredients Section -->
+<section>
+<h2 class="text-lg font-bold mb-2">Ingredients:</h2>
+<p class="text-on-surface-variant text-sm leading-relaxed">
+        Chicken teriyaki is made with boneless chicken, fresh broccoli, and teriyaki sauce made from soy sauce, mirin, sake, and sugar. Additional ingredients include garlic, ginger, sesame oil, sesame seeds, and scallions for garnish.
+      </p>
+</section>
+<!-- Portion Size Selection -->
+<section>
+<h2 class="text-base font-bold mb-3">Select Portion Size</h2>
+<div class="flex space-x-3">
+<button class="flex-1 py-2.5 px-4 bg-maroon text-white rounded-full text-sm font-bold text-center transition-colors">
+          Standard
+        </button>
+<button class="flex-1 py-2.5 px-4 bg-surface-container text-on-surface rounded-full text-sm font-medium text-center transition-colors">
+          Large
+        </button>
+<button class="flex-1 py-2.5 px-4 bg-surface-container text-on-surface rounded-full text-sm font-medium text-center transition-colors">
+          Party Pack
+        </button>
+</div>
+</section>
+<!-- Nutritional Value Card -->
+<section class="bg-surface-container-low rounded-2xl p-4 flex items-center space-x-4">
+<div class="w-10 h-10 rounded-full bg-white flex items-center justify-center text-maroon flex-shrink-0">
+<i class="ph ph-fire text-xl"></i>
+</div>
+<div>
+<h3 class="font-bold text-sm">Nutritional Value</h3>
+<p class="text-on-surface-variant text-xs mt-0.5">High in protein • 450 kcal</p>
+</div>
+</section>
+</main>
+<!-- END: Main Content -->
+<!-- BEGIN: Bottom Action Bar -->
+<footer class="fixed bottom-0 left-0 right-0 bg-white bottom-bar px-6 py-4 flex items-center justify-between gap-4 z-50">
+<!-- Quantity Selector -->
+<div class="flex items-center justify-between bg-surface-container px-4 py-3 rounded-full w-32">
+<button aria-label="Decrease quantity" class="text-on-surface-variant hover:text-on-surface">
+<i class="ph ph-minus text-lg"></i>
+</button>
+<span class="font-bold text-base w-8 text-center">2</span>
+<button aria-label="Increase quantity" class="text-maroon font-bold">
+<i class="ph ph-plus text-lg"></i>
+</button>
+</div>
+<!-- Add to Cart Button -->
+<button class="flex-1 bg-maroon text-white py-4 rounded-full flex items-center justify-center space-x-2 font-bold shadow-sm hover:bg-opacity-90 transition-opacity">
+<span>Add to cart</span>
+<i class="ph-fill ph-shopping-cart text-xl"></i>
+</button>
+</footer>
+<!-- END: Bottom Action Bar -->
+</body></html>

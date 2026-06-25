@@ -37,13 +37,14 @@ export async function seedDatabase() {
       restaurantName: 'Tokyo Momos',
       phone: '9876543210',
       designation: 'owner',
+      role: 'owner',
     });
   } else {
-    // Ensure existing admin record conforms to new schema fields
-    if (!admin.phone || !admin.designation) {
+    // Ensure existing admin record conforms to new schema fields and has correct role
+    if (!admin.phone || !admin.designation || admin.role !== 'owner') {
       const phone = admin.phone || '9876543210';
       const designation = admin.designation || 'owner';
-      admin = await adminRepo.updatePhoneAndDesignation('tokyo-momos', admin._id, phone, designation) || admin;
+      admin = await adminRepo.updatePhoneAndDesignation('tokyo-momos', admin._id, phone, designation, 'owner') || admin;
     }
   }
 
