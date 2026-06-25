@@ -3,6 +3,8 @@
 import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getAdminOrders, updateOrderStatus, updateOrderEstimatedTime } from '@/actions/orders';
+import { PageHeader, StatusBadge, AdminButton } from '@/components/admin/ui';
+import { Clock, ArrowLeft } from 'lucide-react';
 
 interface OrderItem {
   menuItemId: string;
@@ -26,6 +28,18 @@ interface Order {
 }
 
 type FilterStatus = 'all' | Order['status'];
+
+function getStatusVariant(status: Order['status']) {
+  switch (status) {
+    case 'received': return 'info' as const;
+    case 'accepted': return 'info' as const;
+    case 'preparing': return 'warning' as const;
+    case 'ready': return 'success' as const;
+    case 'completed': return 'neutral' as const;
+    case 'cancelled': return 'error' as const;
+    default: return 'neutral' as const;
+  }
+}
 
 function OrdersContent() {
   const searchParams = useSearchParams();
@@ -56,7 +70,6 @@ function OrdersContent() {
       setTotalCount(total);
       setCurrentPage(pageNum);
 
-      // Handle highlight from URL if selectOrder is not manually set yet
       if (highlightId && showLoading) {
         const found = fetchedOrders.find((o: Order) => o._id === highlightId);
         if (found) {
@@ -66,11 +79,8 @@ function OrdersContent() {
       } else if (!selectedOrder && fetchedOrders.length > 0 && showLoading) {
         setSelectedOrder(fetchedOrders[0]);
       } else if (selectedOrder) {
-        // Keep selected order updated with new status if polled
         const updated = fetchedOrders.find((o: Order) => o._id === selectedOrder._id);
-        if (updated) {
-          setSelectedOrder(updated);
-        }
+        if (updated) setSelectedOrder(updated);
       }
 
       setError('');
@@ -84,19 +94,12 @@ function OrdersContent() {
 
   useEffect(() => {
     loadOrders(true, 1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
   useEffect(() => {
     Promise.resolve().then(() => loadOrders(true, currentPage));
-
-    // Poll orders every 10 seconds
-    const interval = setInterval(() => {
-      loadOrders(false, currentPage);
-    }, 10000);
-
+    const interval = setInterval(() => { loadOrders(false, currentPage); }, 10000);
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlightId, currentPage]);
 
   const handleStatusChange = async (orderId: string, nextStatus: Order['status']) => {
@@ -144,55 +147,49 @@ function OrdersContent() {
     }
   };
 
-  const filteredOrders = orders;
-
-  const getStatusLabel = (status: Order['status']) => {
-    return status.toUpperCase();
-  };
-
-  const getStatusColorClass = (status: Order['status']) => {
-    switch (status) {
-      case 'cancelled':
-        return 'border-red-600 text-red-600';
-      case 'completed':
-        return 'border-zinc-300 text-zinc-400';
-      default:
-        return 'border-black bg-black text-white';
-    }
-  };
-
   if (loading) {
-    return <div className="font-mono-custom text-xs text-center py-12">LOADING ORDERS LIST...</div>;
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="h-8 w-32 bg-[#E2E6EA] rounded animate-pulse" />
+        <div className="h-10 w-full bg-[#E2E6EA] rounded-lg animate-pulse" />
+        <div className="flex gap-4">
+          <div className="flex-1 h-96 bg-white border border-[#E2E6EA] rounded-xl animate-pulse" />
+          <div className="flex-1 h-96 bg-white border border-[#E2E6EA] rounded-xl animate-pulse hidden lg:block" />
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="font-mono-custom flex flex-col gap-6">
-      {/* Title */}
-      <div className="border-b border-black pb-4 flex justify-between items-baseline">
-        <div>
-          <h1 className="text-2xl font-bold uppercase">Orders</h1>
-          <span className="text-xs uppercase text-zinc-500">Track and manage customer orders</span>
-        </div>
-        <span className="text-xs uppercase text-zinc-400">Live Updates Active</span>
-      </div>
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        title="Orders"
+        subtitle="Track and manage customer orders in real-time"
+        actions={
+          <span className="inline-flex items-center gap-1.5 text-xs text-[#16A34A] font-medium bg-[#F0FDF4] px-2.5 py-1 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] animate-pulse" />
+            Live
+          </span>
+        }
+      />
 
       {error && (
-        <div className="border border-black p-3 text-xs bg-zinc-100 font-bold text-red-600 uppercase">
-          ⚠️ {error}
+        <div className="bg-[#FEF2F2] border border-[#DC2626]/20 rounded-lg p-3 text-sm text-[#DC2626] font-medium">
+          {error}
         </div>
       )}
 
       {/* Filter Tabs */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1 border-b border-black">
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
         {(['all', 'received', 'accepted', 'preparing', 'ready', 'completed', 'cancelled'] as FilterStatus[]).map(
           (status) => (
             <button
               key={status}
               onClick={() => setFilter(status)}
-              className={`px-3 py-1.5 text-[10px] font-bold border border-black cursor-pointer uppercase whitespace-nowrap transition-colors ${
+              className={`px-3.5 py-2 text-xs font-medium rounded-lg whitespace-nowrap transition-colors capitalize ${
                 filter === status
-                  ? 'bg-black text-white'
-                  : 'bg-white text-black hover:bg-zinc-100'
+                  ? 'bg-[#111827] text-white'
+                  : 'bg-white text-[#6B7280] border border-[#E2E6EA] hover:bg-[#F4F6F9]'
               }`}
             >
               {status}
@@ -202,287 +199,203 @@ function OrdersContent() {
       </div>
 
       {orders.length === 0 ? (
-        <div className="border border-dashed border-black p-12 text-center text-xs uppercase bg-white">
-          No orders received yet.
+        <div className="bg-white border border-[#E2E6EA] rounded-xl p-16 text-center">
+          <p className="text-sm text-[#6B7280]">No orders received yet.</p>
         </div>
       ) : (
-        /* Split-Pane Layout */
-        <div className="flex flex-col lg:flex-row gap-6 items-start w-full">
-          {/* Left pane: Orders list container */}
-          <div className={`w-full lg:w-1/2 flex flex-col gap-3 ${viewMode === 'detail' ? 'hidden lg:block' : 'block'}`}>
-            <div className="border border-black bg-white max-h-[600px] overflow-y-auto">
-              {filteredOrders.length === 0 ? (
-                <div className="p-8 text-center text-xs uppercase text-zinc-400">
-                  No orders matching filter.
-                </div>
-              ) : (
-                <div className="divide-y divide-black">
-                  {filteredOrders.map((order) => {
-                    const displayId = order._id.substring(order._id.length - 6).toUpperCase();
-                    const isSelected = selectedOrder?._id === order._id;
-                    const itemNames = order.items.map((i) => i.name).join(', ');
-                    const dateStr = new Date(order.createdAt).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    });
+        <div className="flex flex-col lg:flex-row gap-4 items-start w-full">
+          {/* Left pane: Orders list */}
+          <div className={`w-full lg:w-1/2 flex flex-col gap-3 ${viewMode === 'detail' ? 'hidden lg:flex' : 'flex'}`}>
+            <div className="bg-white border border-[#E2E6EA] rounded-xl max-h-[600px] overflow-y-auto">
+              <div className="divide-y divide-[#E2E6EA]">
+                {orders.map((order) => {
+                  const displayId = order._id.substring(order._id.length - 6).toUpperCase();
+                  const isSelected = selectedOrder?._id === order._id;
+                  const itemNames = order.items.map((i) => i.name).join(', ');
+                  const dateStr = new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-                    return (
-                      <div
-                        key={order._id}
-                        onClick={() => {
-                          setSelectedOrder(order);
-                          setViewMode('detail');
-                        }}
-                        className={`p-4 flex flex-col gap-1 cursor-pointer hover:bg-zinc-50 transition-colors ${
-                          isSelected ? 'bg-zinc-100 border-l-4 border-black font-bold' : ''
-                        }`}
-                      >
-                        <div className="flex justify-between items-baseline">
-                          <span className="text-sm font-bold">#{displayId}</span>
-                          <span className="text-[10px] text-zinc-500">{dateStr}</span>
-                        </div>
-                        <div className="text-xs uppercase flex justify-between">
-                          <span>{order.customerName} {order.tableId ? `(Table ${order.tableId})` : ''}</span>
-                          <span className="font-bold">₹{order.total}</span>
-                        </div>
-                        <div className="text-[10px] text-zinc-500 truncate mt-1">
-                          ITEMS: {itemNames}
-                        </div>
-                        <div className="mt-2 flex justify-start">
-                          <span
-                            className={`text-[9px] font-bold px-1.5 py-0.5 border ${getStatusColorClass(
-                              order.status
-                            )}`}
-                          >
-                            {getStatusLabel(order.status)}
-                          </span>
-                        </div>
+                  return (
+                    <div
+                      key={order._id}
+                      onClick={() => { setSelectedOrder(order); setViewMode('detail'); }}
+                      className={`p-4 flex flex-col gap-1.5 cursor-pointer transition-colors ${
+                        isSelected ? 'bg-[#FEF2F2] border-l-[3px] border-l-[#C0181A]' : 'hover:bg-[#F4F6F9]'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-semibold text-[#111827]">#{displayId}</span>
+                        <span className="text-[11px] text-[#6B7280]">{dateStr}</span>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-[#111827]">{order.customerName} {order.tableId ? `· Table ${order.tableId}` : ''}</span>
+                        <span className="font-semibold text-[#111827]">₹{order.total}</span>
+                      </div>
+                      <div className="text-[12px] text-[#6B7280] truncate">{itemNames}</div>
+                      <div className="mt-1">
+                        <StatusBadge label={order.status} variant={getStatusVariant(order.status)} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* Pagination Controls */}
             {totalCount > limit && (
-              <div className="flex justify-between items-center px-4 py-2 border border-black bg-white text-xs uppercase font-bold">
+              <div className="flex justify-between items-center px-4 py-2.5 bg-white border border-[#E2E6EA] rounded-lg text-xs">
                 <button
                   disabled={currentPage <= 1}
                   onClick={() => loadOrders(true, currentPage - 1)}
-                  className="px-3 py-1 border border-black hover:bg-zinc-100 disabled:opacity-50 disabled:hover:bg-white cursor-pointer"
+                  className="px-3 py-1.5 border border-[#E2E6EA] rounded-lg hover:bg-[#F4F6F9] disabled:opacity-40 font-medium transition-colors"
                 >
-                  PREV
+                  Previous
                 </button>
-                <span>
-                  PAGE {currentPage} OF {Math.ceil(totalCount / limit)} ({totalCount} total)
+                <span className="text-[#6B7280]">
+                  Page {currentPage} of {Math.ceil(totalCount / limit)} ({totalCount} total)
                 </span>
                 <button
                   disabled={currentPage >= Math.ceil(totalCount / limit)}
                   onClick={() => loadOrders(true, currentPage + 1)}
-                  className="px-3 py-1 border border-black hover:bg-zinc-100 disabled:opacity-50 disabled:hover:bg-white cursor-pointer"
+                  className="px-3 py-1.5 border border-[#E2E6EA] rounded-lg hover:bg-[#F4F6F9] disabled:opacity-40 font-medium transition-colors"
                 >
-                  NEXT
+                  Next
                 </button>
               </div>
             )}
           </div>
 
-          {/* Right pane: Order detail */}
-          <div className={`w-full lg:w-1/2 border border-black p-6 bg-white flex flex-col gap-6 sticky top-6 ${viewMode === 'list' ? 'hidden lg:flex' : 'flex'}`}>
+          {/* Right pane: Detail */}
+          <div className={`w-full lg:w-1/2 bg-white border border-[#E2E6EA] rounded-xl p-6 flex flex-col gap-5 lg:sticky lg:top-6 ${viewMode === 'list' ? 'hidden lg:flex' : 'flex'}`}>
             {selectedOrder ? (
               <>
-                {/* Back Button for Mobile */}
                 <button
                   onClick={() => setViewMode('list')}
-                  className="lg:hidden w-full border border-black py-2.5 text-xs font-bold uppercase bg-zinc-50 hover:bg-zinc-100 transition-all cursor-pointer mb-2"
+                  className="lg:hidden flex items-center gap-1.5 text-sm text-[#6B7280] hover:text-[#111827] mb-2 transition-colors"
                 >
-                  ← Back to Orders List
+                  <ArrowLeft className="w-4 h-4" /> Back to list
                 </button>
+
                 {/* Header */}
-                <div className="border-b border-black pb-4">
-                  <div className="flex justify-between items-baseline">
-                    <h2 className="text-lg font-bold">ORDER DETAILS</h2>
-                    <span
-                      className={`text-xs font-bold px-2 py-0.5 border ${getStatusColorClass(
-                        selectedOrder.status
-                      )}`}
-                    >
-                      {getStatusLabel(selectedOrder.status)}
-                    </span>
+                <div className="flex justify-between items-start border-b border-[#E2E6EA] pb-4">
+                  <div>
+                    <h2 className="text-lg font-bold text-[#111827]">Order Details</h2>
+                    <span className="text-[12px] text-[#6B7280] block mt-0.5">ID: {selectedOrder._id}</span>
+                    <span className="text-[12px] text-[#6B7280] block">{new Date(selectedOrder.createdAt).toLocaleString()}</span>
                   </div>
-                  <span className="text-[10px] text-zinc-500 uppercase mt-1 block">
-                    ID: {selectedOrder._id}
-                  </span>
-                  <span className="text-[10px] text-zinc-400 uppercase mt-0.5 block">
-                    Placed: {new Date(selectedOrder.createdAt).toLocaleString()}
-                  </span>
-                  {selectedOrder.estimatedTime ? (
-                    <span className="text-[10px] text-black font-bold uppercase mt-0.5 block bg-zinc-100 px-2 py-0.5 w-fit border border-dashed border-black">
-                      Preparation ETA: {selectedOrder.estimatedTime} mins
-                    </span>
-                  ) : null}
+                  <StatusBadge label={selectedOrder.status} variant={getStatusVariant(selectedOrder.status)} />
                 </div>
 
-                {/* Customer Details */}
+                {selectedOrder.estimatedTime && (
+                  <div className="inline-flex items-center gap-1.5 text-sm font-medium text-[#D97706] bg-[#FFFBEB] px-3 py-1.5 rounded-lg border border-[#D97706]/20 w-fit">
+                    <Clock className="w-3.5 h-3.5" />
+                    ETA: {selectedOrder.estimatedTime} mins
+                  </div>
+                )}
+
+                {/* Customer */}
                 <div>
-                  <h3 className="font-bold text-xs uppercase mb-2 border-b border-dashed border-zinc-200 pb-1">
-                    Customer
-                  </h3>
-                  <p className="text-xs font-bold">{selectedOrder.customerName.toUpperCase()}</p>
-                  <p className="text-xs text-zinc-600 mt-1">{selectedOrder.customerPhone}</p>
+                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] mb-2">Customer</h3>
+                  <p className="text-sm font-medium text-[#111827]">{selectedOrder.customerName}</p>
+                  <p className="text-sm text-[#6B7280]">{selectedOrder.customerPhone}</p>
                   {selectedOrder.tableId && (
-                    <p className="text-[10px] text-black font-bold uppercase mt-1 bg-yellow-100 px-2 py-0.5 w-fit border border-dashed border-black">
-                      Table: {selectedOrder.tableId}
-                    </p>
+                    <span className="inline-flex mt-1.5 text-xs font-medium bg-[#FFFBEB] text-[#D97706] px-2 py-0.5 rounded border border-[#D97706]/20">
+                      Table {selectedOrder.tableId}
+                    </span>
                   )}
                 </div>
 
-                {/* Receipt Details */}
+                {/* Receipt */}
                 <div>
-                  <h3 className="font-bold text-xs uppercase mb-2 border-b border-dashed border-zinc-200 pb-1">
-                    Receipt
-                  </h3>
-                  <div className="divide-y divide-dashed divide-zinc-200 text-xs">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] mb-2">Items</h3>
+                  <div className="divide-y divide-[#E2E6EA]">
                     {selectedOrder.items.map((item, idx) => (
-                      <div key={idx} className="py-2 flex justify-between uppercase">
-                        <span>
-                          {item.name} x{item.quantity}
-                        </span>
-                        <span>₹{item.price * item.quantity}</span>
+                      <div key={idx} className="py-2 flex justify-between text-sm">
+                        <span className="text-[#111827]">{item.name} <span className="text-[#6B7280]">×{item.quantity}</span></span>
+                        <span className="font-medium">₹{item.price * item.quantity}</span>
                       </div>
                     ))}
                   </div>
-                  <div className="border-t border-black pt-3 mt-2 flex justify-between font-bold text-sm uppercase">
-                    <span>Total Paid</span>
+                  <div className="border-t border-[#111827] pt-3 mt-2 flex justify-between font-semibold text-[#111827]">
+                    <span>Total</span>
                     <span>₹{selectedOrder.total}</span>
                   </div>
                 </div>
 
-                {/* Workflow Transitions */}
-                <div className="border-t border-black pt-4 flex flex-col gap-4">
-                  <div>
-                    <h3 className="font-bold text-xs uppercase mb-2">Set Preparation ETA</h3>
+                {/* ETA Controls */}
+                {['received', 'accepted', 'preparing'].includes(selectedOrder.status) && (
+                  <div className="border-t border-[#E2E6EA] pt-4">
+                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] mb-2">Set Preparation ETA</h3>
                     {actionLoading[selectedOrder._id] ? (
-                      <span className="text-xs font-bold uppercase text-zinc-400 animate-pulse block my-1">
-                        🔄 Updating order ETA...
-                      </span>
-                    ) : ['received', 'accepted', 'preparing'].includes(selectedOrder.status) ? (
+                      <span className="text-xs text-[#6B7280] animate-pulse">Updating...</span>
+                    ) : (
                       <div className="flex flex-col gap-2">
-                        {/* Preset ETA Buttons */}
                         <div className="flex flex-wrap gap-1.5">
                           {[10, 15, 20, 30, 45, 60].map((mins) => (
                             <button
                               key={mins}
                               onClick={() => handleEtaChange(selectedOrder._id, mins)}
-                              disabled={actionLoading[selectedOrder._id]}
-                              className="border border-black bg-white text-black hover:bg-black hover:text-white px-2.5 py-1 text-[10px] font-bold uppercase cursor-pointer"
+                              className="px-3 py-1.5 text-xs font-medium bg-white border border-[#E2E6EA] rounded-lg hover:bg-[#F4F6F9] transition-colors"
                             >
-                              +{mins} Min
+                              {mins} min
                             </button>
                           ))}
                         </div>
-                        
-                        {/* Custom ETA input */}
                         <div className="flex gap-2 items-center">
                           <input
                             type="number"
                             min="1"
                             max="180"
-                            placeholder="Custom Mins (e.g. 25)"
+                            placeholder="Custom minutes"
                             value={customEta}
                             onChange={(e) => setCustomEta(e.target.value)}
-                            disabled={actionLoading[selectedOrder._id]}
-                            className="text-[10px] w-36 px-2 py-1"
+                            className="px-3 py-1.5 text-xs border border-[#E2E6EA] rounded-lg w-32 outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A]"
                           />
-                          <button
+                          <AdminButton
+                            size="sm"
                             onClick={() => {
                               const val = parseInt(customEta);
-                              if (val > 0) {
-                                handleEtaChange(selectedOrder._id, val);
-                              } else {
-                                alert('Please enter valid minutes');
-                              }
+                              if (val > 0) handleEtaChange(selectedOrder._id, val);
+                              else alert('Please enter valid minutes');
                             }}
-                            disabled={actionLoading[selectedOrder._id]}
-                            className="border border-black bg-black text-white hover:bg-white hover:text-black px-3 py-1 text-[10px] font-bold uppercase cursor-pointer"
                           >
-                            [ SET ]
-                          </button>
+                            Set
+                          </AdminButton>
                         </div>
                       </div>
-                    ) : (
-                      <span className="text-[10px] text-zinc-400 uppercase italic">
-                        Cannot change ETA for {selectedOrder.status} orders.
-                      </span>
                     )}
                   </div>
+                )}
 
-                  <div className="border-t border-dashed border-zinc-200 pt-3 flex flex-col gap-2">
-                    <h3 className="font-bold text-xs uppercase mb-2">Change Order Status</h3>
-                    {actionLoading[selectedOrder._id] ? (
-                      <span className="text-xs font-bold uppercase text-zinc-400 animate-pulse block my-1">
-                        🔄 Transiting order status...
-                      </span>
-                    ) : (
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        {selectedOrder.status === 'received' && (
-                          <button
-                            onClick={() => handleStatusChange(selectedOrder._id, 'accepted')}
-                            disabled={actionLoading[selectedOrder._id]}
-                            className="border border-black bg-black text-white hover:bg-white hover:text-black font-bold px-3 py-1.5 cursor-pointer uppercase"
-                          >
-                            [ Accept Order ]
-                          </button>
-                        )}
-                        {selectedOrder.status === 'accepted' && (
-                          <button
-                            onClick={() => handleStatusChange(selectedOrder._id, 'preparing')}
-                            disabled={actionLoading[selectedOrder._id]}
-                            className="border border-black bg-black text-white hover:bg-white hover:text-black font-bold px-3 py-1.5 cursor-pointer uppercase"
-                          >
-                            [ Start Preparing ]
-                          </button>
-                        )}
-                        {selectedOrder.status === 'preparing' && (
-                          <button
-                            onClick={() => handleStatusChange(selectedOrder._id, 'ready')}
-                            disabled={actionLoading[selectedOrder._id]}
-                            className="border border-black bg-black text-white hover:bg-white hover:text-black font-bold px-3 py-1.5 cursor-pointer uppercase"
-                          >
-                            [ Mark as Ready ]
-                          </button>
-                        )}
-                        {selectedOrder.status === 'ready' && (
-                          <button
-                            onClick={() => handleStatusChange(selectedOrder._id, 'completed')}
-                            disabled={actionLoading[selectedOrder._id]}
-                            className="border border-black bg-black text-white hover:bg-white hover:text-black font-bold px-3 py-1.5 cursor-pointer uppercase"
-                          >
-                            [ Mark as Completed ]
-                          </button>
-                        )}
-                        {['received', 'accepted', 'preparing', 'ready'].includes(selectedOrder.status) && (
-                          <button
-                            onClick={() => handleCancelOrder(selectedOrder._id)}
-                            disabled={actionLoading[selectedOrder._id]}
-                            className="border border-red-600 text-red-600 hover:bg-red-600 hover:text-white font-bold px-3 py-1.5 cursor-pointer uppercase"
-                          >
-                            [ Reject/Cancel Order ]
-                          </button>
-                        )}
-                        {['completed', 'cancelled'].includes(selectedOrder.status) && (
-                          <span className="text-[10px] text-zinc-400 uppercase italic">
-                            This order is final and has no remaining transitions.
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                {/* Status Controls */}
+                <div className="border-t border-[#E2E6EA] pt-4">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] mb-3">Update Status</h3>
+                  {actionLoading[selectedOrder._id] ? (
+                    <span className="text-xs text-[#6B7280] animate-pulse">Updating...</span>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedOrder.status === 'received' && (
+                        <AdminButton onClick={() => handleStatusChange(selectedOrder._id, 'accepted')}>Accept Order</AdminButton>
+                      )}
+                      {selectedOrder.status === 'accepted' && (
+                        <AdminButton onClick={() => handleStatusChange(selectedOrder._id, 'preparing')}>Start Preparing</AdminButton>
+                      )}
+                      {selectedOrder.status === 'preparing' && (
+                        <AdminButton onClick={() => handleStatusChange(selectedOrder._id, 'ready')}>Mark Ready</AdminButton>
+                      )}
+                      {selectedOrder.status === 'ready' && (
+                        <AdminButton onClick={() => handleStatusChange(selectedOrder._id, 'completed')}>Complete</AdminButton>
+                      )}
+                      {['received', 'accepted', 'preparing', 'ready'].includes(selectedOrder.status) && (
+                        <AdminButton variant="danger" onClick={() => handleCancelOrder(selectedOrder._id)}>Cancel</AdminButton>
+                      )}
+                      {['completed', 'cancelled'].includes(selectedOrder.status) && (
+                        <span className="text-sm text-[#6B7280]">This order is finalized.</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </>
             ) : (
-              <div className="text-center py-12 text-xs uppercase text-zinc-400">
+              <div className="text-center py-12 text-sm text-[#6B7280]">
                 Select an order from the list to view details.
               </div>
             )}
@@ -495,7 +408,12 @@ function OrdersContent() {
 
 export default function AdminOrdersPage() {
   return (
-    <Suspense fallback={<div className="font-mono-custom text-xs text-center py-12">LOADING ORDERS PAGE...</div>}>
+    <Suspense fallback={
+      <div className="flex flex-col gap-4">
+        <div className="h-8 w-32 bg-[#E2E6EA] rounded animate-pulse" />
+        <div className="h-96 bg-white border border-[#E2E6EA] rounded-xl animate-pulse" />
+      </div>
+    }>
       <OrdersContent />
     </Suspense>
   );

@@ -4,9 +4,8 @@ import React, { useState, Suspense } from 'react';
 import { useDispatch } from 'react-redux';
 import { loginSuccess } from '@/redux/authSlice';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { AppDispatch } from '@/redux/store'; // wait, is there store? let's keep original imports or just add Eye/EyeOff
 import Link from 'next/link';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 
 function LoginForm() {
   const dispatch = useDispatch();
@@ -43,7 +42,6 @@ function LoginForm() {
         throw new Error(data.error || 'Invalid credentials');
       }
 
-      // Dispatch success details
       dispatch(
         loginSuccess({
           token: data.token,
@@ -53,7 +51,6 @@ function LoginForm() {
         })
       );
 
-      // Determine redirect URL
       const redirectUrl = searchParams.get('redirect') || '/admin/dashboard';
       router.push(redirectUrl);
     } catch (err) {
@@ -65,76 +62,81 @@ function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-white font-mono-custom">
-      <div className="w-full max-w-sm border border-black p-5 sm:p-8 bg-white">
-        {/* Header */}
-        <div className="border-b border-black pb-4 mb-6 text-center">
-          <h1 className="text-xl font-bold uppercase tracking-tighter">Admin Login</h1>
-          <span className="text-[10px] text-zinc-500 uppercase">Restaurant QR Ordering System</span>
+    <div className="min-h-screen bg-[#1C2333] flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      {/* Subtle background accent */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#1C2333] to-[#111827]" />
+      <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-gradient-to-t from-[#C0181A]/5 to-transparent" />
+
+      <div className="relative z-10 w-full max-w-sm">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-white tracking-tight">Growlic</h1>
+          <p className="text-white/50 text-sm mt-1">Admin Panel</p>
         </div>
 
-        {/* Error message */}
-        {error && (
-          <div className="border border-black p-3 text-xs bg-zinc-100 font-bold text-red-600 uppercase mb-4">
-            ⚠️ {error}
-          </div>
-        )}
+        {/* Card */}
+        <div className="bg-white rounded-2xl shadow-xl p-6">
+          <h2 className="text-lg font-bold text-[#111827] text-center mb-1">Welcome Back</h2>
+          <p className="text-[#6B7280] text-sm text-center mb-6">Sign in to manage your restaurant</p>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-bold uppercase">Email</label>
-            <input
-              type="email"
-              placeholder="admin@growlic.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={loading}
-              className="w-full text-xs font-mono-custom"
-              required
-            />
-          </div>
+          {error && (
+            <div className="bg-[#FEF2F2] text-[#DC2626] text-sm font-medium rounded-lg p-3 mb-4 border border-[#DC2626]/20">
+              {error}
+            </div>
+          )}
 
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-bold uppercase">Password</label>
-            <div className="relative flex items-center">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Email</label>
               <input
-                type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                type="email"
+                placeholder="admin@growlic.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
-                className="w-full text-xs font-mono-custom pr-10"
+                className="bg-[#F4F6F9] border border-[#E2E6EA] rounded-lg px-4 py-3 text-sm text-[#111827] outline-none transition-colors focus:border-[#C0181A] focus:ring-2 focus:ring-[#C0181A]/20 placeholder:text-[#6B7280]/60"
                 required
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-black cursor-pointer bg-transparent border-0 focus:outline-none flex items-center justify-center"
-                title={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
             </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Password</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                  className="w-full bg-[#F4F6F9] border border-[#E2E6EA] rounded-lg px-4 py-3 pr-11 text-sm text-[#111827] outline-none transition-colors focus:border-[#C0181A] focus:ring-2 focus:ring-[#C0181A]/20 placeholder:text-[#6B7280]/60"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B7280] hover:text-[#111827] transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#C0181A] text-white font-semibold text-sm py-3 rounded-lg mt-2 hover:bg-[#A01416] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-[#C0181A]/30"
+            >
+              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+              {loading ? 'Signing In...' : 'Sign In'}
+            </button>
+          </form>
+
+          <div className="mt-6 pt-4 border-t border-[#E2E6EA] text-center">
+            <span className="text-xs text-[#6B7280] block mb-2">Want to register a new restaurant?</span>
+            <Link href="/admin/register" className="text-[#C0181A] font-semibold text-sm hover:underline">
+              Create Account
+            </Link>
           </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="border-2 border-black w-full py-2.5 text-xs font-bold uppercase bg-black text-white hover:bg-white hover:text-black transition-all cursor-pointer disabled:opacity-50 mt-2"
-          >
-            {loading ? 'LOGGING IN...' : '[ LOGIN ]'}
-          </button>
-        </form>
-
-        {/* Register redirection link */}
-        <div className="mt-6 pt-4 border-t border-dashed border-black/20 text-center font-mono-custom">
-          <span className="text-[10px] text-zinc-500 uppercase block mb-2">Want to launch a new restaurant?</span>
-          <Link
-            href="/admin/register"
-            className="inline-block text-xs font-bold uppercase underline hover:no-underline hover:text-zinc-650 transition-colors"
-          >
-            [ Register your Restaurant ]
-          </Link>
         </div>
       </div>
     </div>
@@ -143,7 +145,11 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="font-mono-custom text-xs text-center p-8">Loading...</div>}>
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#1C2333] flex items-center justify-center">
+        <Loader2 className="w-6 h-6 text-white animate-spin" />
+      </div>
+    }>
       <LoginForm />
     </Suspense>
   );

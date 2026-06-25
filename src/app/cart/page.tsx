@@ -8,7 +8,14 @@ import { createOrder, logEvent } from '@/actions/orders';
 import { getUpsellConfig } from '@/actions/upsell';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { RefreshCw } from 'lucide-react';
+import { Minus, Plus, ArrowLeft, ShoppingBag, Loader2, X, Gift, TrendingUp, Sparkles } from 'lucide-react';
+
+const DISH_PLACEHOLDER = '/dish_placeholder.jpg';
+
+const getItemImage = (image?: string) => {
+  if (!image || image.startsWith('data:image/svg+xml')) return DISH_PLACEHOLDER;
+  return image;
+};
 
 interface MenuItem {
   _id: string;
@@ -65,7 +72,7 @@ export default function CartPage() {
   const dispatch = useDispatch();
   const router = useRouter();
   const cart = useSelector((state: RootState) => state.cart);
-  
+
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [pairingRules, setPairingRules] = useState<PairingRule[]>([]);
   const [discountTiers, setDiscountTiers] = useState<DiscountTier[]>([]);
@@ -80,7 +87,6 @@ export default function CartPage() {
   const [showModal, setShowModal] = useState(false);
   const [offersLoading, setOffersLoading] = useState(true);
 
-  // Fetch upsell configs on component load or restaurant ID changes
   useEffect(() => {
     if (cart.restaurantId) {
       setOffersLoading(true);
@@ -104,7 +110,7 @@ export default function CartPage() {
 
   const { subtotal, items } = cart;
 
-  // 1. Core Rules Evaluation Engine (Memoized)
+  // Core Rules Evaluation Engine
   const evaluationResult = React.useMemo(() => {
     if (items.length === 0) {
       return {
@@ -123,13 +129,11 @@ export default function CartPage() {
     let comboDiscounts = 0;
     const potentialCombos: Nudge[] = [];
 
-    // Track consumed quantities per item to avoid double-discounting
     const consumedQuantities: Record<string, number> = {};
     const getAvailableQty = (itemId: string, initialQty: number) => {
       return initialQty - (consumedQuantities[itemId] || 0);
     };
 
-    // Evaluate Combo/Freebie Rules
     comboRules.forEach((rule) => {
       if (!rule.active) return;
 
@@ -141,7 +145,6 @@ export default function CartPage() {
       let conditionMet = false;
 
       if (condition === 'momos_variety') {
-        // At least 2 distinct momo items in cart
         const momoCategories = ['Classic Momos', 'Momos Gravy Add Ons', 'Momos Woksizzle'];
         const distinctMomoItems = items.filter(
           (i) => momoCategories.includes(i.category) && getAvailableQty(i.id, i.quantity) > 0
@@ -151,36 +154,32 @@ export default function CartPage() {
         const threshold = Number(condition.split(':')[1]) || 0;
         conditionMet = subtotal >= threshold;
       } else {
-        // Comma-separated list of categories
         const categories = condition.split(',').map((c) => c.trim());
         const totalQty = items
           .filter((i) => categories.includes(i.category))
           .reduce((sum, i) => sum + getAvailableQty(i.id, i.quantity), 0);
-        // If message has '2+', require 2; else require 1
         const requiredQty = rule.customerMessage.toLowerCase().includes('2+') ? 2 : 1;
         conditionMet = totalQty >= requiredQty;
       }
 
       if (conditionMet) {
-        // Resolve drinks missing category fallback
         let resolvedExcludeCat = excludeCat;
         let resolvedRewardTargetCat = rewardTarget;
-        
+
         const menuCategories = Array.from(new Set(menuItems.map((m) => m.category)));
         const drinksExist = menuCategories.some(
           (c) => c.toLowerCase().includes('drink') || c.toLowerCase().includes('beverage')
         );
 
         if (excludeCat && (excludeCat.toLowerCase().includes('drink') || excludeCat.toLowerCase().includes('beverage')) && !drinksExist) {
-          resolvedExcludeCat = 'Tokyo Soups'; // Fallback exclude category
+          resolvedExcludeCat = 'Tokyo Soups';
         }
 
         const isTargetDrinks = rewardTarget.toLowerCase().includes('drink') || rewardTarget.toLowerCase().includes('beverage');
         if (isTargetDrinks && !drinksExist) {
-          resolvedRewardTargetCat = 'Tokyo Soups'; // Fallback reward target category
+          resolvedRewardTargetCat = 'Tokyo Soups';
         }
 
-        // Check if user has the target/exclusion in cart
         let hasRewardInCart = false;
         let targetItemsInCart: typeof items = [];
 
@@ -204,7 +203,6 @@ export default function CartPage() {
         }
 
         if (hasRewardInCart) {
-          // Combo applied!
           let discount = 0;
           let discountedItemName = '';
 
@@ -248,7 +246,6 @@ export default function CartPage() {
             });
           }
         } else {
-          // Condition met, but reward is missing. Show Nudge!
           let savingsValue = 0;
           let suggestedItemsForNudge: MenuItem[] = [];
 
@@ -279,7 +276,6 @@ export default function CartPage() {
       }
     });
 
-    // Evaluate Discount Tiers
     let unlockedDiscountTier: DiscountTier | null = null;
     let tierDiscount = 0;
 
@@ -293,7 +289,6 @@ export default function CartPage() {
           .filter((i) => i.category === tier.categoryScope)
           .reduce((sum, i) => sum + i.price * i.quantity, 0);
       }
-
       if (spend >= tier.minSpend) {
         unlockedDiscountTier = tier;
       }
@@ -314,7 +309,6 @@ export default function CartPage() {
       });
     }
 
-    // Next Locked Tier Nudge
     const nextLockedTier = sortedTiers.find((tier) => {
       let spend = subtotal;
       if (tier.categoryScope) {
@@ -365,7 +359,7 @@ export default function CartPage() {
     };
   }, [items, subtotal, comboRules, discountTiers, menuItems]);
 
-  // 2. Cross-sell / Affinity Suggestions (Memoized)
+  // Cross-sell Suggestions
   const crossSellSuggestions = React.useMemo<Array<MenuItem & { socialProof?: string }>>(() => {
     if (menuItems.length === 0) return [];
 
@@ -375,9 +369,8 @@ export default function CartPage() {
 
     if (notInCart.length === 0) return [];
 
-    // Enforce fit meals diet exclusions
     const hasFitMeals = items.some((i) => ['Fit Meals', 'Chicken Salad'].includes(i.category));
-    
+
     const isExcludedByDiet = (item: MenuItem) => {
       if (!hasFitMeals) return false;
       const nameLower = item.name.toLowerCase();
@@ -391,7 +384,6 @@ export default function CartPage() {
 
     const suggestions: Array<MenuItem & { socialProof?: string; priority: number; score?: number }> = [];
 
-    // Data-driven affinity (unlocked if completedCount >= 50)
     if (completedCount >= 50) {
       items.forEach((cartItem) => {
         const affinityList = computedAffinity[cartItem.name];
@@ -402,7 +394,7 @@ export default function CartPage() {
               const confidencePct = Math.round(aff.confidence * 100);
               const existingIdx = suggestions.findIndex(s => s._id === matched._id);
               const socialProofText = `${confidencePct}% of customers who ordered ${cartItem.name} also added this`;
-              
+
               if (existingIdx > -1) {
                 if ((suggestions[existingIdx].score || 0) < aff.confidence) {
                   suggestions[existingIdx] = {
@@ -426,37 +418,27 @@ export default function CartPage() {
       });
     }
 
-    // Sort data-driven matches by confidence score descending
     suggestions.sort((a, b) => (b.score || 0) - (a.score || 0));
 
-    // Manual fallback category tag mappings
     const manualSuggestions: Array<MenuItem & { priority: number }> = [];
     items.forEach((cartItem) => {
-      // Menu item overrides
       const menuVer = menuItems.find(m => m._id === cartItem.id);
       if (menuVer && menuVer.pairsWithCategories) {
         menuVer.pairsWithCategories.forEach((cat) => {
           finalCandidates.forEach((candidate) => {
             if (candidate.category === cat && !suggestions.some(s => s._id === candidate._id) && !manualSuggestions.some(m => m._id === candidate._id)) {
-              manualSuggestions.push({
-                ...candidate,
-                priority: 2
-              });
+              manualSuggestions.push({ ...candidate, priority: 2 });
             }
           });
         });
       }
 
-      // Pairing Rules overrides
       pairingRules.forEach((rule) => {
         if (rule.active && rule.triggerCategory === cartItem.category) {
           rule.suggestCategories.forEach((cat) => {
             finalCandidates.forEach((candidate) => {
               if (candidate.category === cat && !suggestions.some(s => s._id === candidate._id) && !manualSuggestions.some(m => m._id === candidate._id)) {
-                manualSuggestions.push({
-                  ...candidate,
-                  priority: 3
-                });
+                manualSuggestions.push({ ...candidate, priority: 3 });
               }
             });
           });
@@ -466,15 +448,11 @@ export default function CartPage() {
 
     const combined = [...suggestions, ...manualSuggestions];
 
-    // Popular default items if suggestions count < 3
     let index = 0;
     while (combined.length < 3 && index < finalCandidates.length) {
       const candidate = finalCandidates[index];
       if (!combined.some((s) => s._id === candidate._id)) {
-        combined.push({
-          ...candidate,
-          priority: 4
-        });
+        combined.push({ ...candidate, priority: 4 });
       }
       index++;
     }
@@ -482,19 +460,16 @@ export default function CartPage() {
     return combined.slice(0, 8);
   }, [menuItems, items, completedCount, computedAffinity, pairingRules]);
 
-  // 3. Compile Nudges to Display (Cap at 2, ranked by savings value)
+  // Nudges to show
   const nudgesToShow = React.useMemo(() => {
     const list: Nudge[] = [];
 
-    // Add discount level up progress nudge
     if (evaluationResult.discountNudge) {
       list.push(evaluationResult.discountNudge);
     }
 
-    // Add potential combo nudges
     evaluationResult.potentialCombos.forEach((c) => list.push(c));
 
-    // Add cross-sell nudge if list is below cap
     if (crossSellSuggestions.length > 0) {
       const topItem = crossSellSuggestions[0];
       list.push({
@@ -508,11 +483,10 @@ export default function CartPage() {
       });
     }
 
-    // Deduplicate & Rank by highest potential savings, capping at 2
     return list.sort((a, b) => b.savings - a.savings).slice(0, 2);
   }, [evaluationResult, crossSellSuggestions]);
 
-  // Log nudge views (newly added for tracking)
+  // Log nudge views
   useEffect(() => {
     const restaurantId = cart.restaurantId;
     if (nudgesToShow.length > 0 && restaurantId) {
@@ -601,7 +575,7 @@ export default function CartPage() {
       };
 
       const createdOrder = await createOrder(orderPayload);
-      
+
       dispatch(clearCart());
       setShowModal(false);
       router.push(`/track/${createdOrder._id}?restaurantId=${cart.restaurantId}`);
@@ -617,17 +591,23 @@ export default function CartPage() {
 
   if (cart.items.length === 0) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-white font-mono-custom text-center">
-        <div className="border border-black p-8 max-w-sm">
-          <h1 className="text-xl font-bold uppercase mb-4">Your Cart is Empty</h1>
-          <p className="text-xs text-zinc-600 mb-6">
+      <div className="min-h-screen bg-gradient-to-br from-bg-dark to-bg-darker flex flex-col items-center justify-center p-6 relative overflow-hidden">
+        <svg className="absolute bottom-0 left-0 w-full h-[40%]" viewBox="0 0 1440 320" preserveAspectRatio="none">
+          <path d="M0,160L48,170.7C96,181,192,203,288,197.3C384,192,480,160,576,154.7C672,149,768,171,864,186.7C960,203,1056,213,1152,197.3C1248,181,1344,139,1392,117.3L1440,96L1440,320L0,320Z" fill="#C0181A" fillOpacity="0.15" />
+        </svg>
+        <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.10)] p-8 max-w-sm w-full text-center relative z-10">
+          <div className="bg-surface rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+            <ShoppingBag className="w-7 h-7 text-primary" />
+          </div>
+          <h1 className="font-black text-xl text-text-dark uppercase tracking-tight mb-2">Your Cart is Empty</h1>
+          <p className="text-sm text-text-dark/60 mb-6">
             Add items from the menu to place an order.
           </p>
           <Link
             href={menuUrl}
-            className="w-full inline-block border border-black px-4 py-2 text-xs font-bold uppercase bg-black text-white hover:bg-white hover:text-black transition-all"
+            className="block bg-cta text-text-dark font-bold text-sm py-3.5 rounded-xl uppercase tracking-wide text-center active:scale-[0.97] transition-transform"
           >
-            [ GO TO MENU ]
+            Browse Menu
           </Link>
         </div>
       </div>
@@ -635,291 +615,237 @@ export default function CartPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8 font-mono-custom min-h-screen flex flex-col relative">
-      <div className="flex justify-between items-baseline border-b border-black pb-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold uppercase">Your Cart</h1>
+    <div className="min-h-screen bg-white flex flex-col">
+      {/* Header */}
+      <header className="bg-gradient-to-br from-bg-dark to-bg-darker px-4 pt-5 pb-6 relative overflow-hidden">
+        <svg className="absolute bottom-0 left-0 w-full h-12" viewBox="0 0 1440 120" preserveAspectRatio="none">
+          <path d="M0,60L60,52C120,44,240,28,360,32C480,36,600,60,720,68C840,76,960,68,1080,56C1200,44,1320,28,1380,20L1440,12L1440,120L0,120Z" fill="#C0181A" fillOpacity="0.15" />
+        </svg>
+        <div className="max-w-2xl mx-auto relative z-10">
+          <Link href={menuUrl} className="inline-flex items-center gap-1.5 text-white/80 text-sm mb-3 active:opacity-70">
+            <ArrowLeft className="w-4 h-4" />
+            <span>Keep Ordering</span>
+          </Link>
+          <h1 className="text-2xl font-black text-white uppercase tracking-tight">Your Cart</h1>
           {cart.restaurantName && (
-            <span className="text-[10px] uppercase text-zinc-500 font-bold block mt-1">
-              Ordering from: {cart.restaurantName} {cart.tableId ? `| Table ${cart.tableId}` : ''}
-            </span>
+            <p className="text-white/60 text-xs mt-0.5">
+              {cart.restaurantName} {cart.tableId ? `· Table ${cart.tableId}` : ''}
+            </p>
           )}
         </div>
-        <Link href={menuUrl} className="text-xs uppercase hover:underline">
-          ← Keep Ordering
-        </Link>
-      </div>
+      </header>
 
-      {/* Cart Items List */}
-      <div className="border border-black bg-white mb-6 animate-fade-in">
-        <div className="divide-y divide-black">
-          {cart.items.map((item) => (
-            <div key={item.id} className="p-4 flex justify-between items-start gap-4">
-              <div className="flex-1">
-                <span className="text-xs uppercase text-zinc-500 block">{item.category}</span>
-                <span className="font-bold text-sm block uppercase">{item.name}</span>
-                <span className="text-xs text-zinc-600">₹{item.price} each</span>
+      <div className="flex-1 max-w-2xl mx-auto w-full px-4 py-5 flex flex-col gap-5">
+        {/* Cart Items */}
+        <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)] overflow-hidden">
+          {cart.items.map((item, idx) => (
+            <div key={item.id} className={`p-4 flex gap-3 ${idx > 0 ? 'border-t border-surface' : ''}`}>
+              <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={getItemImage(item.image)} alt={item.name} className="w-full h-full object-cover" />
               </div>
-
+              <div className="flex-1 min-w-0">
+                <span className="text-[0.6rem] text-text-dark/50 uppercase font-bold">{item.category}</span>
+                <h3 className="font-bold text-sm text-text-dark leading-tight truncate">{item.name}</h3>
+                <span className="text-xs text-text-dark/60">₹{item.price} each</span>
+              </div>
               <div className="flex flex-col items-end gap-2">
-                <span className="font-bold text-sm">₹{item.price * item.quantity}</span>
-                
-                {/* Quantity Controls */}
-                <div className="flex items-center border border-black text-xs">
+                <span className="font-black text-sm text-text-dark">₹{item.price * item.quantity}</span>
+                <div className="flex items-center bg-surface rounded-lg overflow-hidden">
                   <button
                     onClick={() => handleQtyChange(item.id, item.quantity - 1)}
-                    className="px-2 py-0.5 border-r border-black hover:bg-zinc-100"
+                    className="px-2.5 py-1.5 text-primary active:bg-primary/10"
                   >
-                    -
+                    <Minus className="w-3.5 h-3.5" />
                   </button>
-                  <span className="px-3 py-0.5">{item.quantity}</span>
+                  <span className="px-2 text-sm font-bold text-text-dark min-w-[20px] text-center">{item.quantity}</span>
                   <button
                     onClick={() => handleQtyChange(item.id, item.quantity + 1)}
-                    className="px-2 py-0.5 border-l border-black hover:bg-zinc-100"
+                    className="px-2.5 py-1.5 text-primary active:bg-primary/10"
                   >
-                    +
+                    <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
             </div>
           ))}
-        </div>
 
-        {/* Totals Breakdown Section */}
-        <div className="border-t border-black p-4 bg-zinc-50 flex flex-col gap-2">
-          <div className="flex justify-between items-center text-xs text-zinc-600">
-            <span>SUBTOTAL</span>
-            <span>₹{subtotal}</span>
-          </div>
-
-          {evaluationResult.appliedCombos.map((combo, idx) => (
-            <div key={idx} className="flex justify-between items-center text-xs text-green-700 font-bold uppercase">
-              <span>✓ {combo.name}</span>
-              <span>-₹{combo.amount}</span>
+          {/* Totals */}
+          <div className="border-t border-surface bg-surface/50 p-4 flex flex-col gap-2">
+            <div className="flex justify-between text-sm text-text-dark/60">
+              <span>Subtotal</span>
+              <span>₹{subtotal}</span>
             </div>
-          ))}
 
-          <div className="flex justify-between items-center border-t border-dashed border-black/20 pt-2 mt-1">
-            <span className="font-bold text-base uppercase">Total</span>
-            <span className="font-bold text-lg">₹{evaluationResult.discountedTotal}</span>
+            {evaluationResult.appliedCombos.map((combo, idx) => (
+              <div key={idx} className="flex justify-between text-xs text-green-700 font-bold">
+                <span className="flex items-center gap-1">
+                  <Gift className="w-3 h-3" /> {combo.name}
+                </span>
+                <span>-₹{combo.amount}</span>
+              </div>
+            ))}
+
+            <div className="flex justify-between items-center border-t border-text-dark/10 pt-2 mt-1">
+              <span className="font-black text-lg text-text-dark">Total</span>
+              <span className="font-black text-xl text-text-dark">₹{evaluationResult.discountedTotal}</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Colorful Appetite-Driven Nudges (Capped at 2, ranked by savings) */}
-      {offersLoading ? (
-        <div className="border border-black p-5 bg-zinc-50 flex flex-col gap-3 shadow-sm select-none mb-6">
-          <div className="flex justify-between items-center">
-            <span className="font-bold text-[10px] tracking-wider uppercase text-zinc-500 flex items-center gap-1.5 font-mono-custom">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Personalizing offers...
-            </span>
-            <span className="text-[9px] font-black bg-zinc-200 text-zinc-650 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono-custom">
-              LOADING
-            </span>
+        {/* Nudges */}
+        {offersLoading ? (
+          <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)] p-5 flex items-center gap-3">
+            <Loader2 className="w-5 h-5 text-primary animate-spin" />
+            <span className="text-sm text-text-dark/60">Personalizing offers...</span>
           </div>
-          <h3 className="font-extrabold text-xs uppercase leading-tight text-zinc-700 font-mono-custom">
-            Calculating best discount tier &amp; combo recommendations for you
-          </h3>
-          {/* Animated loading bar */}
-          <div className="w-full bg-zinc-200 h-2 border border-black/10 rounded-full overflow-hidden relative mt-1">
-            <div className="bg-black h-full rounded-full animate-pulse" style={{ width: '60%' }}></div>
-          </div>
-          <p className="text-[9px] font-bold text-zinc-450 uppercase font-mono-custom">
-            Scanning fresh chef specials...
-          </p>
-        </div>
-      ) : nudgesToShow.length > 0 ? (
-        <div className="flex flex-col gap-4 mb-6">
-          {nudgesToShow.map((nudge) => {
-            if (nudge.type === 'discount') {
-              return (
-                <div
-                  key={nudge.id}
-                  className="bg-gradient-to-br from-amber-500 via-orange-500 to-red-500 text-white border border-black p-5 rounded-lg shadow-sm flex flex-col gap-3 select-none"
-                >
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
-                    <div className="flex flex-col gap-1.5">
-                      <span className="font-bold text-[10px] tracking-wider uppercase opacity-90">⭐ DISCOUNT BOOSTER</span>
-                      <h3 className="font-extrabold text-sm uppercase leading-tight">{nudge.message}</h3>
+        ) : nudgesToShow.length > 0 ? (
+          <div className="flex flex-col gap-3">
+            {nudgesToShow.map((nudge) => {
+              if (nudge.type === 'discount') {
+                return (
+                  <div key={nudge.id} className="bg-gradient-to-r from-primary to-bg-dark rounded-2xl p-4 text-white">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-cta" />
+                        <span className="font-bold text-xs uppercase tracking-wide">Discount Booster</span>
+                      </div>
+                      <span className="bg-cta text-text-dark text-[0.6rem] font-bold px-2 py-0.5 rounded-full uppercase">
+                        {nudge.percentOff}% Off
+                      </span>
                     </div>
-                    <div className="self-start bg-white text-black font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm shrink-0">
-                      {nudge.percentOff}% OFF GOAL
+                    <p className="text-sm font-bold mb-3">{nudge.message}</p>
+                    <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
+                      <div
+                        className="bg-cta h-full rounded-full transition-all duration-700"
+                        style={{ width: `${nudge.progress}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[0.65rem] mt-1.5 opacity-80">
+                      <span>{Math.round(nudge.progress || 0)}% there</span>
+                      <span>Save ₹{nudge.savings}</span>
                     </div>
                   </div>
-                  {/* Progress Bar */}
-                  <div className="w-full bg-black/30 h-3 border border-white/20 rounded-full overflow-hidden relative mt-1">
-                    <div
-                      className="bg-gradient-to-r from-yellow-300 to-yellow-400 h-full rounded-full transition-all duration-1000 ease-out"
-                      style={{ width: `${nudge.progress}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-[10px] font-bold uppercase opacity-90">
-                    <span>Progress: {Math.round(nudge.progress || 0)}%</span>
-                    <span>Worth: Save ₹{nudge.savings}!</span>
-                  </div>
-                </div>
-              );
-            } else if (nudge.type === 'combo') {
-              return (
-                <div
-                  key={nudge.id}
-                  className="bg-gradient-to-br from-orange-500 via-amber-500 to-red-500 text-white border border-black p-5 rounded-lg shadow-sm flex flex-col gap-3 select-none animate-fade-in"
-                >
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
-                    <div className="flex flex-col gap-1">
-                      <span className="font-bold text-[10px] tracking-wider uppercase opacity-90">🎁 COMBO DEAL</span>
-                      <h3 className="font-extrabold text-sm uppercase leading-tight">{nudge.message}</h3>
-                      <span className="text-[10px] uppercase font-bold text-yellow-200">Value of Reward: ₹{nudge.savings}!</span>
+                );
+              } else if (nudge.type === 'combo') {
+                return (
+                  <div key={nudge.id} className="bg-gradient-to-r from-primary to-bg-dark rounded-2xl p-4 text-white">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <Gift className="w-4 h-4 text-cta" />
+                        <span className="font-bold text-xs uppercase tracking-wide">Combo Deal</span>
+                      </div>
+                      <span className="bg-cta text-text-dark text-[0.6rem] font-bold px-2 py-0.5 rounded-full uppercase">
+                        Freebie
+                      </span>
                     </div>
-                    <div className="self-start bg-yellow-400 text-black font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm animate-pulse shrink-0">
-                      FREEBIE UNLOCK
-                    </div>
-                  </div>
-
-                  {nudge.suggestedItems && nudge.suggestedItems.length > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                      {nudge.suggestedItems.map((item) => (
-                        <div
-                          key={item._id}
-                          className="border border-white/20 p-3 bg-black/20 flex flex-col justify-between gap-3 rounded hover:bg-black/30 transition-all"
-                        >
-                          <div className="flex gap-2.5 items-start">
-                            {item.image && (
-                              <div className="w-9 h-9 border border-white/30 flex-shrink-0 flex items-center justify-center bg-white select-none rounded">
+                    <p className="text-sm font-bold mb-3">{nudge.message}</p>
+                    {nudge.suggestedItems && nudge.suggestedItems.length > 0 && (
+                      <div className="flex gap-2 overflow-x-auto pb-1">
+                        {nudge.suggestedItems.map((item) => (
+                          <div key={item._id} className="bg-white/10 backdrop-blur-sm rounded-xl p-2.5 flex-shrink-0 w-[140px] flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={item.image}
-                                  alt={item.name}
-                                  className="w-full h-full object-cover rounded-xs"
-                                />
+                                <img src={getItemImage(item.image)} alt={item.name} className="w-full h-full object-cover" />
                               </div>
-                            )}
-                            <div className="min-w-0">
-                              <span className="font-bold text-xs block uppercase truncate text-white">{item.name}</span>
-                              <span className="text-[10px] text-white/80 block">₹{item.price}</span>
+                              <div className="min-w-0">
+                                <span className="text-[0.6rem] font-bold text-white block truncate">{item.name}</span>
+                                <span className="text-[0.55rem] text-white/70">₹{item.price}</span>
+                              </div>
                             </div>
+                            <button
+                              onClick={() => handleAddUpsell(item, 'combo_freebie', nudge.id)}
+                              className="w-full bg-white text-primary text-[0.6rem] font-bold py-1.5 rounded-lg uppercase active:scale-95 transition-transform"
+                            >
+                              + Add
+                            </button>
                           </div>
-                          <button
-                            onClick={() => handleAddUpsell(item, 'combo_freebie', nudge.id)}
-                            className="w-full border border-white bg-white text-black py-1.5 text-[9px] font-bold uppercase hover:bg-black hover:text-white hover:border-black transition-all cursor-pointer text-center rounded"
-                          >
-                            [ + ADD COMBO ]
-                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              } else {
+                return (
+                  <div key={nudge.id} className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)] p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                      <span className="font-bold text-xs text-text-dark uppercase tracking-wide">Complete Your Meal</span>
+                    </div>
+                    {nudge.socialProof && (
+                      <p className="text-[0.65rem] text-text-dark/50 mb-2">{nudge.socialProof}</p>
+                    )}
+                    <div className="flex gap-2.5 overflow-x-auto pb-1">
+                      {nudge.suggestedItems?.map((item) => (
+                        <div key={item._id} className="bg-surface rounded-xl p-2.5 flex-shrink-0 w-[130px] flex flex-col gap-2">
+                          <div className="w-full h-16 rounded-lg overflow-hidden">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={getItemImage(item.image)} alt={item.name} className="w-full h-full object-cover" />
+                          </div>
+                          <span className="text-[0.6rem] font-bold text-text-dark truncate">{item.name}</span>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[0.6rem] font-bold text-primary">₹{item.price}</span>
+                            <button
+                              onClick={() => handleAddUpsell(item, 'cross_sell', nudge.id)}
+                              className="bg-primary text-white text-[0.55rem] font-bold px-2 py-1 rounded-md uppercase active:scale-95 transition-transform"
+                            >
+                              + Add
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
-                  )}
-                </div>
-              );
-            } else {
-              // Cross-sell nudge fallback
-              return (
-                <div
-                  key={nudge.id}
-                  className="bg-gradient-to-br from-amber-500 via-orange-500 to-red-500 text-white border border-black p-5 rounded-lg shadow-sm flex flex-col gap-3 select-none animate-fade-in"
-                >
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
-                    <div className="flex flex-col gap-1">
-                      <span className="font-bold text-[10px] tracking-wider uppercase opacity-90">🔥 POPULAR PAIRING</span>
-                      <h3 className="font-extrabold text-sm uppercase leading-tight">Complete your meal</h3>
-                      {nudge.socialProof && (
-                        <span className="text-[10px] uppercase font-bold text-yellow-200 mt-0.5">
-                          📈 {nudge.socialProof}
-                        </span>
-                      )}
-                    </div>
-                    <div className="self-start bg-black text-white font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm shrink-0">
-                      RECOMMENDED
-                    </div>
                   </div>
+                );
+              }
+            })}
+          </div>
+        ) : null}
 
-                  {nudge.suggestedItems && nudge.suggestedItems.length > 0 && (
-                    <div className="flex gap-4 overflow-x-auto pb-3 snap-x snap-mandatory mt-2 scrollbar-none">
-                      {nudge.suggestedItems.map((item) => (
-                        <div
-                          key={item._id}
-                          className="flex-shrink-0 w-64 snap-start border border-white/20 p-3 bg-black/20 flex flex-col justify-between gap-3 rounded hover:bg-black/30 transition-all"
-                        >
-                          <div className="flex gap-2.5 items-start">
-                            {item.image && (
-                              <div className="w-9 h-9 border border-white/30 flex-shrink-0 flex items-center justify-center bg-white select-none rounded">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={item.image}
-                                  alt={item.name}
-                                  className="w-full h-full object-cover rounded-xs"
-                                />
-                              </div>
-                            )}
-                            <div className="min-w-0">
-                              <span className="font-bold text-xs block uppercase truncate text-white">{item.name}</span>
-                              <span className="text-[10px] text-white/80 block">₹{item.price}</span>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => handleAddUpsell(item, 'cross_sell', nudge.id)}
-                            className="w-full border border-white bg-white text-black py-1.5 text-[9px] font-bold uppercase hover:bg-black hover:text-white hover:border-black transition-all cursor-pointer text-center rounded"
-                          >
-                            [ + ADD ITEM ]
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            }
-          })}
-        </div>
-      ) : null}
-
-      {/* Book Order Button */}
-      <div className="mt-2">
+        {/* Place Order Button */}
         <button
           onClick={() => setShowModal(true)}
-          className="border border-black w-full py-4 text-sm font-bold uppercase bg-black text-white hover:bg-white hover:text-black transition-all cursor-pointer text-center"
+          className="w-full bg-cta text-text-dark font-bold text-sm py-4 rounded-xl uppercase tracking-wide active:scale-[0.97] transition-transform shadow-[0_4px_15px_rgba(245,197,24,0.3)]"
         >
-          [ BOOK ORDER ]
+          Place Order
         </button>
       </div>
 
-      {/* Book Order Details Modal */}
+      {/* Booking Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="border border-black bg-white p-4 sm:p-6 w-full max-w-sm flex flex-col gap-4 font-mono-custom shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-baseline border-b border-black pb-2 mb-2">
-              <h3 className="font-bold text-sm uppercase">Enter Booking Details</h3>
-              <button 
-                onClick={() => setShowModal(false)}
-                className="text-xs uppercase font-bold cursor-pointer hover:underline"
-              >
-                [ Close ]
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50">
+          <div className="bg-white w-full sm:max-w-sm sm:rounded-2xl rounded-t-3xl p-6 relative max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="font-black text-lg text-text-dark uppercase tracking-tight">Confirm Order</h3>
+              <button onClick={() => setShowModal(false)} className="text-text-dark/40 p-1">
+                <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             {formError && (
-              <div className="border border-black p-3 text-xs bg-zinc-100 font-bold text-red-600 uppercase">
-                ⚠️ {formError}
+              <div className="bg-primary/10 text-primary text-sm font-medium rounded-lg p-3 mb-4">
+                {formError}
               </div>
             )}
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold uppercase">Name</label>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[0.7rem] uppercase font-bold text-bg-dark tracking-[0.02em]">Name</label>
                 <input
                   type="text"
                   placeholder="e.g. John Doe"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   disabled={loading}
-                  className="w-full text-sm font-mono-custom"
+                  className="bg-surface border-[1.5px] border-transparent rounded-[10px] px-4 py-3 text-sm text-text-dark outline-none transition-colors focus:border-primary placeholder:text-text-dark/40"
                   required
                   autoFocus
                 />
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold uppercase">Phone Number</label>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[0.7rem] uppercase font-bold text-bg-dark tracking-[0.02em]">Phone Number</label>
                 <input
                   type="tel"
                   maxLength={10}
@@ -927,7 +853,7 @@ export default function CartPage() {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
                   disabled={loading}
-                  className="w-full text-sm font-mono-custom"
+                  className="bg-surface border-[1.5px] border-transparent rounded-[10px] px-4 py-3 text-sm text-text-dark outline-none transition-colors focus:border-primary placeholder:text-text-dark/40"
                   required
                 />
               </div>
@@ -935,9 +861,10 @@ export default function CartPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="border-2 border-black w-full py-3 text-xs font-bold uppercase bg-black text-white hover:bg-white hover:text-black transition-all cursor-pointer disabled:opacity-50 mt-2"
+                className="w-full bg-cta text-text-dark font-bold text-sm py-4 rounded-xl uppercase tracking-wide mt-2 active:scale-[0.97] transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {loading ? 'BOOKING ORDER...' : '[ CONFIRM & PLACE ORDER ]'}
+                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {loading ? 'Placing Order...' : 'Confirm & Place Order'}
               </button>
             </form>
           </div>

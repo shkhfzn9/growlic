@@ -5,6 +5,8 @@ import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { getMenuItems, toggleMenuItemAvailability, deleteMenuItem } from '@/actions/menu';
 import Link from 'next/link';
+import { Plus, Pencil, Trash2, ImageOff } from 'lucide-react';
+import { PageHeader, StatusBadge, AdminButton, EmptyState } from '@/components/admin/ui';
 
 interface MenuItem {
   _id: string;
@@ -41,7 +43,6 @@ export default function AdminMenuPage() {
     if (auth.restaurantId) {
       Promise.resolve().then(() => loadMenu());
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.restaurantId]);
 
   const handleToggle = async (id: string, currentStatus: boolean) => {
@@ -69,103 +70,110 @@ export default function AdminMenuPage() {
   };
 
   if (loading) {
-    return <div className="font-mono-custom text-xs text-center py-12">LOADING MENU ITEMS...</div>;
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="h-8 w-40 bg-[#E2E6EA] rounded animate-pulse" />
+        <div className="bg-white border border-[#E2E6EA] rounded-xl overflow-hidden">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="p-4 flex gap-4 animate-pulse border-b border-[#E2E6EA] last:border-0">
+              <div className="w-12 h-12 bg-[#E2E6EA] rounded-lg" />
+              <div className="flex-1 flex flex-col gap-2">
+                <div className="h-4 w-32 bg-[#E2E6EA] rounded" />
+                <div className="h-3 w-48 bg-[#E2E6EA] rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="font-mono-custom flex flex-col gap-6">
-      {/* Title / Action bar */}
-      <div className="border-b border-black pb-4 flex justify-between items-center flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold uppercase">Menu Items</h1>
-          <span className="text-xs uppercase text-zinc-500">Configure your restaurant menu</span>
-        </div>
-        <Link
-          href="/admin/menu/new"
-          className="border border-black bg-black text-white hover:bg-white hover:text-black px-4 py-2 text-xs font-bold uppercase transition-all"
-        >
-          [ + ADD NEW ITEM ]
-        </Link>
-      </div>
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        title="Menu Items"
+        subtitle="Manage your restaurant menu"
+        actions={
+          <Link href="/admin/menu/new">
+            <AdminButton icon={<Plus className="w-4 h-4" />}>Add Item</AdminButton>
+          </Link>
+        }
+      />
 
       {error && (
-        <div className="border border-black p-3 text-xs bg-zinc-100 font-bold text-red-600 uppercase">
-          ⚠️ {error}
+        <div className="bg-[#FEF2F2] border border-[#DC2626]/20 rounded-lg p-3 text-sm text-[#DC2626] font-medium">
+          {error}
         </div>
       )}
 
       {items.length === 0 ? (
-        <div className="border border-dashed border-black p-12 text-center text-xs uppercase bg-white">
-          No menu items found. Click &quot;ADD NEW ITEM&quot; to create one.
-        </div>
+        <EmptyState
+          title="No menu items"
+          description="Add your first menu item to get started."
+          action={
+            <Link href="/admin/menu/new">
+              <AdminButton icon={<Plus className="w-4 h-4" />}>Add Item</AdminButton>
+            </Link>
+          }
+        />
       ) : (
-        <div className="border border-black overflow-x-auto bg-white">
-          <table className="w-full text-left border-collapse min-w-[700px]">
-            <thead>
-              <tr className="border-b border-black bg-zinc-50 font-bold text-xs uppercase">
-                <th className="p-3 border-r border-black w-20">Preview</th>
-                <th className="p-3 border-r border-black">Name</th>
-                <th className="p-3 border-r border-black">Category</th>
-                <th className="p-3 border-r border-black">Price</th>
-                <th className="p-3 border-r border-black">Status</th>
-                <th className="p-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-black text-xs uppercase">
-              {items.map((item) => (
-                <tr key={item._id} className="hover:bg-zinc-50">
-                  <td className="p-3 border-r border-black">
-                    {item.image ? (
-                      <div className="w-12 h-12 border border-black flex items-center justify-center bg-zinc-100 select-none">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={item.image}
-                          alt={item.name}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    ) : (
-                      <span className="text-[10px] text-zinc-400">NO IMG</span>
-                    )}
-                  </td>
-                  <td className="p-3 border-r border-black">
-                    <span className="font-bold text-sm block">{item.name}</span>
-                    <span className="text-[10px] text-zinc-500 block font-sans line-clamp-1">
-                      {item.description}
-                    </span>
-                  </td>
-                  <td className="p-3 border-r border-black font-semibold">{item.category}</td>
-                  <td className="p-3 border-r border-black font-bold">₹{item.price}</td>
-                  <td className="p-3 border-r border-black">
-                    <button
-                      onClick={() => handleToggle(item._id, item.available)}
-                      className={`font-bold px-2 py-0.5 border cursor-pointer ${
-                        item.available
-                          ? 'border-black bg-black text-white hover:bg-zinc-800'
-                          : 'border-zinc-300 text-zinc-400 hover:bg-zinc-100'
-                      }`}
-                    >
-                      {item.available ? 'AVAILABLE' : 'UNAVAILABLE'}
-                    </button>
-                  </td>
-                  <td className="p-3 flex gap-2 pt-6">
-                    <Link
-                      href={`/admin/menu/edit/${item._id}`}
-                      className="border border-black px-2 py-0.5 hover:bg-black hover:text-white font-bold"
-                    >
-                      [ EDIT ]
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(item._id)}
-                      className="border border-red-600 text-red-600 px-2 py-0.5 hover:bg-red-600 hover:text-white font-bold cursor-pointer"
-                    >
-                      [ DELETE ]
-                    </button>
-                  </td>
+        <div className="bg-white border border-[#E2E6EA] rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[700px]">
+              <thead>
+                <tr className="bg-[#F4F6F9] border-b border-[#E2E6EA]">
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] w-16">Image</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Name</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Category</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Price</th>
+                  <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Status</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-[#E2E6EA]">
+                {items.map((item) => (
+                  <tr key={item._id} className="hover:bg-[#F4F6F9]/50 transition-colors">
+                    <td className="px-4 py-3">
+                      {item.image ? (
+                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-[#F4F6F9] border border-[#E2E6EA]">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-[#F4F6F9] border border-[#E2E6EA] flex items-center justify-center">
+                          <ImageOff className="w-4 h-4 text-[#6B7280]" />
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-medium text-[#111827] block">{item.name}</span>
+                      <span className="text-[12px] text-[#6B7280] line-clamp-1">{item.description}</span>
+                    </td>
+                    <td className="px-4 py-3 text-[#6B7280]">{item.category}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-[#111827]">₹{item.price}</td>
+                    <td className="px-4 py-3 text-center">
+                      <button onClick={() => handleToggle(item._id, item.available)}>
+                        <StatusBadge
+                          label={item.available ? 'Available' : 'Unavailable'}
+                          variant={item.available ? 'success' : 'neutral'}
+                        />
+                      </button>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1.5 justify-end">
+                        <Link href={`/admin/menu/edit/${item._id}`}>
+                          <AdminButton variant="ghost" size="sm" icon={<Pencil className="w-3.5 h-3.5" />}>Edit</AdminButton>
+                        </Link>
+                        <AdminButton variant="danger" size="sm" icon={<Trash2 className="w-3.5 h-3.5" />} onClick={() => handleDelete(item._id)}>
+                          Delete
+                        </AdminButton>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

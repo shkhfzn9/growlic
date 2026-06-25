@@ -1,69 +1,195 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #000000;
+@theme {
+  --color-primary: #C0181A;
+  --color-bg-dark: #8B0000;
+  --color-bg-darker: #6B0000;
+  --color-surface: #F5F5F5;
+  --color-cta: #F5C518;
+  --color-text-dark: #1A1A1A;
+  --color-white: #FFFFFF;
+
+  --font-sans: 'Inter', system-ui, sans-serif;
+
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
 }
 
-body {
-  background-color: #ffffff !important;
-  color: #000000 !important;
-  font-family: var(--font-geist-sans), sans-serif;
-  margin: 0;
-  padding: 0;
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background: linear-gradient(135deg, #8B0000 0%, #6B0000 100%);
+    color: var(--color-text-dark);
+    min-height: 100dvh;
+    margin: 0;
+    padding: 0;
+  }
 }
 
-/* Custom styles to enforce clean black & white aesthetics */
-input, select, textarea {
-  border: 1px solid #000000;
-  border-radius: 0 !important;
-  background-color: #ffffff;
-  color: #000000;
-  padding: 0.5rem;
-  font-family: var(--font-geist-mono), monospace;
+@layer components {
+  .growlic-page-bg {
+    background: linear-gradient(135deg, #8B0000 0%, #6B0000 100%);
+    min-height: 100dvh;
+    position: relative;
+  }
+
+  .growlic-page-bg::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 320'%3E%3Cpath fill='%23C0181A' fill-opacity='0.15' d='M0,160L48,170.7C96,181,192,203,288,197.3C384,192,480,160,576,154.7C672,149,768,171,864,186.7C960,203,1056,213,1152,197.3C1248,181,1344,139,1392,117.3L1440,96L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: bottom;
+    background-size: 100% 40%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .growlic-card {
+    background: #FFFFFF;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.10);
+    padding: 20px;
+  }
+
+  .growlic-card-lg {
+    background: #FFFFFF;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.10);
+    padding: 24px;
+  }
+
+  .growlic-stat-number {
+    font-size: clamp(2.5rem, 5vw, 4rem);
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .growlic-stat-label {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.75;
+  }
+
+  .growlic-headline {
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: -0.02em;
+  }
+
+  .growlic-input {
+    background: #F5F5F5;
+    border: 1.5px solid transparent;
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 0.875rem;
+    color: var(--color-text-dark);
+    outline: none;
+    transition: border-color 0.2s ease;
+    width: 100%;
+  }
+
+  .growlic-input:focus {
+    border-color: #C0181A;
+  }
+
+  .growlic-input-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #8B0000;
+    letter-spacing: 0.02em;
+  }
+
+  .growlic-btn-primary {
+    background: #F5C518;
+    color: #1A1A1A;
+    font-weight: 700;
+    border-radius: 12px;
+    padding: 14px 28px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    font-size: 0.875rem;
+  }
+
+  .growlic-btn-primary:active {
+    transform: scale(0.97);
+  }
+
+  .growlic-btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .growlic-btn-secondary {
+    background: #C0181A;
+    color: #FFFFFF;
+    font-weight: 700;
+    border-radius: 12px;
+    padding: 14px 28px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    font-size: 0.875rem;
+  }
+
+  .growlic-btn-secondary:active {
+    transform: scale(0.97);
+  }
+
+  .growlic-btn-ghost {
+    background: transparent;
+    color: #FFFFFF;
+    font-weight: 700;
+    border-radius: 12px;
+    padding: 14px 28px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: 2px solid #FFFFFF;
+    cursor: pointer;
+    transition: transform 0.2s ease, background-color 0.2s ease;
+    font-size: 0.875rem;
+  }
+
+  .growlic-btn-ghost:active {
+    transform: scale(0.97);
+  }
+
+  .growlic-btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
 }
 
-input:focus, select:focus, textarea:focus {
-  outline: 2px solid #000000;
-  outline-offset: -2px;
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
 }
 
-/* Old school scrollbar */
+/* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #ffffff;
-  border-left: 1px solid #000000;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #000000;
+  background: rgba(192, 24, 26, 0.3);
+  border-radius: 3px;
 }
-
-/* Monochrome Utility overrides */
-.border-black-strong {
-  border: 1px solid #000000;
-}
-
-.border-black-double {
-  border: 3px double #000000;
-}
-
-.font-mono-custom {
-  font-family: var(--font-geist-mono), monospace;
-}
-
-/* Click micro-animations and active states for buttons */
-button, 
-.btn-animate, 
-a.border {
-  transition: transform 0.1s ease, filter 0.1s ease;
-}
-
-button:active:not(:disabled), 
-.btn-animate:active, 
-a.border:active {
-  transform: scale(0.96) !important;
-  filter: brightness(0.9);
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(192, 24, 26, 0.5);
 }

@@ -15,6 +15,8 @@ import {
   saveComboRule,
   deleteComboRule,
 } from '@/actions/upsell';
+import { PageHeader, StatusBadge, AdminButton, EmptyState } from '@/components/admin/ui';
+import { AlertTriangle, Pencil, Trash2, Pause, Play } from 'lucide-react';
 
 interface MenuItem {
   _id: string;
@@ -53,18 +55,9 @@ interface ComboRuleData {
 }
 
 const CATEGORY_TAGS = [
-  'Classic Momos',
-  'Momos Gravy Add Ons',
-  'Momos Woksizzle',
-  'Tokyo Rice Paradise',
-  'Tokyo Rice Bowls',
-  'Tokyo Special',
-  'Tokyo Soups',
-  'Tokyo Noodles',
-  'Tokyo Rolls',
-  'Chicken Salad',
-  'Fit Meals',
-  'Additional Snacks',
+  'Classic Momos', 'Momos Gravy Add Ons', 'Momos Woksizzle', 'Tokyo Rice Paradise',
+  'Tokyo Rice Bowls', 'Tokyo Special', 'Tokyo Soups', 'Tokyo Noodles',
+  'Tokyo Rolls', 'Chicken Salad', 'Fit Meals', 'Additional Snacks',
 ];
 
 export default function AdminUpsellPage() {
@@ -73,22 +66,17 @@ export default function AdminUpsellPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Data states
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [pairingRules, setPairingRules] = useState<PairingRuleData[]>([]);
   const [discountTiers, setDiscountTiers] = useState<DiscountTierData[]>([]);
   const [comboRules, setComboRules] = useState<ComboRuleData[]>([]);
   const [completedOrdersCount, setCompletedOrdersCount] = useState(0);
-
-  // Notice state
   const [hasDrinksCategory, setHasDrinksCategory] = useState(false);
 
-  // Form states
   const [editingPairing, setEditingPairing] = useState<Partial<PairingRuleData> | null>(null);
   const [editingDiscount, setEditingDiscount] = useState<Partial<DiscountTierData> | null>(null);
   const [editingCombo, setEditingCombo] = useState<Partial<ComboRuleData> | null>(null);
 
-  // Dropdown pairings logic
   const [pairingTrigger, setPairingTrigger] = useState(CATEGORY_TAGS[0]);
   const [pairingSuggestions, setPairingSuggestions] = useState<string[]>([]);
 
@@ -102,14 +90,9 @@ export default function AdminUpsellPage() {
       setDiscountTiers(res.discountTiers);
       setComboRules(res.comboRules);
       setCompletedOrdersCount(res.completedCount);
-
-      // Check if drinks category exists
-      const drinksFound = res.menuItems.some(
-        (item: MenuItem) =>
-          item.category.toLowerCase().includes('drink') ||
-          item.category.toLowerCase().includes('beverage')
-      );
-      setHasDrinksCategory(drinksFound);
+      setHasDrinksCategory(res.menuItems.some(
+        (item: MenuItem) => item.category.toLowerCase().includes('drink') || item.category.toLowerCase().includes('beverage')
+      ));
       setError('');
     } catch (err) {
       console.error(err);
@@ -120,105 +103,66 @@ export default function AdminUpsellPage() {
   };
 
   useEffect(() => {
-    if (auth.restaurantId) {
-      Promise.resolve().then(() => {
-        loadData();
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (auth.restaurantId) { Promise.resolve().then(() => loadData()); }
   }, [auth.restaurantId]);
 
-  // Tab 1 handlers
   const handleCategoryChange = async (itemId: string, category: string) => {
     try {
       const updated = await updateMenuItemCategory(itemId, category);
       setMenuItems((prev) => prev.map((item) => (item._id === itemId ? updated : item)));
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Category update failed');
-    }
+    } catch (err) { alert(err instanceof Error ? err.message : 'Category update failed'); }
   };
 
   const handlePairsWithChange = async (itemId: string, cat: string, isChecked: boolean) => {
     const item = menuItems.find((i) => i._id === itemId);
     if (!item) return;
-
     let updatedList = [...(item.pairsWithCategories || [])];
-    if (isChecked) {
-      if (!updatedList.includes(cat)) updatedList.push(cat);
-    } else {
-      updatedList = updatedList.filter((c) => c !== cat);
-    }
-
+    if (isChecked) { if (!updatedList.includes(cat)) updatedList.push(cat); }
+    else { updatedList = updatedList.filter((c) => c !== cat); }
     try {
       const updated = await updateMenuItemPairsWith(itemId, updatedList);
       setMenuItems((prev) => prev.map((i) => (i._id === itemId ? updated : i)));
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Pairings update failed');
-    }
+    } catch (err) { alert(err instanceof Error ? err.message : 'Pairings update failed'); }
   };
 
   const handleItemActiveToggle = async (itemId: string, currentActive: boolean) => {
     try {
       const updated = await updateMenuItemActive(itemId, !currentActive);
       setMenuItems((prev) => prev.map((i) => (i._id === itemId ? updated : i)));
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'State toggle failed');
-    }
+    } catch (err) { alert(err instanceof Error ? err.message : 'Toggle failed'); }
   };
 
-  // Tab 2: Pairing Rules CRUD
   const handleSavePairing = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pairingSuggestions.length === 0) {
-      alert('Please select at least one suggestion category');
-      return;
-    }
+    if (pairingSuggestions.length === 0) { alert('Select at least one suggestion category'); return; }
     try {
-      const payload = {
+      await savePairingRule({
         _id: editingPairing?._id,
         triggerCategory: pairingTrigger,
         suggestCategories: pairingSuggestions,
         active: editingPairing ? editingPairing.active ?? true : true,
-      };
-      await savePairingRule(payload);
+      });
       setEditingPairing(null);
       setPairingSuggestions([]);
       loadData();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Save rule failed');
-    }
+    } catch (err) { alert(err instanceof Error ? err.message : 'Save rule failed'); }
   };
 
   const handleTogglePairingActive = async (rule: PairingRuleData) => {
-    try {
-      await savePairingRule({
-        ...rule,
-        active: !rule.active,
-      });
-      loadData();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Toggle failed');
-    }
+    try { await savePairingRule({ ...rule, active: !rule.active }); loadData(); }
+    catch (err) { alert(err instanceof Error ? err.message : 'Toggle failed'); }
   };
 
   const handleDeletePairing = async (id: string) => {
-    if (confirm('Are you sure you want to delete this pairing rule?')) {
-      try {
-        await deletePairingRule(id);
-        loadData();
-      } catch (err) {
-        alert(err instanceof Error ? err.message : 'Delete failed');
-      }
+    if (confirm('Delete this pairing rule?')) {
+      try { await deletePairingRule(id); loadData(); }
+      catch (err) { alert(err instanceof Error ? err.message : 'Delete failed'); }
     }
   };
 
-  // Tab 3: Discount Tiers CRUD
   const handleSaveDiscount = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingDiscount?.minSpend || !editingDiscount.percentOff) {
-      alert('Please fill all discount fields');
-      return;
-    }
+    if (!editingDiscount?.minSpend || !editingDiscount.percentOff) { alert('Fill all fields'); return; }
     try {
       await saveDiscountTier({
         _id: editingDiscount._id,
@@ -229,43 +173,27 @@ export default function AdminUpsellPage() {
       });
       setEditingDiscount(null);
       loadData();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Save tier failed');
-    }
+    } catch (err) { alert(err instanceof Error ? err.message : 'Save tier failed'); }
   };
 
   const handleToggleDiscountActive = async (tier: DiscountTierData) => {
     try {
-      await saveDiscountTier({
-        _id: tier._id,
-        minSpend: tier.minSpend,
-        percentOff: tier.percentOff,
-        categoryScope: tier.categoryScope,
-        active: tier.active === false ? true : false,
-      });
+      await saveDiscountTier({ _id: tier._id, minSpend: tier.minSpend, percentOff: tier.percentOff, categoryScope: tier.categoryScope, active: !tier.active });
       loadData();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Toggle failed');
-    }
+    } catch (err) { alert(err instanceof Error ? err.message : 'Toggle failed'); }
   };
 
   const handleDeleteDiscount = async (id: string) => {
     if (confirm('Delete this discount tier?')) {
-      try {
-        await deleteDiscountTier(id);
-        loadData();
-      } catch (err) {
-        alert(err instanceof Error ? err.message : 'Delete failed');
-      }
+      try { await deleteDiscountTier(id); loadData(); }
+      catch (err) { alert(err instanceof Error ? err.message : 'Delete failed'); }
     }
   };
 
-  // Tab 4: Combo Rules CRUD
   const handleSaveCombo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCombo?.conditionCategory || !editingCombo.rewardType || !editingCombo.rewardTarget || !editingCombo.customerMessage) {
-      alert('Please fill all combo builder fields');
-      return;
+      alert('Fill all combo fields'); return;
     }
     try {
       await saveComboRule({
@@ -279,91 +207,72 @@ export default function AdminUpsellPage() {
       });
       setEditingCombo(null);
       loadData();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Save combo failed');
-    }
+    } catch (err) { alert(err instanceof Error ? err.message : 'Save combo failed'); }
   };
 
   const handleToggleComboActive = async (rule: ComboRuleData) => {
-    try {
-      await saveComboRule({
-        ...rule,
-        active: !rule.active,
-      });
-      loadData();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Toggle failed');
-    }
+    try { await saveComboRule({ ...rule, active: !rule.active }); loadData(); }
+    catch (err) { alert(err instanceof Error ? err.message : 'Toggle failed'); }
   };
 
   const handleDeleteCombo = async (id: string) => {
     if (confirm('Delete this combo rule?')) {
-      try {
-        await deleteComboRule(id);
-        loadData();
-      } catch (err) {
-        alert(err instanceof Error ? err.message : 'Delete failed');
-      }
+      try { await deleteComboRule(id); loadData(); }
+      catch (err) { alert(err instanceof Error ? err.message : 'Delete failed'); }
     }
   };
 
-  // Dynamic preview helper for category pairings
   const getPairingPreviewText = (trigger: string, suggestions: string[]) => {
-    if (suggestions.length === 0) return 'Select categories to see live preview...';
-    const suggestionsStr = suggestions.join(' or ');
-    return `When a customer adds a "${trigger}" item, we'll suggest a "${suggestionsStr}".`;
+    if (suggestions.length === 0) return 'Select categories to see preview...';
+    return `When a customer adds a "${trigger}" item, suggest from "${suggestions.join('" or "')}"`;
   };
 
   if (loading && menuItems.length === 0) {
-    return <div className="font-mono-custom text-xs text-center py-12">LOADING PAIRINGS PANEL CONFIG...</div>;
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="h-8 w-48 bg-[#E2E6EA] rounded animate-pulse" />
+        <div className="h-10 w-full bg-[#E2E6EA] rounded-lg animate-pulse" />
+        <div className="h-96 bg-white border border-[#E2E6EA] rounded-xl animate-pulse" />
+      </div>
+    );
   }
 
   return (
-    <div className="font-mono-custom flex flex-col gap-6">
-      {/* Title */}
-      <div className="border-b border-black pb-4">
-        <h1 className="text-2xl font-bold uppercase">Upsell & Pairing Panel</h1>
-        <span className="text-xs uppercase text-zinc-500">Configure psychological triggers, pairings, and combos</span>
-      </div>
+    <div className="flex flex-col gap-5">
+      <PageHeader title="Upsell & Rules" subtitle="Configure pairings, discounts, and combo triggers" />
 
-      {/* Drinks gap notice */}
       {!hasDrinksCategory && (
-        <div className="border-2 border-amber-600 bg-amber-50 p-4 text-xs font-bold text-amber-900 uppercase">
-          ⚠️ NOTICE: There is no drinks/beverages category configured in the menu. Any combo or freebie rules referencing drinks will automatically fall back to the cheapest Soup or Side Snack in the customer&apos;s cart until a beverages category is added.
+        <div className="flex items-start gap-2 bg-[#FFFBEB] border border-[#D97706]/20 rounded-lg p-3 text-sm text-[#D97706]">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>No drinks/beverages category found. Combo rules referencing drinks will fall back to cheapest soup or side.</span>
         </div>
       )}
 
-      {/* Analytics info */}
-      <div className="border border-black p-3 bg-zinc-50 flex justify-between text-[10px] uppercase font-bold">
-        <span>Order Volume: {completedOrdersCount} completed orders</span>
-        <span className={completedOrdersCount >= 50 ? 'text-green-700' : 'text-zinc-500'}>
-          {completedOrdersCount >= 50
-            ? '✓ Data-Driven Affinity Engine Unlocked'
-            : 'Cold-starting: Manual category tags fallback active (<50 orders)'}
-        </span>
+      <div className="flex items-center justify-between bg-white border border-[#E2E6EA] rounded-lg px-4 py-2.5">
+        <span className="text-sm text-[#6B7280]">Order Volume: <span className="font-medium text-[#111827]">{completedOrdersCount} completed</span></span>
+        <StatusBadge
+          label={completedOrdersCount >= 50 ? 'Affinity Engine Active' : 'Cold-start mode (<50 orders)'}
+          variant={completedOrdersCount >= 50 ? 'success' : 'neutral'}
+        />
       </div>
 
       {error && (
-        <div className="border border-black p-3 text-xs bg-zinc-100 font-bold text-red-600 uppercase">
-          ⚠️ {error}
-        </div>
+        <div className="bg-[#FEF2F2] border border-[#DC2626]/20 rounded-lg p-3 text-sm text-[#DC2626] font-medium">{error}</div>
       )}
 
-      {/* Tab Selectors */}
-      <div className="flex gap-2 border-b border-black overflow-x-auto pb-1">
+      {/* Tabs */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
         {[
-          { id: 'items', label: `Step 1: Item Categories (${menuItems.filter(i => i.active).length} Active)` },
-          { id: 'pairings', label: `Step 2: Category Pairings (${pairingRules.filter(r => r.active).length} Active)` },
-          { id: 'discounts', label: `Step 3: Discount Tiers (${discountTiers.filter(t => t.active !== false).length} Active)` },
-          { id: 'combos', label: `Step 4: Combo Rules (${comboRules.filter(c => c.active).length} Active)` },
+          { id: 'items' as const, label: `Items (${menuItems.filter(i => i.active).length} active)` },
+          { id: 'pairings' as const, label: `Pairings (${pairingRules.filter(r => r.active).length} active)` },
+          { id: 'discounts' as const, label: `Discounts (${discountTiers.filter(t => t.active !== false).length} active)` },
+          { id: 'combos' as const, label: `Combos (${comboRules.filter(c => c.active).length} active)` },
         ].map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id as 'items' | 'pairings' | 'discounts' | 'combos')}
-            className={`px-3 py-1.5 text-[10px] font-bold border border-black cursor-pointer uppercase whitespace-nowrap transition-colors ${
-              activeTab === tab.id
-                ? 'bg-black text-white'
-                : 'bg-white text-black hover:bg-zinc-100'
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-3.5 py-2 text-xs font-medium rounded-lg whitespace-nowrap transition-colors ${
+              activeTab === tab.id ? 'bg-[#111827] text-white' : 'bg-white text-[#6B7280] border border-[#E2E6EA] hover:bg-[#F4F6F9]'
             }`}
           >
             {tab.label}
@@ -371,67 +280,53 @@ export default function AdminUpsellPage() {
         ))}
       </div>
 
-      {/* TAB 1: ITEM CATEGORIES */}
+      {/* Tab 1: Items */}
       {activeTab === 'items' && (
-        <div className="flex flex-col gap-4">
-          <div className="text-xs uppercase text-zinc-500 border-b border-zinc-200 pb-2">
-            Assign menu items to categories and configure custom pairings override.
-          </div>
-          <div className="border border-black overflow-x-auto bg-white">
-            <table className="w-full text-left border-collapse min-w-[700px]">
+        <div className="bg-white border border-[#E2E6EA] rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[700px]">
               <thead>
-                <tr className="border-b border-black bg-zinc-50 font-bold text-[10px] uppercase">
-                  <th className="p-3 border-r border-black w-1/3">Item Details</th>
-                  <th className="p-3 border-r border-black w-1/4">Category Tag</th>
-                  <th className="p-3 border-r border-black">Pairs With Category Overrides</th>
-                  <th className="p-3 w-28 text-center">Status</th>
+                <tr className="bg-[#F4F6F9] border-b border-[#E2E6EA]">
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Item</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Category</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Pairs With</th>
+                  <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] w-24">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-black text-[11px] uppercase">
+              <tbody className="divide-y divide-[#E2E6EA]">
                 {menuItems.map((item) => (
-                  <tr key={item._id} className="hover:bg-zinc-50">
-                    <td className="p-3 border-r border-black">
-                      <span className="font-bold text-sm block">{item.name}</span>
-                      <span className="text-[10px] text-zinc-500 block">Price: ₹{item.price}</span>
+                  <tr key={item._id} className="hover:bg-[#F4F6F9]/50 transition-colors">
+                    <td className="px-4 py-3">
+                      <span className="font-medium text-[#111827] block">{item.name}</span>
+                      <span className="text-[12px] text-[#6B7280]">₹{item.price}</span>
                     </td>
-                    <td className="p-3 border-r border-black">
+                    <td className="px-4 py-3">
                       <select
                         value={item.category}
                         onChange={(e) => handleCategoryChange(item._id, e.target.value)}
-                        className="text-[10px] p-1.5 border border-black bg-white w-full uppercase"
+                        className="text-xs px-2 py-1.5 border border-[#E2E6EA] rounded-lg bg-white w-full outline-none focus:ring-2 focus:ring-[#C0181A]/20"
                       >
-                        {CATEGORY_TAGS.map((tag) => (
-                          <option key={tag} value={tag}>
-                            {tag}
-                          </option>
-                        ))}
+                        {CATEGORY_TAGS.map((tag) => (<option key={tag} value={tag}>{tag}</option>))}
                       </select>
                     </td>
-                    <td className="p-3 border-r border-black">
-                      <div className="grid grid-cols-2 gap-1.5 max-h-24 overflow-y-auto pr-1">
+                    <td className="px-4 py-3">
+                      <div className="grid grid-cols-2 gap-1 max-h-20 overflow-y-auto">
                         {CATEGORY_TAGS.map((cat) => (
-                          <label key={cat} className="flex items-center gap-1.5 cursor-pointer text-[9px]">
+                          <label key={cat} className="flex items-center gap-1 cursor-pointer text-[11px] text-[#6B7280]">
                             <input
                               type="checkbox"
                               checked={item.pairsWithCategories?.includes(cat) || false}
                               onChange={(e) => handlePairsWithChange(item._id, cat, e.target.checked)}
-                              className="w-3.5 h-3.5 cursor-pointer"
+                              className="w-3 h-3 rounded border-[#E2E6EA] text-[#C0181A] focus:ring-[#C0181A]/20"
                             />
                             <span className="truncate">{cat}</span>
                           </label>
                         ))}
                       </div>
                     </td>
-                    <td className="p-3 text-center">
-                      <button
-                        onClick={() => handleItemActiveToggle(item._id, item.active)}
-                        className={`font-bold px-2 py-1 text-[9px] border cursor-pointer w-full transition-all ${
-                          item.active
-                            ? 'border-black bg-black text-white hover:bg-zinc-800'
-                            : 'border-zinc-300 text-zinc-400 hover:bg-zinc-100'
-                        }`}
-                      >
-                        {item.active ? 'ACTIVE' : 'INACTIVE'}
+                    <td className="px-4 py-3 text-center">
+                      <button onClick={() => handleItemActiveToggle(item._id, item.active)}>
+                        <StatusBadge label={item.active ? 'Active' : 'Inactive'} variant={item.active ? 'success' : 'neutral'} />
                       </button>
                     </td>
                   </tr>
@@ -442,134 +337,68 @@ export default function AdminUpsellPage() {
         </div>
       )}
 
-      {/* TAB 2: CATEGORY PAIRINGS */}
+      {/* Tab 2: Pairings */}
       {activeTab === 'pairings' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          {/* Rule Creator */}
-          <form onSubmit={handleSavePairing} className="border border-black p-5 bg-white flex flex-col gap-4 lg:col-span-1">
-            <h3 className="font-bold text-xs uppercase border-b border-black pb-2">
-              {editingPairing ? 'Edit Pairing Rule' : 'Create Pairing Rule'}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+          <form onSubmit={handleSavePairing} className="bg-white border border-[#E2E6EA] rounded-xl p-5 flex flex-col gap-4 lg:col-span-1">
+            <h3 className="text-[14px] font-semibold text-[#111827]">
+              {editingPairing ? 'Edit Rule' : 'Create Pairing Rule'}
             </h3>
-            
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold uppercase">When customer has item from category:</label>
-              <select
-                value={pairingTrigger}
-                onChange={(e) => setPairingTrigger(e.target.value)}
-                className="text-xs p-2 border border-black bg-white w-full"
-              >
-                {CATEGORY_TAGS.map((tag) => (
-                  <option key={tag} value={tag}>
-                    {tag.toUpperCase()}
-                  </option>
-                ))}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Trigger Category</label>
+              <select value={pairingTrigger} onChange={(e) => setPairingTrigger(e.target.value)} className="text-sm px-3 py-2 border border-[#E2E6EA] rounded-lg bg-white outline-none focus:ring-2 focus:ring-[#C0181A]/20">
+                {CATEGORY_TAGS.map((tag) => (<option key={tag} value={tag}>{tag}</option>))}
               </select>
             </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold uppercase">Suggest items from category (Multi-select):</label>
-              <div className="border border-black p-3 max-h-48 overflow-y-auto bg-zinc-50 flex flex-col gap-2">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Suggest Categories</label>
+              <div className="border border-[#E2E6EA] rounded-lg p-3 max-h-44 overflow-y-auto bg-[#F4F6F9] flex flex-col gap-1.5">
                 {CATEGORY_TAGS.map((cat) => (
-                  <label key={cat} className="flex items-center gap-2 text-xs uppercase cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={pairingSuggestions.includes(cat)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setPairingSuggestions((prev) => [...prev, cat]);
-                        } else {
-                          setPairingSuggestions((prev) => prev.filter((item) => item !== cat));
-                        }
-                      }}
-                      className="w-4 h-4 cursor-pointer"
+                  <label key={cat} className="flex items-center gap-2 text-sm cursor-pointer text-[#6B7280] hover:text-[#111827]">
+                    <input type="checkbox" checked={pairingSuggestions.includes(cat)}
+                      onChange={(e) => { if (e.target.checked) setPairingSuggestions(prev => [...prev, cat]); else setPairingSuggestions(prev => prev.filter(i => i !== cat)); }}
+                      className="w-3.5 h-3.5 rounded border-[#E2E6EA] text-[#C0181A] focus:ring-[#C0181A]/20"
                     />
-                    <span>{cat}</span>
+                    {cat}
                   </label>
                 ))}
               </div>
             </div>
-
-            {/* Plain English live preview */}
-            <div className="border border-dashed border-black p-3 bg-amber-50 text-[10px] font-bold text-zinc-700 uppercase">
-              <strong>Live Preview:</strong>
-              <p className="mt-1 normal-case italic font-sans">{getPairingPreviewText(pairingTrigger, pairingSuggestions)}</p>
+            <div className="bg-[#FFFBEB] border border-[#D97706]/20 rounded-lg p-3 text-[12px] text-[#D97706]">
+              <span className="font-medium">Preview:</span> {getPairingPreviewText(pairingTrigger, pairingSuggestions)}
             </div>
-
             <div className="flex gap-2">
-              <button
-                type="submit"
-                className="flex-1 border border-black bg-black text-white hover:bg-white hover:text-black py-2 text-xs font-bold uppercase cursor-pointer transition-all"
-              >
-                {editingPairing ? '[ UPDATE RULE ]' : '[ ADD PAIRING ]'}
-              </button>
-              {editingPairing && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingPairing(null);
-                    setPairingSuggestions([]);
-                  }}
-                  className="border border-black bg-white text-black hover:bg-zinc-100 px-3 py-2 text-xs font-bold uppercase cursor-pointer"
-                >
-                  [ CANCEL ]
-                </button>
-              )}
+              <AdminButton type="submit" className="flex-1">{editingPairing ? 'Update' : 'Add Rule'}</AdminButton>
+              {editingPairing && <AdminButton variant="secondary" type="button" onClick={() => { setEditingPairing(null); setPairingSuggestions([]); }}>Cancel</AdminButton>}
             </div>
           </form>
 
-          {/* Rules List */}
-          <div className="lg:col-span-2 border border-black p-5 bg-white flex flex-col gap-4">
-            <h3 className="font-bold text-xs uppercase border-b border-black pb-2">Active Category Pairings</h3>
+          <div className="lg:col-span-2 flex flex-col gap-3">
+            <h3 className="text-[14px] font-semibold text-[#111827]">Active Pairings</h3>
             {pairingRules.length === 0 ? (
-              <div className="border border-dashed border-black p-8 text-center text-xs uppercase text-zinc-400">
-                No pairing rules configured.
-              </div>
+              <EmptyState title="No pairing rules" description="Create your first pairing rule to get started." />
             ) : (
-              <div className="border border-black bg-white overflow-hidden divide-y divide-black">
+              <div className="bg-white border border-[#E2E6EA] rounded-xl divide-y divide-[#E2E6EA] overflow-hidden">
                 {pairingRules.map((rule) => (
-                  <div key={rule._id} className="p-4 flex justify-between items-start gap-4 hover:bg-zinc-50">
-                    <div className="flex-1 flex flex-col gap-1 text-[11px] uppercase">
-                      <div className="flex gap-2 items-center">
-                        <span className="font-bold bg-black text-white px-2 py-0.5 text-[9px]">
-                          IF {rule.triggerCategory}
-                        </span>
-                        <span className="text-zinc-400">→</span>
-                        <span className="font-bold border border-black px-2 py-0.5 text-[9px]">
-                          SUGGEST {rule.suggestCategories.join(', ')}
-                        </span>
+                  <div key={rule._id} className="p-4 flex justify-between items-start gap-3 hover:bg-[#F4F6F9]/50 transition-colors">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <StatusBadge label={`IF ${rule.triggerCategory}`} variant="info" dot={false} />
+                        <span className="text-[#6B7280]">→</span>
+                        <StatusBadge label={`Suggest: ${rule.suggestCategories.join(', ')}`} variant="neutral" dot={false} />
                       </div>
-                      <span className="text-[10px] text-zinc-500 block mt-2 font-sans italic normal-case">
-                        {getPairingPreviewText(rule.triggerCategory, rule.suggestCategories)}
-                      </span>
-                      <span className="text-[9px] font-bold text-zinc-400 mt-1 uppercase">
-                        Triggers: {rule.triggerCount || 0} times
-                      </span>
+                      <p className="text-[12px] text-[#6B7280] mt-1.5 italic">{getPairingPreviewText(rule.triggerCategory, rule.suggestCategories)}</p>
+                      <span className="text-[11px] text-[#6B7280] mt-1 block">Triggered {rule.triggerCount || 0} times</span>
                     </div>
-
-                    <div className="flex gap-2 items-center">
-                      <button
-                        onClick={() => handleTogglePairingActive(rule)}
-                        className={`text-[9px] font-bold px-2 py-1 border cursor-pointer ${
-                          rule.active ? 'border-black bg-zinc-100' : 'border-zinc-300 text-zinc-400'
-                        }`}
-                      >
-                        {rule.active ? 'ACTIVE' : 'PAUSED'}
+                    <div className="flex gap-1.5 flex-shrink-0">
+                      <button onClick={() => handleTogglePairingActive(rule)} className="p-1.5 rounded-lg hover:bg-[#F4F6F9] text-[#6B7280] transition-colors" title={rule.active ? 'Pause' : 'Activate'}>
+                        {rule.active ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
                       </button>
-                      <button
-                        onClick={() => {
-                          setEditingPairing(rule);
-                          setPairingTrigger(rule.triggerCategory);
-                          setPairingSuggestions(rule.suggestCategories);
-                        }}
-                        className="text-[9px] font-bold border border-black px-2 py-1 bg-white hover:bg-zinc-100 cursor-pointer"
-                      >
-                        [ EDIT ]
+                      <button onClick={() => { setEditingPairing(rule); setPairingTrigger(rule.triggerCategory); setPairingSuggestions(rule.suggestCategories); }} className="p-1.5 rounded-lg hover:bg-[#F4F6F9] text-[#6B7280] transition-colors">
+                        <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      <button
-                        onClick={() => handleDeletePairing(rule._id)}
-                        className="text-[9px] font-bold border border-red-600 text-red-600 px-2 py-1 bg-white hover:bg-red-50 cursor-pointer"
-                      >
-                        [ DELETE ]
+                      <button onClick={() => handleDeletePairing(rule._id)} className="p-1.5 rounded-lg hover:bg-[#FEF2F2] text-[#DC2626] transition-colors">
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -580,132 +409,68 @@ export default function AdminUpsellPage() {
         </div>
       )}
 
-      {/* TAB 3: DISCOUNT TIERS */}
+      {/* Tab 3: Discounts */}
       {activeTab === 'discounts' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          {/* Creator Form */}
-          <form onSubmit={handleSaveDiscount} className="border border-black p-5 bg-white flex flex-col gap-4 lg:col-span-1">
-            <h3 className="font-bold text-xs uppercase border-b border-black pb-2">
-              {editingDiscount ? 'Edit Discount Tier' : 'Add Discount Tier'}
-            </h3>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold uppercase">Spend Amount Threshold (₹):</label>
-              <input
-                type="number"
-                min="1"
-                placeholder="e.g. 399"
-                value={editingDiscount?.minSpend || ''}
-                onChange={(e) => setEditingDiscount((prev) => ({ ...prev, minSpend: Number(e.target.value) }))}
-                className="text-xs p-2 border border-black w-full"
-                required
-              />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+          <form onSubmit={handleSaveDiscount} className="bg-white border border-[#E2E6EA] rounded-xl p-5 flex flex-col gap-4 lg:col-span-1">
+            <h3 className="text-[14px] font-semibold text-[#111827]">{editingDiscount ? 'Edit Tier' : 'Add Discount Tier'}</h3>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Min Spend (₹)</label>
+              <input type="number" min="1" placeholder="399" value={editingDiscount?.minSpend || ''} onChange={(e) => setEditingDiscount(prev => ({ ...prev, minSpend: Number(e.target.value) }))}
+                className="px-3 py-2 text-sm border border-[#E2E6EA] rounded-lg outline-none focus:ring-2 focus:ring-[#C0181A]/20" required />
             </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold uppercase">Discount Percentage (%):</label>
-              <input
-                type="number"
-                min="1"
-                max="100"
-                placeholder="e.g. 10"
-                value={editingDiscount?.percentOff || ''}
-                onChange={(e) => setEditingDiscount((prev) => ({ ...prev, percentOff: Number(e.target.value) }))}
-                className="text-xs p-2 border border-black w-full"
-                required
-              />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Discount %</label>
+              <input type="number" min="1" max="100" placeholder="10" value={editingDiscount?.percentOff || ''} onChange={(e) => setEditingDiscount(prev => ({ ...prev, percentOff: Number(e.target.value) }))}
+                className="px-3 py-2 text-sm border border-[#E2E6EA] rounded-lg outline-none focus:ring-2 focus:ring-[#C0181A]/20" required />
             </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold uppercase">Applies to category scope (Optional):</label>
-              <select
-                value={editingDiscount?.categoryScope || ''}
-                onChange={(e) => setEditingDiscount((prev) => ({ ...prev, categoryScope: e.target.value || null }))}
-                className="text-xs p-2 border border-black bg-white w-full uppercase"
-              >
-                <option value="">ALL ITEMS</option>
-                {CATEGORY_TAGS.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Category Scope</label>
+              <select value={editingDiscount?.categoryScope || ''} onChange={(e) => setEditingDiscount(prev => ({ ...prev, categoryScope: e.target.value || null }))}
+                className="text-sm px-3 py-2 border border-[#E2E6EA] rounded-lg bg-white outline-none focus:ring-2 focus:ring-[#C0181A]/20">
+                <option value="">All Items</option>
+                {CATEGORY_TAGS.map((cat) => (<option key={cat} value={cat}>{cat}</option>))}
               </select>
             </div>
-
-            <div className="border border-dashed border-black p-3 bg-amber-50 text-[10px] font-bold text-zinc-700 uppercase">
-              <strong>Info:</strong>
-              <p className="mt-1 normal-case italic font-sans text-zinc-600">
-                When a customer&apos;s cart reaches the spend amount, they&apos;ll automatically see this discount as a goal to unlock.
-              </p>
-            </div>
-
             <div className="flex gap-2">
-              <button
-                type="submit"
-                className="flex-1 border border-black bg-black text-white hover:bg-white hover:text-black py-2 text-xs font-bold uppercase cursor-pointer transition-all"
-              >
-                {editingDiscount ? '[ UPDATE TIER ]' : '[ ADD TIER ]'}
-              </button>
-              {editingDiscount && (
-                <button
-                  type="button"
-                  onClick={() => setEditingDiscount(null)}
-                  className="border border-black bg-white text-black hover:bg-zinc-100 px-3 py-2 text-xs font-bold uppercase cursor-pointer"
-                >
-                  [ CANCEL ]
-                </button>
-              )}
+              <AdminButton type="submit" className="flex-1">{editingDiscount ? 'Update' : 'Add Tier'}</AdminButton>
+              {editingDiscount && <AdminButton variant="secondary" type="button" onClick={() => setEditingDiscount(null)}>Cancel</AdminButton>}
             </div>
           </form>
 
-          {/* List Tiers */}
-          <div className="lg:col-span-2 border border-black p-5 bg-white flex flex-col gap-4">
-            <h3 className="font-bold text-xs uppercase border-b border-black pb-2">Active Discount Tiers</h3>
+          <div className="lg:col-span-2">
+            <h3 className="text-[14px] font-semibold text-[#111827] mb-3">Active Tiers</h3>
             {discountTiers.length === 0 ? (
-              <div className="border border-dashed border-black p-8 text-center text-xs uppercase text-zinc-400">
-                No discount tiers configured.
-              </div>
+              <EmptyState title="No discount tiers" description="Add a spend threshold to encourage larger orders." />
             ) : (
-              <div className="border border-black overflow-x-auto bg-white">
-                <table className="w-full text-left border-collapse min-w-[500px]">
+              <div className="bg-white border border-[#E2E6EA] rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-black bg-zinc-50 font-bold text-[10px] uppercase">
-                      <th className="p-3 border-r border-black w-1/4">Min Spend Required</th>
-                      <th className="p-3 border-r border-black w-1/4">Discount Percentage</th>
-                      <th className="p-3 border-r border-black w-1/4">Scope Target</th>
-                      <th className="p-3 border-r border-black w-24 text-center">Status</th>
-                      <th className="p-3 text-center w-36">Actions</th>
+                    <tr className="bg-[#F4F6F9] border-b border-[#E2E6EA]">
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Min Spend</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Discount</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Scope</th>
+                      <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Status</th>
+                      <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-black text-xs uppercase font-mono-custom">
+                  <tbody className="divide-y divide-[#E2E6EA]">
                     {discountTiers.map((tier) => (
-                      <tr key={tier._id} className="hover:bg-zinc-50">
-                        <td className="p-3 border-r border-black font-bold">₹{tier.minSpend}</td>
-                        <td className="p-3 border-r border-black font-bold text-green-700">{tier.percentOff}% OFF</td>
-                        <td className="p-3 border-r border-black">{tier.categoryScope || 'ALL ITEMS'}</td>
-                        <td className="p-3 border-r border-black text-center">
-                          <button
-                            onClick={() => handleToggleDiscountActive(tier)}
-                            className={`text-[9px] font-bold px-2 py-1 border cursor-pointer w-full transition-all ${
-                              tier.active !== false ? 'border-black bg-zinc-100' : 'border-zinc-300 text-zinc-400'
-                            }`}
-                          >
-                            {tier.active !== false ? 'ACTIVE' : 'PAUSED'}
-                          </button>
+                      <tr key={tier._id} className="hover:bg-[#F4F6F9]/50 transition-colors">
+                        <td className="px-4 py-3 font-medium">₹{tier.minSpend}</td>
+                        <td className="px-4 py-3 font-semibold text-[#16A34A]">{tier.percentOff}% OFF</td>
+                        <td className="px-4 py-3 text-[#6B7280]">{tier.categoryScope || 'All Items'}</td>
+                        <td className="px-4 py-3 text-center">
+                          <StatusBadge label={tier.active !== false ? 'Active' : 'Paused'} variant={tier.active !== false ? 'success' : 'neutral'} />
                         </td>
-                        <td className="p-3 text-center flex gap-2 justify-center">
-                          <button
-                            onClick={() => setEditingDiscount(tier)}
-                            className="text-[9px] font-bold border border-black px-2 py-1 bg-white hover:bg-zinc-100 cursor-pointer"
-                          >
-                            [ EDIT ]
-                          </button>
-                          <button
-                            onClick={() => handleDeleteDiscount(tier._id)}
-                            className="text-[9px] font-bold border border-red-600 text-red-600 px-2 py-1 bg-white hover:bg-red-50 cursor-pointer"
-                          >
-                            [ DELETE ]
-                          </button>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-1.5 justify-end">
+                            <button onClick={() => handleToggleDiscountActive(tier)} className="p-1.5 rounded-lg hover:bg-[#F4F6F9] text-[#6B7280] transition-colors">
+                              {tier.active !== false ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                            </button>
+                            <button onClick={() => setEditingDiscount(tier)} className="p-1.5 rounded-lg hover:bg-[#F4F6F9] text-[#6B7280] transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => handleDeleteDiscount(tier._id)} className="p-1.5 rounded-lg hover:bg-[#FEF2F2] text-[#DC2626] transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -717,153 +482,74 @@ export default function AdminUpsellPage() {
         </div>
       )}
 
-      {/* TAB 4: COMBO RULES */}
+      {/* Tab 4: Combos */}
       {activeTab === 'combos' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          {/* Creator Form Card */}
-          <form onSubmit={handleSaveCombo} className="border border-black p-5 bg-white flex flex-col gap-4 lg:col-span-1">
-            <h3 className="font-bold text-xs uppercase border-b border-black pb-2">
-              {editingCombo ? 'Edit Combo Rule' : 'Add Combo Rule'}
-            </h3>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold uppercase">IF customer has items from category:</label>
-              <input
-                type="text"
-                placeholder="e.g. Classic Momos (or subtotal:350)"
-                value={editingCombo?.conditionCategory || ''}
-                onChange={(e) => setEditingCombo((prev) => ({ ...prev, conditionCategory: e.target.value }))}
-                className="text-xs p-2 border border-black w-full"
-                required
-              />
-              <span className="text-[9px] text-zinc-400 uppercase">comma-separate multiple, or use `subtotal:350` / `momos_variety`</span>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+          <form onSubmit={handleSaveCombo} className="bg-white border border-[#E2E6EA] rounded-xl p-5 flex flex-col gap-4 lg:col-span-1">
+            <h3 className="text-[14px] font-semibold text-[#111827]">{editingCombo ? 'Edit Combo' : 'Add Combo Rule'}</h3>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">IF has category</label>
+              <input type="text" placeholder="e.g. Classic Momos" value={editingCombo?.conditionCategory || ''} onChange={(e) => setEditingCombo(prev => ({ ...prev, conditionCategory: e.target.value }))}
+                className="px-3 py-2 text-sm border border-[#E2E6EA] rounded-lg outline-none focus:ring-2 focus:ring-[#C0181A]/20" required />
             </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold uppercase">AND does NOT have category (Optional):</label>
-              <input
-                type="text"
-                placeholder="e.g. Tokyo Soups"
-                value={editingCombo?.conditionExcludeCategory || ''}
-                onChange={(e) => setEditingCombo((prev) => ({ ...prev, conditionExcludeCategory: e.target.value || null }))}
-                className="text-xs p-2 border border-black w-full"
-              />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Exclude category (optional)</label>
+              <input type="text" placeholder="e.g. Tokyo Soups" value={editingCombo?.conditionExcludeCategory || ''} onChange={(e) => setEditingCombo(prev => ({ ...prev, conditionExcludeCategory: e.target.value || null }))}
+                className="px-3 py-2 text-sm border border-[#E2E6EA] rounded-lg outline-none focus:ring-2 focus:ring-[#C0181A]/20" />
             </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold uppercase">THEN Reward Type:</label>
-              <select
-                value={editingCombo?.rewardType || 'free_item'}
-                onChange={(e) => setEditingCombo((prev) => ({ ...prev, rewardType: e.target.value as 'free_item' | 'percent_off_item' | 'percent_off_order' }))}
-                className="text-xs p-2 border border-black bg-white w-full uppercase"
-                required
-              >
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Reward type</label>
+              <select value={editingCombo?.rewardType || 'free_item'} onChange={(e) => setEditingCombo(prev => ({ ...prev, rewardType: e.target.value as any }))}
+                className="text-sm px-3 py-2 border border-[#E2E6EA] rounded-lg bg-white outline-none focus:ring-2 focus:ring-[#C0181A]/20" required>
                 <option value="free_item">Free Item</option>
-                <option value="percent_off_item">Percent Off Specific Item</option>
-                <option value="percent_off_order">Percent Off Whole Order</option>
+                <option value="percent_off_item">% Off Specific Item</option>
+                <option value="percent_off_order">% Off Whole Order</option>
               </select>
             </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold uppercase">Reward Target:</label>
-              <input
-                type="text"
-                placeholder="e.g. Tokyo Soups (or category:15 / cheapest_momo)"
-                value={editingCombo?.rewardTarget || ''}
-                onChange={(e) => setEditingCombo((prev) => ({ ...prev, rewardTarget: e.target.value }))}
-                className="text-xs p-2 border border-black w-full"
-                required
-              />
-              <span className="text-[9px] text-zinc-400 uppercase">Use category name, or tag `cheapest_momo`, or category:15 for 15% off</span>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Reward target</label>
+              <input type="text" placeholder="e.g. Tokyo Soups" value={editingCombo?.rewardTarget || ''} onChange={(e) => setEditingCombo(prev => ({ ...prev, rewardTarget: e.target.value }))}
+                className="px-3 py-2 text-sm border border-[#E2E6EA] rounded-lg outline-none focus:ring-2 focus:ring-[#C0181A]/20" required />
             </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold uppercase">Customer sees this message:</label>
-              <input
-                type="text"
-                placeholder="e.g. Add a soup, it's on us with 2+ momos"
-                value={editingCombo?.customerMessage || ''}
-                onChange={(e) => setEditingCombo((prev) => ({ ...prev, customerMessage: e.target.value }))}
-                className="text-xs p-2 border border-black w-full"
-                required
-              />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Customer message</label>
+              <input type="text" placeholder="Add a soup, it's on us!" value={editingCombo?.customerMessage || ''} onChange={(e) => setEditingCombo(prev => ({ ...prev, customerMessage: e.target.value }))}
+                className="px-3 py-2 text-sm border border-[#E2E6EA] rounded-lg outline-none focus:ring-2 focus:ring-[#C0181A]/20" required />
             </div>
-
-            <div className="flex gap-2 mt-2">
-              <button
-                type="submit"
-                className="flex-1 border border-black bg-black text-white hover:bg-white hover:text-black py-2 text-xs font-bold uppercase cursor-pointer transition-all"
-              >
-                {editingCombo ? '[ UPDATE COMBO ]' : '[ ADD COMBO ]'}
-              </button>
-              {editingCombo && (
-                <button
-                  type="button"
-                  onClick={() => setEditingCombo(null)}
-                  className="border border-black bg-white text-black hover:bg-zinc-100 px-3 py-2 text-xs font-bold uppercase cursor-pointer"
-                >
-                  [ CANCEL ]
-                </button>
-              )}
+            <div className="flex gap-2">
+              <AdminButton type="submit" className="flex-1">{editingCombo ? 'Update' : 'Add Combo'}</AdminButton>
+              {editingCombo && <AdminButton variant="secondary" type="button" onClick={() => setEditingCombo(null)}>Cancel</AdminButton>}
             </div>
           </form>
 
-          {/* Cards list */}
-          <div className="lg:col-span-2 flex flex-col gap-4">
-            <h3 className="font-bold text-xs uppercase border-b border-black pb-2">Active Combo Rules</h3>
+          <div className="lg:col-span-2 flex flex-col gap-3">
+            <h3 className="text-[14px] font-semibold text-[#111827]">Active Combos</h3>
             {comboRules.length === 0 ? (
-              <div className="border border-dashed border-black p-8 text-center text-xs uppercase text-zinc-400">
-                No combo cards configured.
-              </div>
+              <EmptyState title="No combo rules" description="Create a combo rule to nudge customers toward complementary items." />
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {comboRules.map((rule) => (
-                  <div key={rule._id} className="border border-black p-4 bg-white flex flex-col justify-between gap-4 shadow-sm relative">
-                    <span className="absolute top-2 right-2 text-[9px] font-bold text-zinc-400 uppercase">
-                      Triggered: {rule.triggerCount || 0} times
-                    </span>
-                    <div className="flex flex-col gap-2 uppercase">
-                      <span className="text-[9px] font-bold bg-amber-100 text-amber-900 px-1.5 py-0.5 w-fit border border-dashed border-amber-400">
-                        Starter rule — customize or delete
-                      </span>
-                      <div className="text-[10px] font-bold text-zinc-700 mt-2">
-                        <span className="text-zinc-400 font-normal">IF has:</span> {rule.conditionCategory}
-                        {rule.conditionExcludeCategory && (
-                          <>
-                            <br />
-                            <span className="text-zinc-400 font-normal">AND does NOT have:</span> {rule.conditionExcludeCategory}
-                          </>
-                        )}
-                      </div>
-                      <div className="text-[10px] font-bold text-green-700">
-                        <span className="text-zinc-400 font-normal">THEN:</span> {rule.rewardType.replace('_', ' ')} ({rule.rewardTarget})
-                      </div>
-                      <div className="border border-zinc-200 p-2 bg-zinc-50 text-[10px] text-zinc-600 italic font-sans normal-case mt-1">
-                        &quot;{rule.customerMessage}&quot;
-                      </div>
+                  <div key={rule._id} className="bg-white border border-[#E2E6EA] rounded-xl p-4 flex flex-col gap-3">
+                    <div className="flex justify-between items-start">
+                      <StatusBadge label={rule.active ? 'Active' : 'Paused'} variant={rule.active ? 'success' : 'neutral'} />
+                      <span className="text-[11px] text-[#6B7280]">{rule.triggerCount || 0} triggers</span>
                     </div>
-
-                    <div className="flex gap-2 justify-end mt-2 pt-2 border-t border-zinc-100">
-                      <button
-                        onClick={() => handleToggleComboActive(rule)}
-                        className={`text-[9px] font-bold px-2 py-1 border cursor-pointer ${
-                          rule.active ? 'border-black bg-zinc-100' : 'border-zinc-300 text-zinc-400'
-                        }`}
-                      >
-                        {rule.active ? 'ACTIVE' : 'PAUSED'}
+                    <div className="text-sm text-[#111827]">
+                      <span className="text-[#6B7280]">IF:</span> <span className="font-medium">{rule.conditionCategory}</span>
+                      {rule.conditionExcludeCategory && (<><br/><span className="text-[#6B7280]">NOT:</span> {rule.conditionExcludeCategory}</>)}
+                    </div>
+                    <div className="text-sm text-[#16A34A] font-medium">
+                      <span className="text-[#6B7280] font-normal">Then:</span> {rule.rewardType.replace(/_/g, ' ')} → {rule.rewardTarget}
+                    </div>
+                    <div className="bg-[#F4F6F9] rounded-lg p-2.5 text-[12px] text-[#6B7280] italic">
+                      &ldquo;{rule.customerMessage}&rdquo;
+                    </div>
+                    <div className="flex gap-1.5 justify-end pt-2 border-t border-[#E2E6EA]">
+                      <button onClick={() => handleToggleComboActive(rule)} className="p-1.5 rounded-lg hover:bg-[#F4F6F9] text-[#6B7280] transition-colors">
+                        {rule.active ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
                       </button>
-                      <button
-                        onClick={() => setEditingCombo(rule)}
-                        className="text-[9px] font-bold border border-black px-2 py-1 bg-white hover:bg-zinc-100 cursor-pointer"
-                      >
-                        [ EDIT ]
-                      </button>
-                      <button
-                        onClick={() => handleDeleteCombo(rule._id)}
-                        className="text-[9px] font-bold border border-red-600 text-red-600 px-2 py-1 bg-white hover:bg-red-50 cursor-pointer"
-                      >
-                        [ DELETE ]
-                      </button>
+                      <button onClick={() => setEditingCombo(rule)} className="p-1.5 rounded-lg hover:bg-[#F4F6F9] text-[#6B7280] transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => handleDeleteCombo(rule._id)} className="p-1.5 rounded-lg hover:bg-[#FEF2F2] text-[#DC2626] transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   </div>
                 ))}

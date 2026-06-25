@@ -6,6 +6,14 @@ import { RootState } from '@/redux/store';
 import { addItem, updateQuantity, removeItem, setTableId } from '@/redux/cartSlice';
 import Link from 'next/link';
 import { logEvent } from '@/actions/orders';
+import { Search, ShoppingBag, Minus, Plus, X, ChevronLeft, ChevronRight, Flame } from 'lucide-react';
+
+const DISH_PLACEHOLDER = '/dish_placeholder.jpg';
+
+const getItemImage = (image?: string) => {
+  if (!image || image.startsWith('data:image/svg+xml')) return DISH_PLACEHOLDER;
+  return image;
+};
 
 interface MenuItem {
   _id: string;
@@ -50,12 +58,12 @@ const isAllergen = (ingredient: string) => {
 const estimateNutrition = (name: string, category: string) => {
   const lowerName = name.toLowerCase();
   const lowerCat = category.toLowerCase();
-  
+
   let calories = 250;
   let protein = 12;
   let carbs = 35;
   let fat = 8;
-  
+
   if (lowerCat.includes('salad') || lowerName.includes('salad')) {
     calories = 180; protein = 15; carbs = 8; fat = 6;
     if (lowerName.includes('chicken')) { protein = 24; calories = 220; }
@@ -84,7 +92,7 @@ const highlightAllergens = (text: string) => {
   return parts.map((part, idx) => {
     if (part.toLowerCase().match(allergenRegex)) {
       return (
-        <strong key={idx} className="text-red-600 font-bold">
+        <strong key={idx} className="text-primary font-bold">
           {part}
         </strong>
       );
@@ -99,33 +107,32 @@ const getItemTag = (name: string, category: string, price: number) => {
   const lowerCat = category.toLowerCase();
 
   if (lowerName.includes('tandoori') || lowerName.includes('ramen') || lowerName.includes('butter chicken')) {
-    return { text: "CHEF'S SPECIAL", bg: 'bg-amber-100 text-amber-800 border-amber-300' };
+    return { text: "CHEF'S SPECIAL", bg: 'bg-cta/20 text-text-dark' };
   }
   if (lowerName.includes('schezwan') || lowerName.includes('chilli') || lowerName.includes('peri peri') || lowerName.includes('spicy')) {
-    return { text: 'EXTRA SPICY', bg: 'bg-rose-100 text-rose-850 border-rose-350' };
+    return { text: 'EXTRA SPICY', bg: 'bg-primary/10 text-primary' };
   }
   if (lowerCat.includes('salad') || lowerCat.includes('fit') || lowerName.includes('protein') || lowerName.includes('breast')) {
-    return { text: 'HEALTHY CHOICE', bg: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
+    return { text: 'HEALTHY CHOICE', bg: 'bg-green-100 text-green-800' };
   }
   if (lowerName.includes('steam') || lowerName.includes('classic') || lowerName.includes('noodle')) {
     if (price > 140) {
-      return { text: "TODAY'S SPECIAL", bg: 'bg-indigo-100 text-indigo-800 border-indigo-300' };
+      return { text: "TODAY'S SPECIAL", bg: 'bg-cta/15 text-text-dark' };
     } else {
-      return { text: 'MOST POPULAR', bg: 'bg-sky-100 text-sky-850 border-sky-350' };
+      return { text: 'MOST POPULAR', bg: 'bg-primary/10 text-primary' };
     }
   }
   if (price > 200) {
-    return { text: 'PREMIUM CHOICE', bg: 'bg-purple-100 text-purple-800 border-purple-300' };
+    return { text: 'PREMIUM', bg: 'bg-bg-dark/10 text-bg-dark' };
   }
-  
-  // Deterministic fallback based on name length
+
   const hash = name.length % 3;
   if (hash === 0) {
-    return { text: "TODAY'S RECOMMENDATION", bg: 'bg-teal-100 text-teal-800 border-teal-300' };
+    return { text: "RECOMMENDED", bg: 'bg-cta/15 text-text-dark' };
   } else if (hash === 1) {
-    return { text: 'BEST SELLER', bg: 'bg-pink-100 text-pink-800 border-pink-300' };
+    return { text: 'BEST SELLER', bg: 'bg-primary/10 text-primary' };
   } else {
-    return { text: 'HOUSE SPECIAL', bg: 'bg-orange-100 text-orange-800 border-orange-300' };
+    return { text: 'HOUSE SPECIAL', bg: 'bg-bg-dark/10 text-bg-dark' };
   }
 };
 
@@ -152,7 +159,6 @@ export default function MenuList({
   restaurantId,
   table,
   logoUrl,
-  primaryColor,
   welcomeMessage,
   upsellData,
 }: MenuListProps) {
@@ -178,12 +184,10 @@ export default function MenuList({
     if (!upsellData) return null;
     const { computedAffinity, pairingRules, menuItems } = upsellData;
 
-    // Filter candidate items: must be available, active, and not the current item
     const notThisItem = menuItems.filter(
       (m) => m.available && m.active !== false && m._id !== item._id
     );
 
-    // Apply Fit Meals Diet Exclusions if the item itself is a fit meal / salad
     const isFitMeal = ['Fit Meals', 'Chicken Salad'].includes(item.category);
     const isExcludedByDiet = (candidate: MenuItem) => {
       if (!isFitMeal) return false;
@@ -196,7 +200,6 @@ export default function MenuList({
 
     if (candidates.length === 0) return null;
 
-    // 1. Data-driven affinity (confidence score descending)
     const affinityList = computedAffinity ? computedAffinity[item.name] : null;
     if (affinityList && Array.isArray(affinityList) && affinityList.length > 0) {
       for (const aff of affinityList) {
@@ -210,7 +213,6 @@ export default function MenuList({
       }
     }
 
-    // 2. Manual pairsWithCategories on item level
     if (item.pairsWithCategories && item.pairsWithCategories.length > 0) {
       for (const cat of item.pairsWithCategories) {
         const matched = candidates.find((c) => c.category === cat);
@@ -223,7 +225,6 @@ export default function MenuList({
       }
     }
 
-    // 3. PairingRules based on category
     if (pairingRules && pairingRules.length > 0) {
       const activeRules = pairingRules.filter((r) => r.active && r.triggerCategory === item.category);
       for (const rule of activeRules) {
@@ -242,12 +243,8 @@ export default function MenuList({
     return null;
   };
 
-
-
-  // Extract unique categories
   const categories = Array.from(new Set(initialItems.map((item) => item.category)));
 
-  // Filter items based on category and search query
   const filteredItems = initialItems.filter((item) => {
     const matchesCategory = selectedCategory ? item.category === selectedCategory : true;
     const matchesSearch =
@@ -256,7 +253,6 @@ export default function MenuList({
     return matchesCategory && matchesSearch && item.available;
   });
 
-  // Helper to get item quantity in cart
   const getItemQuantity = (itemId: string) => {
     const item = cart.items.find((i) => i.id === itemId);
     return item ? item.quantity : 0;
@@ -298,104 +294,125 @@ export default function MenuList({
 
   const totalItemsCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
 
-  const slides = selectedDetailedItem 
-    ? [selectedDetailedItem.image, ...(selectedDetailedItem.images || [])].filter(Boolean)
+  const slides = selectedDetailedItem
+    ? [getItemImage(selectedDetailedItem.image), ...(selectedDetailedItem.images || []).map(img => getItemImage(img))].filter(Boolean)
     : [];
 
   return (
-    <div className="flex flex-col min-h-screen pb-24">
-      {/* Brand custom styles */}
-      <style>{`
-        .brand-bg-primary { background-color: ${primaryColor || '#000000'} !important; }
-        .brand-border-primary { border-color: ${primaryColor || '#000000'} !important; }
-        .brand-text-primary { color: ${primaryColor || '#000000'} !important; }
-        
-        .brand-btn-primary {
-          border-color: ${primaryColor || '#000000'} !important;
-          color: ${primaryColor || '#000000'} !important;
-          background-color: transparent !important;
-        }
-        .brand-btn-primary:hover {
-          background-color: ${primaryColor || '#000000'} !important;
-          color: #ffffff !important;
-        }
-        
-        .brand-btn-solid {
-          background-color: ${primaryColor || '#000000'} !important;
-          color: #ffffff !important;
-          border-color: ${primaryColor || '#000000'} !important;
-        }
-        .brand-btn-solid:hover {
-          background-color: transparent !important;
-          color: ${primaryColor || '#000000'} !important;
-        }
-        .hover\\:text-brand-primary:hover {
-          color: ${primaryColor || '#000000'} !important;
-        }
-        .divide-brand-primary > :not([hidden]) ~ :not([hidden]) {
-          border-color: ${primaryColor || '#000000'} !important;
-        }
-      `}</style>
+    <div className="flex flex-col min-h-screen bg-white pb-28">
+      {/* Hero Header */}
+      <header className="bg-gradient-to-br from-bg-dark to-bg-darker relative overflow-hidden">
+        {/* Wave decoration */}
+        <svg
+          className="absolute bottom-0 left-0 w-full h-16 opacity-100"
+          viewBox="0 0 1440 120"
+          preserveAspectRatio="none"
+          fill="none"
+        >
+          <path
+            d="M0,60L60,52C120,44,240,28,360,32C480,36,600,60,720,68C840,76,960,68,1080,56C1200,44,1320,28,1380,20L1440,12L1440,120L0,120Z"
+            fill="#C0181A"
+            fillOpacity="0.15"
+          />
+        </svg>
 
-      {/* Header */}
-      <header className="border-b-2 py-6 px-4 bg-white sticky top-0 z-10 brand-border-primary">
-        <div className="max-w-2xl mx-auto flex flex-col gap-4">
-          <div className="flex items-center gap-4">
+        <div className="relative z-10 max-w-2xl mx-auto px-4 pt-6 pb-8">
+          {/* Restaurant Info */}
+          <div className="flex items-center gap-3 mb-4">
             {logoUrl && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={logoUrl}
                 alt={restaurantName}
-                className="w-14 h-14 object-cover border-2 brand-border-primary shrink-0"
-                style={{ borderRadius: '0px' }}
+                className="w-12 h-12 rounded-full object-cover border-2 border-white/30 shrink-0"
               />
             )}
             <div className="flex-1 min-w-0">
-              <div className="flex justify-between items-baseline flex-wrap gap-2">
-                <h1 className="text-2xl sm:text-3xl font-black tracking-tighter uppercase font-mono-custom break-words max-w-[75%]">
-                  {restaurantName}
-                </h1>
-                <span className="text-xs uppercase border px-2 py-0.5 font-mono-custom shrink-0 brand-border-primary brand-text-primary font-bold">
-                  {table ? `Table ${table}` : 'QR Menu'}
-                </span>
-              </div>
+              <h1 className="text-xl font-black uppercase tracking-tight text-white leading-tight">
+                {restaurantName}
+              </h1>
               {welcomeMessage && (
-                <p className="text-[11px] text-zinc-500 font-sans italic mt-1 leading-tight">
-                  {welcomeMessage}
-                </p>
+                <p className="text-white/70 text-xs mt-0.5 leading-tight">{welcomeMessage}</p>
               )}
             </div>
+            {table && (
+              <span className="bg-white/20 text-white text-[0.65rem] font-bold uppercase px-2.5 py-1 rounded-full">
+                Table {table}
+              </span>
+            )}
           </div>
 
-          {/* Search */}
-          <input
-            type="text"
-            placeholder="Search menu items..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full text-sm font-mono-custom border brand-border-primary focus:ring-0 focus:outline-none"
-          />
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dark/40" />
+            <input
+              type="text"
+              placeholder="Search menu items..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white rounded-xl pl-10 pr-4 py-3 text-sm text-text-dark outline-none placeholder:text-text-dark/40 shadow-[0_4px_20px_rgba(0,0,0,0.15)]"
+            />
+          </div>
+        </div>
+      </header>
 
-          {/* Categories */}
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none font-mono-custom">
+      {/* Promo Banner */}
+      <div className="w-full px-4 py-4 bg-white">
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-gradient-to-r from-bg-dark via-bg-dark to-primary rounded-2xl overflow-hidden flex items-stretch h-[140px] shadow-[0_6px_24px_rgba(139,0,0,0.25)]">
+            <div className="w-[60%] p-5 flex flex-col justify-center relative z-10">
+              <h2 className="font-black text-xl text-white leading-tight tracking-tight">
+                Free delivery for<br />
+                <span className="text-cta">today&apos;s specials</span>
+              </h2>
+              <p className="text-[0.7rem] text-white/70 mt-1.5 font-medium">Up to 3 times per day</p>
+              <button className="mt-3 bg-cta text-text-dark text-[0.7rem] font-bold uppercase px-5 py-2.5 rounded-full w-fit active:scale-95 transition-transform shadow-[0_4px_12px_rgba(245,197,24,0.3)]">
+                Order now
+              </button>
+            </div>
+            <div className="w-[40%] relative overflow-hidden flex-shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={DISH_PLACEHOLDER}
+                alt="Featured dish"
+                className="w-full h-full object-cover scale-110"
+              />
+              {/* Arc separator */}
+              <svg
+                className="absolute left-0 top-0 h-full w-6"
+                viewBox="0 0 24 100"
+                preserveAspectRatio="none"
+                fill="none"
+              >
+                <path d="M24,0 C0,25 0,75 24,100 L0,100 L0,0 Z" fill="#8B0000" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Category Filters */}
+      <div className="sticky top-0 z-20 bg-white border-b border-surface shadow-sm">
+        <div className="max-w-2xl mx-auto px-4 py-3">
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
             <button
               onClick={() => setSelectedCategory(null)}
-              className={`px-3 py-1 text-xs border cursor-pointer transition-colors ${
+              className={`px-4 py-2 text-xs font-bold uppercase rounded-full whitespace-nowrap transition-colors ${
                 selectedCategory === null
-                  ? 'brand-btn-solid font-bold'
-                  : 'brand-btn-primary'
+                  ? 'bg-primary text-white'
+                  : 'bg-surface text-text-dark hover:bg-primary/10'
               }`}
             >
-              ALL
+              All
             </button>
             {categories.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-3 py-1 text-xs border uppercase cursor-pointer transition-colors whitespace-nowrap ${
+                className={`px-4 py-2 text-xs font-bold uppercase rounded-full whitespace-nowrap transition-colors ${
                   selectedCategory === cat
-                    ? 'brand-btn-solid font-bold'
-                    : 'brand-btn-primary'
+                    ? 'bg-primary text-white'
+                    : 'bg-surface text-text-dark hover:bg-primary/10'
                 }`}
               >
                 {cat}
@@ -403,89 +420,82 @@ export default function MenuList({
             ))}
           </div>
         </div>
-      </header>
+      </div>
 
-      {/* Menu List */}
-      <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-6">
+      {/* Menu Items Grid */}
+      <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-5">
         {filteredItems.length === 0 ? (
-          <div className="border border-dashed p-8 text-center font-mono-custom text-sm brand-border-primary">
-            NO ITEMS FOUND MATCHING YOUR SEARCH.
+          <div className="text-center py-16">
+            <p className="text-text-dark/50 text-sm">No items found matching your search.</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-4">
             {filteredItems.map((item) => {
               const qty = getItemQuantity(item._id);
+              const tag = getItemTag(item.name, item.category, item.price);
               return (
                 <div
                   key={item._id}
-                  className="border p-4 flex gap-4 bg-white transition-colors duration-100 brand-border-primary"
+                  className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-3.5 flex gap-3.5"
                 >
-                  {/* Image/Emoji */}
-                  {item.image && (
-                    <div 
-                      onClick={() => openDetailedModal(item)}
-                      className="w-20 h-20 border flex-shrink-0 flex items-center justify-center bg-zinc-50 select-none cursor-pointer hover:opacity-80 transition-opacity brand-border-primary"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        className="w-full h-full object-cover rounded-none"
-                      />
-                    </div>
-                  )}
+                  {/* Image */}
+                  <div
+                    onClick={() => openDetailedModal(item)}
+                    className="w-[90px] h-[90px] rounded-xl overflow-hidden flex-shrink-0 cursor-pointer"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={getItemImage(item.image)}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
 
                   {/* Details */}
-                  <div className="flex-1 flex flex-col justify-between">
+                  <div className="flex-1 flex flex-col justify-between min-w-0">
                     <div>
-                      {(() => {
-                        const tag = getItemTag(item.name, item.category, item.price);
-                        if (!tag) return null;
-                        return (
-                          <span className={`text-[8px] font-bold tracking-wider px-1.5 py-0.5 border rounded-none inline-block font-mono-custom mb-1.5 uppercase leading-none ${tag.bg}`}>
-                            {tag.text}
-                          </span>
-                        );
-                      })()}
-                      <div className="flex justify-between items-start">
-                        <h3 
-                          onClick={() => openDetailedModal(item)}
-                          className="font-bold text-base tracking-tight uppercase cursor-pointer hover:underline"
-                        >
-                          {item.name}
-                        </h3>
-                        <span className="font-mono-custom font-bold text-sm">
-                          ₹{item.price}
+                      {tag && (
+                        <span className={`text-[0.6rem] font-bold tracking-wider px-2 py-0.5 rounded-full inline-block mb-1.5 ${tag.bg}`}>
+                          {tag.text}
                         </span>
-                      </div>
-                      <p className="text-xs text-zinc-600 mt-1 font-sans line-clamp-2">
+                      )}
+                      <h3
+                        onClick={() => openDetailedModal(item)}
+                        className="font-bold text-sm text-text-dark leading-tight cursor-pointer hover:text-primary transition-colors line-clamp-1"
+                      >
+                        {item.name}
+                      </h3>
+                      <p className="text-xs text-text-dark/60 mt-0.5 line-clamp-2 leading-relaxed">
                         {item.description}
                       </p>
                     </div>
 
-                    {/* Actions */}
-                    <div className="flex justify-end mt-3">
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="font-black text-base text-text-dark">
+                        ₹{item.price}
+                      </span>
+
                       {qty === 0 ? (
                         <button
                           onClick={() => handleAddOne(item)}
-                          className="px-4 py-1 text-xs border font-bold uppercase font-mono-custom transition-all brand-btn-primary"
+                          className="bg-primary text-white text-xs font-bold px-4 py-2 rounded-lg uppercase tracking-wide active:scale-95 transition-transform"
                         >
-                          [ ADD ]
+                          Add
                         </button>
                       ) : (
-                        <div className="flex items-center border font-mono-custom text-xs brand-border-primary">
+                        <div className="flex items-center gap-0 bg-primary rounded-lg overflow-hidden">
                           <button
                             onClick={() => handleRemoveOne(item._id, qty)}
-                            className="px-3 py-1 font-bold border-r hover:bg-zinc-100 brand-border-primary"
+                            className="text-white px-2.5 py-2 active:bg-bg-dark transition-colors"
                           >
-                            -
+                            <Minus className="w-3.5 h-3.5" />
                           </button>
-                          <span className="px-4 py-1 font-bold brand-text-primary">{qty}</span>
+                          <span className="text-white font-bold text-sm px-2 min-w-[24px] text-center">{qty}</span>
                           <button
                             onClick={() => handleAddMore(item._id, qty)}
-                            className="px-3 py-1 font-bold border-l hover:bg-zinc-100 brand-border-primary"
+                            className="text-white px-2.5 py-2 active:bg-bg-dark transition-colors"
                           >
-                            +
+                            <Plus className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       )}
@@ -500,197 +510,178 @@ export default function MenuList({
 
       {/* Floating Bottom Cart Bar */}
       {totalItemsCount > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 py-4 px-6 border-t-2 z-20 brand-bg-primary brand-border-primary text-white">
-          <div className="max-w-2xl mx-auto flex justify-between items-center font-mono-custom">
-            <div className="flex flex-col">
-              <span className="text-xs text-zinc-300">
-                {totalItemsCount} ITEM{totalItemsCount > 1 ? 'S' : ''} IN CART
-              </span>
-              <span className="text-lg font-bold">Total: ₹{cart.total}</span>
+        <div className="fixed bottom-0 left-0 right-0 z-30 p-4">
+          <Link
+            href="/cart"
+            className="max-w-2xl mx-auto flex items-center justify-between bg-primary rounded-2xl px-5 py-4 shadow-[0_8px_30px_rgba(139,0,0,0.4)] active:scale-[0.98] transition-transform"
+          >
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 rounded-full p-2">
+                <ShoppingBag className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <span className="text-white/80 text-xs font-medium block">
+                  {totalItemsCount} item{totalItemsCount > 1 ? 's' : ''}
+                </span>
+                <span className="text-white font-black text-lg leading-tight">₹{cart.total}</span>
+              </div>
             </div>
-            <Link
-              href="/cart"
-              className="border border-white bg-white px-5 py-2 text-sm font-bold uppercase transition-all brand-text-primary hover:bg-transparent hover:text-white"
-            >
-              [ VIEW CART → ]
-            </Link>
-          </div>
+            <span className="text-white font-bold text-sm uppercase tracking-wide">
+              View Cart →
+            </span>
+          </Link>
         </div>
       )}
 
       {/* Product Details Modal */}
       {selectedDetailedItem && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs transition-opacity duration-200"
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm"
           onClick={() => setSelectedDetailedItem(null)}
         >
-          <div 
-            className="bg-white border-2 max-w-md w-full max-h-[85vh] flex flex-col overflow-hidden relative shadow-2xl animate-in fade-in zoom-in-95 duration-150 brand-border-primary"
+          <div
+            className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
-            <div className="border-b-2 p-4 flex justify-between items-center text-white brand-bg-primary brand-border-primary">
-              <div>
-                <span className="text-[10px] uppercase tracking-wider text-zinc-300 font-mono-custom">
-                  {selectedDetailedItem.category}
-                </span>
-                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                  <h3 className="font-bold text-lg leading-tight uppercase font-mono-custom">
-                    {selectedDetailedItem.name}
-                  </h3>
-                  {(() => {
-                    const tag = getItemTag(selectedDetailedItem.name, selectedDetailedItem.category, selectedDetailedItem.price);
-                    if (!tag) return null;
-                    return (
-                      <span className={`text-[8px] font-bold tracking-wider px-1.5 py-0.5 border rounded-none inline-block font-mono-custom uppercase leading-none ${tag.bg}`}>
-                        {tag.text}
-                      </span>
-                    );
-                  })()}
-                </div>
-              </div>
-              <button 
-                onClick={() => setSelectedDetailedItem(null)}
-                className="px-2 py-1 text-xs border border-white font-mono-custom hover:bg-white hover:text-brand-primary transition-all cursor-pointer font-bold"
-              >
-                [ CLOSE ]
-              </button>
-            </div>
-
-            {/* Slider */}
+            {/* Image Slider */}
             {slides.length > 0 && (
-              <div className="relative w-full h-56 border-b bg-zinc-50 overflow-hidden group brand-border-primary">
-                <div 
+              <div className="relative w-full h-56 overflow-hidden bg-surface">
+                <div
                   className="flex h-full transition-transform duration-300 ease-out"
                   style={{ transform: `translate3d(-${activeImageIndex * 100}%, 0, 0)` }}
                 >
                   {slides.map((slide, idx) => (
-                    <div key={idx} className="w-full h-full flex-shrink-0 relative">
+                    <div key={idx} className="w-full h-full flex-shrink-0">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={slide}
                         alt={`${selectedDetailedItem.name} slide ${idx + 1}`}
-                        className="w-full h-full object-cover select-none"
+                        className="w-full h-full object-cover"
                       />
                     </div>
                   ))}
                 </div>
 
+                {/* Close button */}
+                <button
+                  onClick={() => setSelectedDetailedItem(null)}
+                  className="absolute top-3 right-3 bg-black/40 backdrop-blur-sm text-white rounded-full p-2 z-10"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+
                 {slides.length > 1 && (
                   <>
                     <button
                       onClick={() => setActiveImageIndex((prev) => (prev - 1 + slides.length) % slides.length)}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 bg-white border w-8 h-8 flex items-center justify-center text-sm font-bold font-mono-custom transition-colors cursor-pointer shadow-md z-10 brand-border-primary hover:brand-bg-primary hover:text-white"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 rounded-full p-1.5 shadow-md z-10"
                     >
-                      &lt;
+                      <ChevronLeft className="w-4 h-4 text-text-dark" />
                     </button>
                     <button
                       onClick={() => setActiveImageIndex((prev) => (prev + 1) % slides.length)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 bg-white border w-8 h-8 flex items-center justify-center text-sm font-bold font-mono-custom transition-colors cursor-pointer shadow-md z-10 brand-border-primary hover:brand-bg-primary hover:text-white"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 rounded-full p-1.5 shadow-md z-10"
                     >
-                      &gt;
+                      <ChevronRight className="w-4 h-4 text-text-dark" />
                     </button>
-                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1 z-10 bg-white border px-2 py-1 brand-border-primary">
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
                       {slides.map((_, idx) => (
                         <button
                           key={idx}
                           onClick={() => setActiveImageIndex(idx)}
-                          className={`w-1.5 h-1.5 rounded-full border transition-all cursor-pointer brand-border-primary ${
-                            activeImageIndex === idx ? 'brand-bg-primary scale-110' : 'bg-white hover:bg-black/50'
+                          className={`w-2 h-2 rounded-full transition-all ${
+                            activeImageIndex === idx ? 'bg-white scale-125' : 'bg-white/50'
                           }`}
                         />
                       ))}
-                    </div>
-                    <div className="absolute top-3 right-3 bg-white border px-2 py-0.5 text-[9px] font-bold font-mono-custom z-10 brand-border-primary">
-                      {activeImageIndex + 1} / {slides.length}
                     </div>
                   </>
                 )}
               </div>
             )}
 
-            {/* Modal Body / Scrollable Content */}
-            <div className="p-5 flex-1 overflow-y-auto space-y-4">
-              {/* Portion, Price, Spice, Prep Info Box */}
-              <div className="border p-3 bg-zinc-50 space-y-1.5 font-mono-custom brand-border-primary">
-                <div className="flex justify-between items-baseline">
-                  <span className="font-bold text-sm text-black">₹{selectedDetailedItem.price}</span>
-                  {selectedDetailedItem.spiceLevel !== undefined && selectedDetailedItem.spiceLevel > 0 && (
-                    <span className="flex items-center text-[10px] uppercase font-bold text-zinc-500">
-                      Spice:
-                      <span className="ml-1 flex gap-0.5 text-xs text-red-600">
-                        {Array.from({ length: selectedDetailedItem.spiceLevel }).map((_, i) => (
-                          <span key={i}>🔥</span>
-                        ))}
-                      </span>
-                    </span>
-                  )}
-                </div>
-                <div className="h-px bg-zinc-200 w-full" />
-                <div className="text-xs text-zinc-800 flex justify-between">
-                  <span className="text-[9px] uppercase text-zinc-400 font-bold">Portion</span>
-                  <span className="font-bold">{selectedDetailedItem.portionSize || 'Good for 1'}</span>
-                </div>
-                <div className="text-xs text-zinc-800 flex justify-between">
-                  <span className="text-[9px] uppercase text-zinc-400 font-bold">Prep</span>
-                  <span className="font-bold text-right text-zinc-700">
-                    ~{selectedDetailedItem.prepTimeMin || 10}-{selectedDetailedItem.prepTimeMax || 12} min, made fresh to order
+            {/* Modal Body */}
+            <div className="p-5 flex-1 overflow-y-auto">
+              {/* Header info */}
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div>
+                  <span className="text-[0.65rem] text-primary font-bold uppercase tracking-wider">
+                    {selectedDetailedItem.category}
                   </span>
+                  <h3 className="font-black text-xl text-text-dark leading-tight mt-0.5">
+                    {selectedDetailedItem.name}
+                  </h3>
                 </div>
+                <span className="font-black text-xl text-primary shrink-0">
+                  ₹{selectedDetailedItem.price}
+                </span>
+              </div>
+
+              {/* Quick info row */}
+              <div className="flex items-center gap-4 mb-4 flex-wrap">
+                {selectedDetailedItem.spiceLevel !== undefined && selectedDetailedItem.spiceLevel > 0 && (
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: selectedDetailedItem.spiceLevel }).map((_, i) => (
+                      <Flame key={i} className="w-3.5 h-3.5 text-primary fill-primary" />
+                    ))}
+                  </div>
+                )}
+                <span className="text-xs text-text-dark/60">
+                  {selectedDetailedItem.portionSize || 'Good for 1'}
+                </span>
+                <span className="text-xs text-text-dark/60">
+                  ~{selectedDetailedItem.prepTimeMin || 10}-{selectedDetailedItem.prepTimeMax || 12} min
+                </span>
               </div>
 
               {/* Chef's Note */}
               {selectedDetailedItem.chefNote && (
-                <div className="border-l-2 pl-3 py-0.5 italic text-xs font-medium text-zinc-700 font-sans leading-relaxed brand-border-primary">
-                  &ldquo;{selectedDetailedItem.chefNote}&rdquo; &mdash; Chef
+                <div className="bg-cta/10 rounded-xl p-3 mb-4">
+                  <p className="text-xs text-text-dark italic leading-relaxed">
+                    &ldquo;{selectedDetailedItem.chefNote}&rdquo; — Chef
+                  </p>
                 </div>
               )}
 
               {/* Description */}
-              <div>
-                <h4 className="text-[10px] font-bold uppercase text-zinc-400 font-mono-custom mb-1">Description</h4>
-                <p className="text-xs text-zinc-800 font-sans leading-relaxed">{selectedDetailedItem.description}</p>
-              </div>
+              <p className="text-sm text-text-dark/70 leading-relaxed mb-4">{selectedDetailedItem.description}</p>
 
               {/* Preparation */}
               {selectedDetailedItem.preparation && (
-                <div>
-                  <h4 className="text-[10px] font-bold uppercase text-zinc-400 font-mono-custom mb-1">Preparation</h4>
-                  <p className="text-xs text-zinc-800 font-sans leading-relaxed">{selectedDetailedItem.preparation}</p>
+                <div className="mb-4">
+                  <h4 className="text-[0.65rem] font-bold uppercase text-bg-dark tracking-wider mb-1">Preparation</h4>
+                  <p className="text-xs text-text-dark/70 leading-relaxed">{selectedDetailedItem.preparation}</p>
                 </div>
               )}
 
-              {/* Ingredients & Allergens */}
+              {/* Ingredients */}
               {selectedDetailedItem.ingredients && selectedDetailedItem.ingredients.length > 0 && (
-                <div>
-                  <h4 className="text-[10px] font-bold uppercase text-zinc-400 font-mono-custom mb-1.5">Ingredients &amp; Allergens</h4>
-                  <ul className="text-xs font-sans space-y-1">
-                     {selectedDetailedItem.ingredients.map((ing, idx) => {
+                <div className="mb-4">
+                  <h4 className="text-[0.65rem] font-bold uppercase text-bg-dark tracking-wider mb-2">Ingredients</h4>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedDetailedItem.ingredients.map((ing, idx) => {
                       const allergen = isAllergen(ing);
                       return (
-                        <li key={idx} className="text-zinc-700 flex items-start gap-1.5">
-                          <span className="text-zinc-400">•</span>
-                          <span className="leading-tight">
-                            {highlightAllergens(ing)}
-                            {allergen && (
-                              <span className="ml-1 text-[8px] uppercase border border-red-600 px-1 py-0.2 rounded font-mono-custom text-red-600 font-bold inline-block leading-none">
-                                Contains {allergen}
-                              </span>
-                            )}
-                          </span>
-                        </li>
+                        <span
+                          key={idx}
+                          className={`text-[0.65rem] px-2 py-1 rounded-full ${
+                            allergen ? 'bg-primary/10 text-primary font-bold' : 'bg-surface text-text-dark/70'
+                          }`}
+                        >
+                          {highlightAllergens(ing)}
+                        </span>
                       );
                     })}
-                  </ul>
+                  </div>
                 </div>
               )}
 
-              {/* Nutrition Facts */}
+              {/* Nutrition */}
               {(() => {
-                const hasCustomNutrition = !!(selectedDetailedItem.nutrition && 
-                  (selectedDetailedItem.nutrition.calories > 0 || 
-                   selectedDetailedItem.nutrition.protein > 0 || 
-                   selectedDetailedItem.nutrition.carbs > 0 || 
+                const hasCustomNutrition = !!(selectedDetailedItem.nutrition &&
+                  (selectedDetailedItem.nutrition.calories > 0 ||
+                   selectedDetailedItem.nutrition.protein > 0 ||
+                   selectedDetailedItem.nutrition.carbs > 0 ||
                    selectedDetailedItem.nutrition.fat > 0));
 
                 const displayNutrition = hasCustomNutrition && selectedDetailedItem.nutrition
@@ -698,93 +689,83 @@ export default function MenuList({
                   : estimateNutrition(selectedDetailedItem.name, selectedDetailedItem.category);
 
                 return (
-                  <div>
-                    <h4 className="text-[10px] font-bold uppercase text-zinc-400 font-mono-custom mb-1.5">
-                      Nutrition Facts {hasCustomNutrition ? '' : '(Approx)'}
+                  <div className="mb-4">
+                    <h4 className="text-[0.65rem] font-bold uppercase text-bg-dark tracking-wider mb-2">
+                      Nutrition {hasCustomNutrition ? '' : '(Approx)'}
                     </h4>
-                    <div className="grid grid-cols-4 border text-center bg-zinc-50 font-mono-custom text-xs brand-border-primary divide-brand-primary">
-                      <div className="p-2">
-                        <div className="text-zinc-500 text-[9px] uppercase">Cal</div>
-                        <div className="font-bold text-sm text-black">{displayNutrition.calories}</div>
-                      </div>
-                      <div className="p-2">
-                        <div className="text-zinc-500 text-[9px] uppercase">Protein</div>
-                        <div className="font-bold text-sm text-black">{displayNutrition.protein}g</div>
-                      </div>
-                      <div className="p-2">
-                        <div className="text-zinc-500 text-[9px] uppercase">Carbs</div>
-                        <div className="font-bold text-sm text-black">{displayNutrition.carbs}g</div>
-                      </div>
-                      <div className="p-2">
-                        <div className="text-zinc-500 text-[9px] uppercase">Fat</div>
-                        <div className="font-bold text-sm text-black">{displayNutrition.fat}g</div>
-                      </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        { label: 'Cal', value: displayNutrition.calories },
+                        { label: 'Protein', value: `${displayNutrition.protein}g` },
+                        { label: 'Carbs', value: `${displayNutrition.carbs}g` },
+                        { label: 'Fat', value: `${displayNutrition.fat}g` },
+                      ].map((n) => (
+                        <div key={n.label} className="bg-surface rounded-lg p-2 text-center">
+                          <span className="text-[0.6rem] text-text-dark/50 uppercase block">{n.label}</span>
+                          <span className="text-sm font-bold text-text-dark">{n.value}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 );
               })()}
 
-              {/* Goes Well With Recommendation */}
+              {/* Goes Well With */}
               {(() => {
                 const pairedData = getPairedItem(selectedDetailedItem);
                 if (!pairedData) return null;
 
                 const pairedItem = pairedData.item;
-                // Suppress social proof if Chef's Note is already active, to strictly obey 2-trigger cap (chefNote + goesWellWith)
                 const showAnySocialProof = !selectedDetailedItem.chefNote;
                 const pairedQty = getItemQuantity(pairedItem._id);
 
                 return (
-                  <div className="border-t border-dashed pt-4 mt-2 brand-border-primary">
-                    <h4 className="text-[10px] font-bold uppercase text-zinc-400 font-mono-custom mb-2">
+                  <div className="border-t border-surface pt-4 mt-2">
+                    <h4 className="text-[0.65rem] font-bold uppercase text-bg-dark tracking-wider mb-2">
                       Goes Well With
                     </h4>
-                    
+
                     {showAnySocialProof && (
-                      <p className="text-[10px] text-zinc-500 font-mono-custom mb-2">
-                        {pairedData.showSocialProof ? (
-                          `👥 Most people order this with ${pairedItem.name}`
-                        ) : (
-                          `🔥 Popular choice recommended with this item`
-                        )}
+                      <p className="text-[0.65rem] text-text-dark/50 mb-2">
+                        {pairedData.showSocialProof
+                          ? `Most people order this with ${pairedItem.name}`
+                          : `Popular choice recommended with this item`}
                       </p>
                     )}
 
-                    <div className="border p-3 bg-zinc-50 flex gap-3 items-center brand-border-primary">
-                      {pairedItem.image && (
-                        <div className="w-12 h-12 border flex-shrink-0 flex items-center justify-center bg-white select-none brand-border-primary">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={pairedItem.image} alt={pairedItem.name} className="w-full h-full object-cover" />
-                        </div>
-                      )}
-                      
+                    <div className="bg-surface rounded-xl p-3 flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={getItemImage(pairedItem.image)} alt={pairedItem.name} className="w-full h-full object-cover" />
+                      </div>
+
                       <div className="flex-1 min-w-0">
-                        <h5 className="font-bold text-xs uppercase truncate">{pairedItem.name}</h5>
-                        <span className="font-mono-custom text-[10px] font-bold text-zinc-650">₹{pairedItem.price}</span>
+                        <h5 className="font-bold text-sm text-text-dark truncate">{pairedItem.name}</h5>
+                        <span className="text-xs font-bold text-primary">₹{pairedItem.price}</span>
                       </div>
 
                       <div>
                         {pairedQty === 0 ? (
                           <button
                             onClick={() => handleAddOne(pairedItem, true, 'cross_sell', pairedItem._id)}
-                            className="px-3 py-1.5 border text-[10px] font-bold uppercase transition-all cursor-pointer font-mono-custom brand-btn-primary"
+                            className="bg-primary text-white text-[0.65rem] font-bold px-3 py-1.5 rounded-lg uppercase active:scale-95 transition-transform"
                           >
                             + Add
                           </button>
                         ) : (
-                          <div className="flex items-center border text-[10px] font-mono-custom bg-white brand-border-primary">
+                          <div className="flex items-center gap-0 bg-primary rounded-lg overflow-hidden">
                             <button
                               onClick={() => handleRemoveOne(pairedItem._id, pairedQty)}
-                              className="px-2 py-1 font-bold border-r hover:bg-zinc-100 brand-border-primary"
+                              className="text-white px-2 py-1.5"
                             >
-                              -
+                              <Minus className="w-3 h-3" />
                             </button>
-                            <span className="px-3 py-1 font-bold brand-text-primary">{pairedQty}</span>
+                            <span className="text-white font-bold text-xs px-1.5">{pairedQty}</span>
                             <button
                               onClick={() => handleAddMore(pairedItem._id, pairedQty)}
-                              className="px-2 py-1 font-bold border-l hover:bg-zinc-100 brand-border-primary"
+                              className="text-white px-2 py-1.5"
                             >
-                              +
+                              <Plus className="w-3 h-3" />
                             </button>
                           </div>
                         )}
@@ -795,35 +776,35 @@ export default function MenuList({
               })()}
             </div>
 
-            {/* Bottom Bar: Price & Add to Cart */}
-            <div className="border-t-2 p-4 bg-white flex justify-between items-center font-mono-custom brand-border-primary">
-              <div className="flex flex-col">
-                <span className="text-[9px] text-zinc-400 uppercase">Total Price</span>
-                <span className="font-bold text-lg brand-text-primary">₹{selectedDetailedItem.price}</span>
+            {/* Bottom Add to Cart Bar */}
+            <div className="border-t border-surface p-4 bg-white flex items-center justify-between">
+              <div>
+                <span className="text-[0.6rem] text-text-dark/50 uppercase">Total</span>
+                <span className="block font-black text-lg text-text-dark">₹{selectedDetailedItem.price}</span>
               </div>
-              
+
               <div>
                 {getItemQuantity(selectedDetailedItem._id) === 0 ? (
                   <button
                     onClick={() => handleAddOne(selectedDetailedItem)}
-                    className="px-5 py-2 border font-bold uppercase transition-all text-xs cursor-pointer brand-btn-solid"
+                    className="bg-cta text-text-dark font-bold text-sm px-6 py-3 rounded-xl uppercase tracking-wide active:scale-95 transition-transform"
                   >
-                    [ Add to Cart ]
+                    Add to Cart
                   </button>
                 ) : (
-                  <div className="flex items-center border text-xs brand-border-primary">
+                  <div className="flex items-center gap-0 bg-primary rounded-xl overflow-hidden">
                     <button
                       onClick={() => handleRemoveOne(selectedDetailedItem._id, getItemQuantity(selectedDetailedItem._id))}
-                      className="px-3.5 py-2 font-bold border-r hover:bg-zinc-100 cursor-pointer brand-border-primary"
+                      className="text-white px-3.5 py-3"
                     >
-                      -
+                      <Minus className="w-4 h-4" />
                     </button>
-                    <span className="px-5 py-2 font-bold brand-text-primary">{getItemQuantity(selectedDetailedItem._id)}</span>
+                    <span className="text-white font-bold text-base px-3">{getItemQuantity(selectedDetailedItem._id)}</span>
                     <button
                       onClick={() => handleAddMore(selectedDetailedItem._id, getItemQuantity(selectedDetailedItem._id))}
-                      className="px-3.5 py-2 font-bold border-l hover:bg-zinc-100 cursor-pointer brand-border-primary"
+                      className="text-white px-3.5 py-3"
                     >
-                      +
+                      <Plus className="w-4 h-4" />
                     </button>
                   </div>
                 )}

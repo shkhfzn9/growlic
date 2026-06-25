@@ -5,23 +5,22 @@ import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import QRCode from 'qrcode';
 import { getRestaurantDetails, saveRestaurantBranding } from '@/actions/auth';
+import { PageHeader, AdminButton } from '@/components/admin/ui';
+import { Plus, Trash2, Download, Printer, CheckCircle } from 'lucide-react';
 
 export default function AdminSettingsPage() {
   const auth = useSelector((state: RootState) => state.auth);
 
-  // Branding states
   const [logoUrl, setLogoUrl] = useState('');
   const [primaryColor, setPrimaryColor] = useState('#000000');
   const [welcomeMessage, setWelcomeMessage] = useState('Welcome to our restaurant!');
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Table QR states
   const [tables, setTables] = useState<string[]>(['1', '2', '3', '4', '5']);
   const [newTableLabel, setNewTableLabel] = useState('');
   const [qrUrls, setQrUrls] = useState<Record<string, string>>({});
 
-  // Hydrate tables and branding configurations from DB
   useEffect(() => {
     const loadDetails = async () => {
       try {
@@ -38,16 +37,11 @@ export default function AdminSettingsPage() {
 
     if (auth.isLoggedIn && auth.restaurantId) {
       loadDetails();
-
-      // Retrieve custom table list from local storage
       const stored = localStorage.getItem(`growlic_tables_${auth.restaurantId}`);
-      if (stored) {
-        setTables(JSON.parse(stored));
-      }
+      if (stored) setTables(JSON.parse(stored));
     }
   }, [auth.isLoggedIn, auth.restaurantId]);
 
-  // Generate Table Specific QR code mappings
   useEffect(() => {
     if (auth.restaurantId && tables.length > 0) {
       const origin = window.location.origin;
@@ -57,14 +51,7 @@ export default function AdminSettingsPage() {
         for (const table of tables) {
           const targetUrl = `${origin}/menu/${auth.restaurantId}?table=${encodeURIComponent(table)}`;
           try {
-            const url = await QRCode.toDataURL(targetUrl, {
-              width: 512,
-              margin: 2,
-              color: {
-                dark: '#000000',
-                light: '#FFFFFF',
-              },
-            });
+            const url = await QRCode.toDataURL(targetUrl, { width: 512, margin: 2, color: { dark: '#000000', light: '#FFFFFF' } });
             newUrls[table] = url;
           } catch (err) {
             console.error('Error generating QR:', err);
@@ -87,19 +74,14 @@ export default function AdminSettingsPage() {
   const addTable = () => {
     const label = newTableLabel.trim();
     if (!label) return;
-    if (tables.includes(label)) {
-      alert('Table ID already exists');
-      return;
-    }
-    const updated = [...tables, label];
-    saveTables(updated);
+    if (tables.includes(label)) { alert('Table ID already exists'); return; }
+    saveTables([...tables, label]);
     setNewTableLabel('');
   };
 
   const removeTable = (label: string) => {
-    if (confirm(`Are you sure you want to remove table "${label}"?`)) {
-      const updated = tables.filter(t => t !== label);
-      saveTables(updated);
+    if (confirm(`Remove table "${label}"?`)) {
+      saveTables(tables.filter(t => t !== label));
     }
   };
 
@@ -107,13 +89,8 @@ export default function AdminSettingsPage() {
     e.preventDefault();
     setSaving(true);
     setSaveSuccess(false);
-
     try {
-      await saveRestaurantBranding({
-        logoUrl,
-        primaryColor,
-        welcomeMessage,
-      });
+      await saveRestaurantBranding({ logoUrl, primaryColor, welcomeMessage });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
@@ -126,72 +103,30 @@ export default function AdminSettingsPage() {
 
   const handlePrintTable = (table: string, qrUrl: string) => {
     if (typeof window === 'undefined') return;
-
     const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('Pop-up blocked. Please allow pop-ups to print the QR code.');
-      return;
-    }
+    if (!printWindow) { alert('Pop-up blocked. Please allow pop-ups to print the QR code.'); return; }
 
     const menuUrl = `${window.location.origin}/menu/${auth.restaurantId}?table=${encodeURIComponent(table)}`;
-
     printWindow.document.write(`
       <html>
         <head>
-          <title>Print QR Code - ${auth.restaurantName || 'Menu'} - Table ${table}</title>
+          <title>QR - ${auth.restaurantName || 'Menu'} - Table ${table}</title>
           <style>
-            body {
-              font-family: monospace;
-              text-align: center;
-              padding: 8% 5%;
-            }
-            .title {
-              font-size: 24px;
-              font-weight: bold;
-              text-transform: uppercase;
-              letter-spacing: 2px;
-              margin-bottom: 5px;
-            }
-            .table-label {
-              font-size: 20px;
-              font-weight: bold;
-              margin-bottom: 25px;
-              text-transform: uppercase;
-              border: 2px solid black;
-              display: inline-block;
-              padding: 5px 20px;
-            }
-            .subtitle {
-              font-size: 11px;
-              color: #555;
-              margin-bottom: 30px;
-              text-transform: uppercase;
-            }
-            .qr-img {
-              width: 320px;
-              height: 320px;
-              border: 2px solid #000;
-              padding: 10px;
-            }
-            .url {
-              margin-top: 20px;
-              font-size: 10px;
-              color: #666;
-            }
+            body { font-family: 'Inter', system-ui, sans-serif; text-align: center; padding: 8% 5%; }
+            .title { font-size: 24px; font-weight: bold; margin-bottom: 5px; }
+            .table-label { font-size: 20px; font-weight: bold; margin-bottom: 25px; border: 2px solid #111; display: inline-block; padding: 5px 20px; border-radius: 8px; }
+            .subtitle { font-size: 13px; color: #555; margin-bottom: 30px; }
+            .qr-img { width: 320px; height: 320px; border: 2px solid #E2E6EA; padding: 10px; border-radius: 12px; }
+            .url { margin-top: 20px; font-size: 10px; color: #666; }
           </style>
         </head>
         <body>
           <div class="title">${auth.restaurantName || 'Restaurant Menu'}</div>
-          <div class="table-label">TABLE ${table}</div>
-          <div class="subtitle">Scan to Order directly from your table</div>
+          <div class="table-label">Table ${table}</div>
+          <div class="subtitle">Scan to order directly from your table</div>
           <img src="${qrUrl}" class="qr-img" />
           <div class="url">${menuUrl}</div>
-          <script>
-            window.onload = function() {
-              window.print();
-              window.close();
-            }
-          </script>
+          <script>window.onload = function() { window.print(); window.close(); }</script>
         </body>
       </html>
     `);
@@ -199,144 +134,124 @@ export default function AdminSettingsPage() {
   };
 
   return (
-    <div className="font-mono-custom flex flex-col gap-6 max-w-xl mx-auto pb-12">
-      {/* Title */}
-      <div className="border-b border-black pb-4">
-        <h1 className="text-2xl font-bold uppercase">Settings</h1>
-        <span className="text-xs uppercase text-zinc-500">Configure your restaurant qr order details and branding</span>
-      </div>
+    <div className="flex flex-col gap-6 max-w-2xl pb-12">
+      <PageHeader title="Settings" subtitle="Configure branding and table QR codes" />
 
-      {/* Brand Customization settings */}
-      <form onSubmit={handleSaveBranding} className="border border-black p-6 bg-white flex flex-col gap-4">
-        <div className="border-b border-black pb-2">
-          <h2 className="text-sm font-bold uppercase">Custom Branding & Theme</h2>
+      {/* Branding */}
+      <form onSubmit={handleSaveBranding} className="bg-white border border-[#E2E6EA] rounded-xl p-6 flex flex-col gap-5">
+        <div>
+          <h2 className="text-[15px] font-semibold text-[#111827]">Custom Branding</h2>
+          <p className="text-[13px] text-[#6B7280] mt-0.5">Personalize the customer-facing menu appearance</p>
         </div>
 
         {saveSuccess && (
-          <div className="border border-black p-3 text-xs bg-zinc-100 font-bold text-green-600 uppercase">
-            ✔ BRANDING CONFIGURATIONS SAVED SUCCESSFULLY
+          <div className="flex items-center gap-2 bg-[#F0FDF4] border border-[#16A34A]/20 rounded-lg p-3 text-sm text-[#16A34A] font-medium">
+            <CheckCircle className="w-4 h-4" /> Settings saved successfully
           </div>
         )}
 
-        {/* Logo URL */}
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-bold uppercase">Logo Image URL</label>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Logo URL</label>
           <input
             type="url"
-            placeholder="e.g. https://myrestaurant.com/logo.png"
+            placeholder="https://example.com/logo.png"
             value={logoUrl}
             onChange={(e) => setLogoUrl(e.target.value)}
-            className="w-full text-xs font-mono-custom"
+            className="px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors"
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          {/* Primary brand color */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold uppercase">Primary Brand Color</label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Primary Color</label>
             <div className="flex gap-2 items-center">
               <input
                 type="color"
                 value={primaryColor}
                 onChange={(e) => setPrimaryColor(e.target.value)}
-                className="w-10 h-8 cursor-pointer border border-black rounded-none p-0"
+                className="w-10 h-10 cursor-pointer border border-[#E2E6EA] rounded-lg p-0.5"
               />
               <input
                 type="text"
                 value={primaryColor}
                 onChange={(e) => setPrimaryColor(e.target.value)}
-                className="w-full text-xs font-mono-custom"
-                placeholder="#000000"
+                className="flex-1 px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] font-mono"
               />
             </div>
           </div>
-
-          {/* Welcome Message */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold uppercase">Welcome Message</label>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Welcome Message</label>
             <input
               type="text"
-              placeholder="e.g. Welcome to Tokyo Momos!"
+              placeholder="Welcome to our restaurant!"
               value={welcomeMessage}
               onChange={(e) => setWelcomeMessage(e.target.value)}
-              className="w-full text-xs font-mono-custom"
+              className="px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors"
             />
           </div>
         </div>
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="border-2 border-black w-full py-2.5 text-xs font-bold uppercase bg-black text-white hover:bg-white hover:text-black transition-all cursor-pointer mt-2"
-        >
-          {saving ? 'SAVING DETAILS...' : '[ SAVE BRAND CONFIGURATIONS ]'}
-        </button>
+        <AdminButton type="submit" loading={saving} className="w-full">
+          Save Branding
+        </AdminButton>
       </form>
 
-      {/* Table Management & QR Section */}
-      <div className="border border-black p-6 bg-white flex flex-col gap-6">
-        <div className="border-b border-black pb-2 w-full">
-          <h2 className="text-sm font-bold uppercase">Table QR Code Manager</h2>
-          <span className="text-[10px] text-zinc-500 uppercase">Generate and print table-scoped scanning codes</span>
+      {/* Table QR Codes */}
+      <div className="bg-white border border-[#E2E6EA] rounded-xl p-6 flex flex-col gap-5">
+        <div>
+          <h2 className="text-[15px] font-semibold text-[#111827]">Table QR Codes</h2>
+          <p className="text-[13px] text-[#6B7280] mt-0.5">Generate and print table-scoped QR codes for ordering</p>
         </div>
 
-        {/* Add Table Label */}
         <div className="flex gap-2">
           <input
             type="text"
-            placeholder="Enter Table ID (e.g. 5, Bar-Left, Balcony-3)"
+            placeholder="Table ID (e.g. 5, Bar-Left)"
             value={newTableLabel}
             onChange={(e) => setNewTableLabel(e.target.value.replace(/[^a-zA-Z0-9-]/g, ''))}
-            className="w-full text-xs font-mono-custom"
+            className="flex-1 px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors"
           />
-          <button
-            onClick={addTable}
-            className="border border-black bg-black text-white hover:bg-white hover:text-black px-4 text-xs font-bold uppercase transition-all cursor-pointer whitespace-nowrap"
-          >
-            [ ADD TABLE ]
-          </button>
+          <AdminButton onClick={addTable} icon={<Plus className="w-4 h-4" />}>Add</AdminButton>
         </div>
 
-        {/* Tables QR Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {tables.map((table) => {
             const tableQrUrl = qrUrls[table];
             return (
-              <div key={table} className="border border-black p-4 bg-zinc-50 flex flex-col items-center gap-3">
-                <div className="flex justify-between items-center w-full border-b border-black pb-1">
-                  <span className="text-xs font-bold uppercase">Table {table}</span>
-                  <button
-                    onClick={() => removeTable(table)}
-                    className="text-[10px] text-red-600 hover:underline bg-transparent border-0 cursor-pointer uppercase font-bold"
-                  >
-                    [ Delete ]
+              <div key={table} className="bg-[#F4F6F9] border border-[#E2E6EA] rounded-xl p-4 flex flex-col items-center gap-3">
+                <div className="flex justify-between items-center w-full">
+                  <span className="text-sm font-semibold text-[#111827]">Table {table}</span>
+                  <button onClick={() => removeTable(table)} className="text-[#DC2626] hover:bg-[#FEF2F2] p-1 rounded transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
                 {tableQrUrl ? (
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="border border-black p-1 bg-white">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="bg-white border border-[#E2E6EA] rounded-lg p-2">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={tableQrUrl} alt={`Table ${table} QR`} className="w-40 h-40 select-none" />
+                      <img src={tableQrUrl} alt={`Table ${table} QR`} className="w-36 h-36" />
                     </div>
-                    <div className="flex gap-2 mt-1">
+                    <div className="flex gap-2">
                       <a
                         href={tableQrUrl}
                         download={`table-${table}-qr.png`}
-                        className="border border-black bg-black text-white hover:bg-white hover:text-black px-2 py-1 text-[9px] font-bold uppercase transition-all"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-[#E2E6EA] rounded-lg hover:bg-[#F4F6F9] transition-colors"
                       >
-                        Download
+                        <Download className="w-3 h-3" /> Download
                       </a>
                       <button
                         onClick={() => handlePrintTable(table, tableQrUrl)}
-                        className="border border-black bg-white text-black hover:bg-black hover:text-white px-2 py-1 text-[9px] font-bold uppercase transition-all cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-[#E2E6EA] rounded-lg hover:bg-[#F4F6F9] transition-colors"
                       >
-                        Print QR
+                        <Printer className="w-3 h-3" /> Print
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="text-[10px] uppercase text-zinc-500 py-6">Generating...</div>
+                  <div className="py-6">
+                    <div className="w-6 h-6 border-2 border-[#E2E6EA] border-t-[#C0181A] rounded-full animate-spin" />
+                  </div>
                 )}
               </div>
             );
@@ -344,21 +259,16 @@ export default function AdminSettingsPage() {
         </div>
       </div>
 
-      {/* Restaurant details */}
-      <div className="border border-black p-6 bg-white flex flex-col gap-4">
-        <div className="border-b border-black pb-2">
-          <h2 className="text-sm font-bold uppercase">Restaurant Details</h2>
-        </div>
-
-        <div className="grid grid-cols-2 text-xs gap-3">
-          <span className="font-bold uppercase text-zinc-500">Restaurant Name</span>
-          <span className="font-bold uppercase">{auth.restaurantName}</span>
-
-          <span className="font-bold uppercase text-zinc-500">Slug / ID</span>
-          <span className="font-mono-custom lowercase">{auth.restaurantId}</span>
-
-          <span className="font-bold uppercase text-zinc-500">Admin Email</span>
-          <span className="font-mono-custom lowercase">{auth.email}</span>
+      {/* Restaurant Info */}
+      <div className="bg-white border border-[#E2E6EA] rounded-xl p-6">
+        <h2 className="text-[15px] font-semibold text-[#111827] mb-4">Restaurant Details</h2>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <span className="text-[#6B7280]">Restaurant Name</span>
+          <span className="font-medium text-[#111827]">{auth.restaurantName}</span>
+          <span className="text-[#6B7280]">Slug / ID</span>
+          <span className="font-mono text-[13px] text-[#111827]">{auth.restaurantId}</span>
+          <span className="text-[#6B7280]">Admin Email</span>
+          <span className="font-mono text-[13px] text-[#111827]">{auth.email}</span>
         </div>
       </div>
     </div>
