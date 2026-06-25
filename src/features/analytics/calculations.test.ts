@@ -24,7 +24,7 @@ describe('analytics calculations', () => {
     const mockStart = new Date('2026-06-01T00:00:00Z');
     const mockEnd = new Date('2026-06-30T23:59:59Z');
 
-    const mockParams = {
+    const mockParams: any = {
       start: mockStart,
       end: mockEnd,
       eventAggregates: {
@@ -80,7 +80,7 @@ describe('analytics calculations', () => {
       menuItems: [
         { _id: 'item-1', name: 'Burger', price: 200, category: 'Main', ingredients: ['bread', 'beef'], spiceLevel: 1, active: true, restaurantId: 'cafe-alpha', description: 'tasty' },
         { _id: 'item-2', name: 'Fries', price: 50, category: 'Sides', ingredients: ['potato'], spiceLevel: 0, active: true, restaurantId: 'cafe-alpha', description: 'crispy' },
-      ],
+      ] as any,
       pairingRules: [
         { _id: 'rule-1', restaurantId: 'cafe-alpha', triggerCategory: 'Main', suggestCategories: ['Sides'], active: true },
       ],
@@ -91,9 +91,9 @@ describe('analytics calculations', () => {
       discountTierAchievement: [],
       avgOrderValueNoTier: 300,
       customersByPhone: [
-        { phone: '9999999999', totalOrders: 3 } as any,
-        { phone: '8888888888', totalOrders: 2 } as any,
-      ],
+        { phone: '9999999999', totalOrders: 3 },
+        { phone: '8888888888', totalOrders: 2 },
+      ] as any,
     };
 
     it('should correctly compile overall KPIs', () => {
