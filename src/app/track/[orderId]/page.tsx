@@ -25,7 +25,6 @@ export default async function TrackPage({ params, searchParams }: PageProps) {
 
   if (hasError) {
     return (
-<<<<<<< Updated upstream
       <div className="min-h-screen bg-gradient-to-br from-bg-dark to-bg-darker flex flex-col items-center justify-center p-6 relative overflow-hidden">
         <svg className="absolute bottom-0 left-0 w-full h-[40%]" viewBox="0 0 1440 320" preserveAspectRatio="none">
           <path d="M0,160L48,170.7C96,181,192,203,288,197.3C384,192,480,160,576,154.7C672,149,768,171,864,186.7C960,203,1056,213,1152,197.3C1248,181,1344,139,1392,117.3L1440,96L1440,320L0,320Z" fill="#C0181A" fillOpacity="0.15" />
@@ -36,23 +35,11 @@ export default async function TrackPage({ params, searchParams }: PageProps) {
           </div>
           <h1 className="font-black text-xl text-text-dark uppercase tracking-tight mb-2">System Error</h1>
           <p className="text-sm text-text-dark/60 mb-6">
-=======
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center" style={{ backgroundColor: 'var(--gourmet-surface)' }}>
-        <div className="gourmet-card p-10 max-w-sm w-full">
-          <span className="material-symbols-outlined text-[56px] mb-4 block" style={{ color: 'var(--gourmet-outline)' }}>error_outline</span>
-          <h1 className="font-serif text-2xl font-bold mb-3" style={{ color: 'var(--gourmet-on-surface)' }}>Something Went Wrong</h1>
-          <p className="text-sm mb-6" style={{ color: 'var(--gourmet-on-surface-variant)' }}>
->>>>>>> Stashed changes
             Failed to load order. Make sure the ID is correct.
           </p>
           <Link
             href="/"
-<<<<<<< Updated upstream
             className="block bg-cta text-text-dark font-bold text-sm py-3 rounded-xl uppercase tracking-wide text-center active:scale-[0.97] transition-transform"
-=======
-            className="inline-block rounded-xl px-6 py-3 text-sm font-bold text-white transition-all active:scale-95"
-            style={{ backgroundColor: '#8b0021', boxShadow: '0 4px 14px rgba(139,0,33,0.35)' }}
->>>>>>> Stashed changes
           >
             Go to Menu
           </Link>
@@ -63,7 +50,6 @@ export default async function TrackPage({ params, searchParams }: PageProps) {
 
   if (!order) {
     return (
-<<<<<<< Updated upstream
       <div className="min-h-screen bg-gradient-to-br from-bg-dark to-bg-darker flex flex-col items-center justify-center p-6 relative overflow-hidden">
         <svg className="absolute bottom-0 left-0 w-full h-[40%]" viewBox="0 0 1440 320" preserveAspectRatio="none">
           <path d="M0,160L48,170.7C96,181,192,203,288,197.3C384,192,480,160,576,154.7C672,149,768,171,864,186.7C960,203,1056,213,1152,197.3C1248,181,1344,139,1392,117.3L1440,96L1440,320L0,320Z" fill="#C0181A" fillOpacity="0.15" />
@@ -74,23 +60,11 @@ export default async function TrackPage({ params, searchParams }: PageProps) {
           </div>
           <h1 className="font-black text-xl text-text-dark uppercase tracking-tight mb-2">Order Not Found</h1>
           <p className="text-sm text-text-dark/60 mb-6">
-=======
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center" style={{ backgroundColor: 'var(--gourmet-surface)' }}>
-        <div className="gourmet-card p-10 max-w-sm w-full">
-          <span className="material-symbols-outlined text-[56px] mb-4 block" style={{ color: 'var(--gourmet-outline)' }}>search_off</span>
-          <h1 className="font-serif text-2xl font-bold mb-3" style={{ color: 'var(--gourmet-on-surface)' }}>Order Not Found</h1>
-          <p className="text-sm mb-6" style={{ color: 'var(--gourmet-on-surface-variant)' }}>
->>>>>>> Stashed changes
             We couldn&apos;t find an order with ID: &quot;{orderId}&quot;.
           </p>
           <Link
             href="/"
-<<<<<<< Updated upstream
             className="block bg-cta text-text-dark font-bold text-sm py-3 rounded-xl uppercase tracking-wide text-center active:scale-[0.97] transition-transform"
-=======
-            className="inline-block rounded-xl px-6 py-3 text-sm font-bold text-white transition-all active:scale-95"
-            style={{ backgroundColor: '#8b0021', boxShadow: '0 4px 14px rgba(139,0,33,0.35)' }}
->>>>>>> Stashed changes
           >
             Go to Menu
           </Link>

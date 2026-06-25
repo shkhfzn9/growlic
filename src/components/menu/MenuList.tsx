@@ -27,7 +27,12 @@ interface MenuItem {
   images?: string[];
   preparation?: string;
   ingredients?: string[];
-  nutrition?: { calories: number; protein: number; carbs: number; fat: number };
+  nutrition?: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
   spiceLevel?: number;
   portionSize?: string;
   prepTimeMin?: number;
@@ -37,9 +42,20 @@ interface MenuItem {
   pairsWithCategories?: string[];
 }
 
-// Fallback nutrition estimator
+
+const COMMON_ALLERGENS = ['wheat', 'soy', 'dairy', 'egg', 'peanut'];
+const isAllergen = (ingredient: string) => {
+  const lower = ingredient.toLowerCase();
+  for (const allergen of COMMON_ALLERGENS) {
+    if (lower.includes(allergen)) return allergen;
+  }
+  for (const allergen of ['milk', 'cheese', 'gluten', 'nut', 'cashew', 'sesame']) {
+    if (lower.includes(allergen)) return allergen;
+  }
+  return null;
+};
+
 const estimateNutrition = (name: string, category: string) => {
-<<<<<<< Updated upstream
   const lowerName = name.toLowerCase();
   const lowerCat = category.toLowerCase();
 
@@ -117,26 +133,9 @@ const getItemTag = (name: string, category: string, price: number) => {
     return { text: 'BEST SELLER', bg: 'bg-primary/10 text-primary' };
   } else {
     return { text: 'HOUSE SPECIAL', bg: 'bg-bg-dark/10 text-bg-dark' };
-=======
-  const n = name.toLowerCase(), c = category.toLowerCase();
-  let cal = 280, pro = 14, carb = 36, fat = 9;
-  if (c.includes('salad') || n.includes('salad')) { cal = 180; pro = 15; carb = 8; fat = 6; }
-  else if (c.includes('soup') || n.includes('soup')) { cal = 95; pro = 4; carb = 12; fat = 2; }
-  else if (c.includes('momo') || n.includes('momo')) {
-    cal = 280; pro = 14; carb = 38; fat = 8;
-    if (n.includes('fried') || n.includes('crispy')) { cal = 380; fat = 16; }
-    if (n.includes('cheese') || n.includes('paneer')) { cal = 340; fat = 14; }
-    if (n.includes('chicken') || n.includes('meat')) { pro = 18; cal = 290; }
-  } else if (c.includes('rice') || n.includes('rice') || c.includes('noodle') || n.includes('noodle')) {
-    cal = 520; pro = 12; carb = 78; fat = 10;
-    if (n.includes('chicken')) { pro = 22; cal = 560; }
->>>>>>> Stashed changes
   }
-  return { calories: cal, protein: pro, carbs: carb, fat };
 };
 
-const COMMON_ALLERGENS = ['wheat','soy','dairy','egg','peanut','milk','cheese','gluten','nut','cashew','sesame'];
-const isAllergen = (ing: string) => COMMON_ALLERGENS.some(a => ing.toLowerCase().includes(a));
 
 interface MenuListProps {
   initialItems: MenuItem[];
@@ -160,39 +159,30 @@ export default function MenuList({
   restaurantId,
   table,
   logoUrl,
-<<<<<<< Updated upstream
   welcomeMessage,
-=======
-  primaryColor,
->>>>>>> Stashed changes
   upsellData,
 }: MenuListProps) {
   const dispatch = useDispatch();
   const cart = useSelector((state: RootState) => state.cart);
 
-  React.useEffect(() => { dispatch(setTableId(table || null)); }, [table, dispatch]);
-
-  const brand = primaryColor || '#8b0021';
+  React.useEffect(() => {
+    dispatch(setTableId(table || null));
+  }, [table, dispatch]);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [detailItem, setDetailItem] = useState<MenuItem | null>(null);
-  const [activeImageIdx, setActiveImageIdx] = useState(0);
-  // "added to bag" toast state
-  const [lastAdded, setLastAdded] = useState<MenuItem | null>(null);
-  const [showAddedModal, setShowAddedModal] = useState(false);
+  const [selectedDetailedItem, setSelectedDetailedItem] = useState<MenuItem | null>(null);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
 
-  const openDetail = (item: MenuItem) => {
-    setDetailItem(item);
-    setActiveImageIdx(0);
-    logEvent(restaurantId, 'modal_open', item._id).catch(() => {});
+  const openDetailedModal = (item: MenuItem) => {
+    setSelectedDetailedItem(item);
+    setActiveImageIndex(0);
+    logEvent(restaurantId, 'modal_open', item._id).catch((e) => console.error('Error logging modal view:', e));
   };
 
-  const getPairedItem = (item: MenuItem): { item: MenuItem; showSocialProof: boolean } | null => {
+  const getPairedItem = (item: MenuItem) => {
     if (!upsellData) return null;
     const { computedAffinity, pairingRules, menuItems } = upsellData;
-<<<<<<< Updated upstream
 
     const notThisItem = menuItems.filter(
       (m) => m.available && m.active !== false && m._id !== item._id
@@ -212,47 +202,47 @@ export default function MenuList({
 
     const affinityList = computedAffinity ? computedAffinity[item.name] : null;
     if (affinityList && Array.isArray(affinityList) && affinityList.length > 0) {
-=======
-    const notThis = menuItems.filter(m => m.available && m.active !== false && m._id !== item._id);
-    if (!notThis.length) return null;
-    const affinityList = computedAffinity?.[item.name];
-    if (affinityList?.length) {
->>>>>>> Stashed changes
       for (const aff of affinityList) {
-        const matched = notThis.find(c => c.name === aff.name);
-        if (matched) return { item: matched, showSocialProof: true };
+        const matched = candidates.find((c) => c.name === aff.name);
+        if (matched) {
+          return {
+            item: matched,
+            showSocialProof: true,
+          };
+        }
       }
     }
-<<<<<<< Updated upstream
 
     if (item.pairsWithCategories && item.pairsWithCategories.length > 0) {
-=======
-    if (item.pairsWithCategories?.length) {
->>>>>>> Stashed changes
       for (const cat of item.pairsWithCategories) {
-        const matched = notThis.find(c => c.category === cat);
-        if (matched) return { item: matched, showSocialProof: false };
+        const matched = candidates.find((c) => c.category === cat);
+        if (matched) {
+          return {
+            item: matched,
+            showSocialProof: false,
+          };
+        }
       }
     }
-<<<<<<< Updated upstream
 
     if (pairingRules && pairingRules.length > 0) {
       const activeRules = pairingRules.filter((r) => r.active && r.triggerCategory === item.category);
       for (const rule of activeRules) {
-=======
-    for (const rule of (pairingRules || [])) {
-      if (rule.active && rule.triggerCategory === item.category) {
->>>>>>> Stashed changes
         for (const cat of rule.suggestCategories) {
-          const matched = notThis.find(c => c.category === cat);
-          if (matched) return { item: matched, showSocialProof: false };
+          const matched = candidates.find((c) => c.category === cat);
+          if (matched) {
+            return {
+              item: matched,
+              showSocialProof: false,
+            };
+          }
         }
       }
     }
+
     return null;
   };
 
-<<<<<<< Updated upstream
   const categories = Array.from(new Set(initialItems.map((item) => item.category)));
 
   const filteredItems = initialItems.filter((item) => {
@@ -266,50 +256,44 @@ export default function MenuList({
   const getItemQuantity = (itemId: string) => {
     const item = cart.items.find((i) => i.id === itemId);
     return item ? item.quantity : 0;
-=======
-  const categories = Array.from(new Set(initialItems.map(i => i.category)));
-
-  const filteredItems = initialItems.filter(item => {
-    const cat = selectedCategory ? item.category === selectedCategory : true;
-    const q = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              item.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return cat && q && item.available;
-  });
-
-  const getQty = (id: string) => cart.items.find(i => i.id === id)?.quantity || 0;
-
-  const handleAdd = (item: MenuItem, fromNudge = false, nudgeType?: 'cross_sell' | 'threshold_discount' | 'combo_freebie', nudgeRuleId?: string) => {
-    if (cart.items.length === 0) logEvent(restaurantId, 'cart_create').catch(() => {});
-    dispatch(addItem({
-      item: { id: item._id, name: item.name, price: item.price, image: item.image, category: item.category, originatedFromNudge: fromNudge, nudgeType, nudgeRuleId },
-      restaurantId,
-      restaurantName,
-    }));
-    setLastAdded(item);
-    setShowAddedModal(true);
->>>>>>> Stashed changes
   };
 
-  const handleRemove = (id: string, qty: number) => {
-    if (qty <= 1) dispatch(removeItem(id));
-    else dispatch(updateQuantity({ id, quantity: qty - 1 }));
+  const handleAddOne = (item: MenuItem, originatedFromNudge = false, nudgeType?: 'cross_sell' | 'threshold_discount' | 'combo_freebie', nudgeRuleId?: string) => {
+    if (cart.items.length === 0) {
+      logEvent(restaurantId, 'cart_create').catch((e) => console.error('Error logging cart create:', e));
+    }
+    dispatch(
+      addItem({
+        item: {
+          id: item._id,
+          name: item.name,
+          price: item.price,
+          image: item.image,
+          category: item.category,
+          originatedFromNudge,
+          nudgeType,
+          nudgeRuleId,
+        },
+        restaurantId,
+        restaurantName,
+      })
+    );
   };
 
-  const handleAddMore = (id: string, qty: number) => dispatch(updateQuantity({ id, quantity: qty + 1 }));
+  const handleRemoveOne = (itemId: string, currentQty: number) => {
+    if (currentQty <= 1) {
+      dispatch(removeItem(itemId));
+    } else {
+      dispatch(updateQuantity({ id: itemId, quantity: currentQty - 1 }));
+    }
+  };
 
-  const totalCount = cart.items.reduce((s, i) => s + i.quantity, 0);
+  const handleAddMore = (itemId: string, currentQty: number) => {
+    dispatch(updateQuantity({ id: itemId, quantity: currentQty + 1 }));
+  };
 
-  // Group items by category for display
-  const groupedItems = React.useMemo(() => {
-    const groups: Array<{ category: string; items: MenuItem[] }> = [];
-    categories.forEach(cat => {
-      const items = filteredItems.filter(i => i.category === cat);
-      if (items.length > 0) groups.push({ category: cat, items });
-    });
-    return groups;
-  }, [categories, filteredItems]);
+  const totalItemsCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
 
-<<<<<<< Updated upstream
   const slides = selectedDetailedItem
     ? [getItemImage(selectedDetailedItem.image), ...(selectedDetailedItem.images || []).map(img => getItemImage(img))].filter(Boolean)
     : [];
@@ -418,102 +402,18 @@ export default function MenuList({
                   ? 'bg-primary text-white'
                   : 'bg-surface text-text-dark hover:bg-primary/10'
               }`}
-=======
-  const slides = detailItem ? [detailItem.image, ...(detailItem.images || [])].filter(Boolean) : [];
-
-  return (
-    <div className="min-h-screen" style={{ backgroundColor: '#eef2fb' }}>
-      <style>{`
-        :root { --brand: ${brand}; }
-        .brand-text { color: ${brand}; }
-        .brand-bg { background-color: ${brand}; }
-        .brand-border { border-color: ${brand}; }
-        .cat-active { background-color: ${brand} !important; color: #fff !important; border-color: ${brand} !important; }
-        .add-circle { background-color: ${brand}; }
-        .qty-bg { background-color: ${brand}1a; }
-        .qty-icon { color: ${brand}; }
-      `}</style>
-
-      {/* ─── STICKY HEADER ─────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 bg-[#eef2fb] pt-5 pb-2 px-5">
-        <div className="max-w-lg mx-auto">
-          {/* Top Row: search icon | restaurant name + table | cart */}
-          <div className="flex items-center justify-between mb-4">
-            <button
-              onClick={() => { setSearchOpen(v => !v); if (searchOpen) setSearchQuery(''); }}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-white shadow-sm"
-              aria-label="Search"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={brand} strokeWidth="2.2" strokeLinecap="round">
-                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-              </svg>
-            </button>
-
-            <div className="text-center">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
-                {table ? `Table ${table}` : 'Menu'}
-              </p>
-              <div className="flex items-center gap-1 justify-center">
-                {logoUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={logoUrl} alt="" className="w-5 h-5 rounded-full object-cover" />
-                )}
-                <h1 className="font-serif font-bold text-[17px] text-gray-900">{restaurantName}</h1>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5"><path d="m6 9 6 6 6-6"/></svg>
-              </div>
-            </div>
-
-            <Link href="/cart" aria-label="Cart">
-              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-white shadow-sm relative">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={brand} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>
-                </svg>
-                {totalCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-[18px] h-[18px] rounded-full flex items-center justify-center text-[9px] font-bold text-white brand-bg">
-                    {totalCount}
-                  </span>
-                )}
-              </div>
-            </Link>
-          </div>
-
-          {/* Search input */}
-          {searchOpen && (
-            <div className="mb-3">
-              <input
-                type="text"
-                placeholder="Search dishes…"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                autoFocus
-                className="w-full bg-white rounded-full px-5 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none shadow-sm"
-                style={{ border: `1.5px solid ${brand}44` }}
-              />
-            </div>
-          )}
-
-          {/* Category Pills */}
-          <div className="flex gap-2 overflow-x-auto pb-1" style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
-            <button
-              onClick={() => setSelectedCategory(null)}
-              className={`flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedCategory === null ? 'cat-active' : 'bg-white text-gray-700 border-gray-200'}`}
->>>>>>> Stashed changes
             >
               All
             </button>
-            {categories.map(cat => (
+            {categories.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-<<<<<<< Updated upstream
                 className={`px-4 py-2 text-xs font-bold uppercase rounded-full whitespace-nowrap transition-colors ${
                   selectedCategory === cat
                     ? 'bg-primary text-white'
                     : 'bg-surface text-text-dark hover:bg-primary/10'
                 }`}
-=======
-                className={`flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedCategory === cat ? 'cat-active' : 'bg-white text-gray-700 border-gray-200'}`}
->>>>>>> Stashed changes
               >
                 {cat}
               </button>
@@ -522,7 +422,6 @@ export default function MenuList({
         </div>
       </div>
 
-<<<<<<< Updated upstream
       {/* Menu Items Grid */}
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-5">
         {filteredItems.length === 0 ? (
@@ -843,82 +742,17 @@ export default function MenuList({
                       <div className="flex-1 min-w-0">
                         <h5 className="font-bold text-sm text-text-dark truncate">{pairedItem.name}</h5>
                         <span className="text-xs font-bold text-primary">₹{pairedItem.price}</span>
-=======
-      {/* ─── MENU CONTENT ──────────────────────────────────────────────── */}
-      <main className="max-w-lg mx-auto px-4 pt-4 pb-32">
-        {filteredItems.length === 0 ? (
-          <div className="bg-white rounded-3xl p-10 text-center mt-4">
-            <p className="text-gray-400 text-sm">No items found</p>
-          </div>
-        ) : (
-          groupedItems.map(({ category, items }) => (
-            <div key={category} className="mb-6">
-              {/* Section header */}
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="font-serif font-bold text-xl text-gray-900">{category}</h2>
-                <span className="text-xs text-gray-400 font-medium">See all</span>
-              </div>
-
-              {/* Item cards */}
-              <div className="flex flex-col gap-3">
-                {items.map(item => {
-                  const qty = getQty(item._id);
-                  return (
-                    <div
-                      key={item._id}
-                      className="bg-white rounded-2xl flex items-center gap-3 p-3 shadow-sm cursor-pointer"
-                      style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}
-                    >
-                      {/* Thumb */}
-                      <div
-                        className="w-[90px] h-[90px] rounded-xl flex-shrink-0 overflow-hidden bg-gray-100"
-                        onClick={() => openDetail(item)}
-                      >
-                        {item.image ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <span className="text-2xl">🍽️</span>
-                          </div>
-                        )}
->>>>>>> Stashed changes
                       </div>
 
-                      {/* Info */}
-                      <div className="flex-1 min-w-0" onClick={() => openDetail(item)}>
-                        <h3 className="font-bold text-[15px] text-gray-900 leading-tight">{item.name}</h3>
-                        <div className="flex items-center gap-2 mt-1">
-                          {/* Star */}
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b" stroke="none">
-                            <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
-                          </svg>
-                          <span className="text-[11px] font-semibold text-gray-500">4.5</span>
-                          <span className="text-gray-300">·</span>
-                          <span className="text-[11px] text-gray-400">~{item.prepTimeMin || 10}–{item.prepTimeMax || 15} min</span>
-                        </div>
-                        <p className="font-bold text-[17px] mt-2 brand-text">₹{item.price}</p>
-                      </div>
-
-                      {/* Add / Qty control */}
-                      <div className="flex-shrink-0">
-                        {qty === 0 ? (
+                      <div>
+                        {pairedQty === 0 ? (
                           <button
-<<<<<<< Updated upstream
                             onClick={() => handleAddOne(pairedItem, true, 'cross_sell', pairedItem._id)}
                             className="bg-primary text-white text-[0.65rem] font-bold px-3 py-1.5 rounded-lg uppercase active:scale-95 transition-transform"
-=======
-                            onClick={() => handleAdd(item)}
-                            className="add-circle w-9 h-9 rounded-full flex items-center justify-center shadow-md transition-transform active:scale-90"
-                            style={{ boxShadow: `0 4px 12px ${brand}55` }}
->>>>>>> Stashed changes
                           >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
-                              <path d="M12 5v14M5 12h14"/>
-                            </svg>
+                            + Add
                           </button>
                         ) : (
-<<<<<<< Updated upstream
                           <div className="flex items-center gap-0 bg-primary rounded-lg overflow-hidden">
                             <button
                               onClick={() => handleRemoveOne(pairedItem._id, pairedQty)}
@@ -932,394 +766,16 @@ export default function MenuList({
                               className="text-white px-2 py-1.5"
                             >
                               <Plus className="w-3 h-3" />
-=======
-                          <div className="flex items-center rounded-full px-1.5 py-1 gap-1 qty-bg">
-                            <button onClick={() => handleRemove(item._id, qty)} className="w-6 h-6 flex items-center justify-center qty-icon">
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14"/></svg>
-                            </button>
-                            <span className="font-bold text-sm w-5 text-center text-gray-900">{qty}</span>
-                            <button onClick={() => handleAddMore(item._id, qty)} className="w-6 h-6 flex items-center justify-center qty-icon">
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
->>>>>>> Stashed changes
                             </button>
                           </div>
                         )}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))
-        )}
-      </main>
-
-      {/* ─── FLOATING CART BAR ─────────────────────────────────────────── */}
-      {totalCount > 0 && (
-        <div className="fixed bottom-5 left-4 right-4 z-30 max-w-lg mx-auto">
-          <Link href="/cart">
-            <div
-              className="brand-bg rounded-full px-6 py-4 flex items-center justify-between shadow-2xl"
-              style={{ boxShadow: `0 8px 32px ${brand}55` }}
-            >
-              <div className="bg-white/20 rounded-full w-8 h-8 flex items-center justify-center">
-                <span className="font-bold text-white text-sm">{totalCount}</span>
-              </div>
-              <span className="font-bold text-white text-[15px]">Go to Checkout</span>
-              <span className="font-serif font-bold text-white text-[17px]">₹{cart.total}</span>
-            </div>
-          </Link>
-        </div>
-      )}
-
-      {/* ─── "ADDED TO BAG" CONFIRMATION MODAL ─────────────────────────── */}
-      {showAddedModal && lastAdded && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowAddedModal(false)}>
-          <div
-            className="bg-[#eef2fb] w-full max-w-lg rounded-t-3xl px-5 pt-6 pb-10 animate-slide-up"
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between mb-5">
-              <button onClick={() => setShowAddedModal(false)} className="w-9 h-9 flex items-center justify-center rounded-full bg-white shadow-sm">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-              </button>
-              <h2 className="font-serif font-bold text-xl" style={{ color: brand }}>Item Added</h2>
-              <div className="w-9 h-9 flex items-center justify-center rounded-full bg-white shadow-sm relative">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={brand} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>
-                </svg>
-                {totalCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[8px] font-bold text-white flex items-center justify-center brand-bg">{totalCount}</span>
-                )}
-              </div>
-            </div>
-
-            {/* Success message */}
-            <div className="flex flex-col items-center text-center mb-6">
-              <div className="w-16 h-16 rounded-full flex items-center justify-center mb-3" style={{ backgroundColor: '#dcfce7' }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/>
-                </svg>
-              </div>
-              <h3 className="font-serif font-bold text-2xl text-gray-900 mb-1">Added to Bag!</h3>
-              <p className="text-sm text-gray-500">Great choice. Let&apos;s finish your order or add more treats.</p>
-            </div>
-
-            {/* Added item card */}
-            <div className="bg-white rounded-2xl p-3 flex items-center gap-3 mb-6 shadow-sm">
-              {lastAdded.image && (
-                <div className="w-[72px] h-[72px] rounded-xl overflow-hidden flex-shrink-0">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={lastAdded.image} alt={lastAdded.name} className="w-full h-full object-cover" />
-                </div>
-              )}
-              <div className="flex-1">
-                <p className="font-bold text-gray-900 text-sm">{lastAdded.name}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{lastAdded.category}</p>
-                <p className="font-bold text-[17px] mt-1 brand-text">₹{lastAdded.price}</p>
-              </div>
-              <div className="flex items-center rounded-full px-2 py-1.5 gap-1 qty-bg">
-                <button onClick={() => handleRemove(lastAdded._id, getQty(lastAdded._id))} className="w-6 h-6 flex items-center justify-center qty-icon">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14"/></svg>
-                </button>
-                <span className="font-bold text-sm w-5 text-center text-gray-900">{getQty(lastAdded._id)}</span>
-                <button onClick={() => handleAddMore(lastAdded._id, getQty(lastAdded._id))} className="w-6 h-6 flex items-center justify-center qty-icon">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                </button>
-              </div>
-            </div>
-
-            {/* Upsell: Goes well with */}
-            {(() => {
-              const pair = getPairedItem(lastAdded);
-              const crossItems = upsellData?.menuItems.filter(m =>
-                m.available && m.active !== false && m._id !== lastAdded._id && !cart.items.some(i => i.id === m._id)
-              ).slice(0, 3) || [];
-              const displayItems = pair ? [pair.item, ...crossItems.filter(i => i._id !== pair.item._id)].slice(0, 3) : crossItems;
-
-              if (displayItems.length === 0) return null;
-              return (
-                <div className="mb-5">
-                  <div className="flex justify-between items-center mb-3">
-                    <h4 className="font-serif font-bold text-lg text-gray-900">Add more &amp; Save</h4>
-                    <span className="text-xs brand-text font-semibold">See all</span>
-                  </div>
-                  <div className="flex gap-3 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-                    {displayItems.map(item => (
-                      <div
-                        key={item._id}
-                        className="flex-shrink-0 w-[130px] bg-white rounded-2xl p-3 flex flex-col gap-2"
-                        style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}
-                      >
-                        <div className="w-full h-[90px] rounded-xl overflow-hidden bg-gray-100">
-                          {item.image ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-2xl">🍽️</div>
-                          )}
-                        </div>
-                        <p className="font-semibold text-[12px] text-gray-900 line-clamp-2 leading-tight">{item.name}</p>
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-[13px] brand-text">+₹{item.price}</span>
-                          <button
-                            onClick={() => handleAdd(item, true, 'cross_sell', item._id)}
-                            className="text-[11px] font-bold text-gray-600 bg-gray-100 rounded-full px-3 py-1 hover:bg-gray-200 transition-colors"
-                          >
-                            Add
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Action buttons */}
-            <Link href="/cart" onClick={() => setShowAddedModal(false)}>
-              <div
-                className="brand-bg rounded-full py-4 flex items-center justify-between px-6 mb-3 shadow-lg"
-                style={{ boxShadow: `0 6px 20px ${brand}44` }}
-              >
-                <span className="font-bold text-white text-[15px]">Go to Checkout</span>
-                <span className="font-serif font-bold text-white text-[17px]">₹{cart.total}</span>
-              </div>
-            </Link>
-            <button
-              onClick={() => setShowAddedModal(false)}
-              className="w-full py-4 rounded-full border-2 font-bold text-[15px] brand-text transition-all active:scale-95"
-              style={{ borderColor: brand }}
-            >
-              Continue Shopping
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ─── ITEM DETAIL MODAL ──────────────────────────────────────────── */}
-      {detailItem && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm"
-          onClick={() => setDetailItem(null)}
-        >
-          <div
-            className="bg-white w-full max-w-lg max-h-[95vh] flex flex-col rounded-t-[2rem] overflow-hidden animate-slide-up"
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Hero Image */}
-            <div className="relative h-[300px] flex-shrink-0 bg-gray-100">
-              {slides.length > 0 ? (
-                <div
-                  className="flex h-full transition-transform duration-300"
-                  style={{ transform: `translateX(-${activeImageIdx * 100}%)` }}
-                >
-                  {slides.map((s, i) => (
-                    <div key={i} className="w-full h-full flex-shrink-0">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={s} alt={detailItem.name} className="w-full h-full object-cover" />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-6xl">🍽️</div>
-              )}
-
-              {/* Back & Fav buttons */}
-              <div className="absolute top-5 left-5 right-5 flex justify-between">
-                <button
-                  onClick={() => setDetailItem(null)}
-                  className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-md"
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.5" strokeLinecap="round"><path d="m15 18-6-6 6-6"/></svg>
-                </button>
-                <button className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-md">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill={brand} stroke={brand} strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                </button>
-              </div>
-
-              {/* Dots */}
-              {slides.length > 1 && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
-                  {slides.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setActiveImageIdx(i)}
-                      className="rounded-full transition-all"
-                      style={{ width: activeImageIdx === i ? 20 : 6, height: 6, backgroundColor: activeImageIdx === i ? brand : 'rgba(255,255,255,0.6)' }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Scrollable body */}
-            <div className="flex-1 overflow-y-auto px-5 pt-5 pb-4 space-y-5" style={{ scrollbarWidth: 'none' }}>
-              {/* Title + Price */}
-              <div className="flex justify-between items-start gap-4">
-                <div>
-                  <h2 className="font-serif font-bold text-3xl text-gray-900 leading-tight">{detailItem.name}</h2>
-                  {detailItem.portionSize && (
-                    <p className="text-sm text-gray-400 mt-0.5">{detailItem.portionSize}</p>
-                  )}
-                </div>
-                <div className="text-right pt-1">
-                  <p className="font-bold text-3xl brand-text">₹{detailItem.price}</p>
-                </div>
-              </div>
-
-              {/* Stats row: star · distance · time */}
-              <div className="flex items-center gap-4 text-sm text-gray-500">
-                <span className="flex items-center gap-1.5">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" stroke="none">
-                    <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
-                  </svg>
-                  <strong className="text-gray-700">4.9</strong>
-                </span>
-                <span className="text-gray-300">·</span>
-                <span className="flex items-center gap-1">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                  {detailItem.prepTimeMin || 10}–{detailItem.prepTimeMax || 15} mins
-                </span>
-              </div>
-
-              {/* Chef note */}
-              {detailItem.chefNote && (
-                <div className="rounded-2xl p-4 bg-amber-50 border border-amber-100">
-                  <p className="text-sm italic text-amber-800">&ldquo;{detailItem.chefNote}&rdquo;</p>
-                  <p className="text-[11px] font-bold text-amber-600 mt-1">— Chef&apos;s Note</p>
-                </div>
-              )}
-
-              {/* Ingredients section */}
-              <div>
-                <h3 className="font-serif font-bold text-lg text-gray-900 mb-2">Ingredients:</h3>
-                {detailItem.ingredients && detailItem.ingredients.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {detailItem.ingredients.map((ing, i) => (
-                      <span
-                        key={i}
-                        className="text-xs px-3 py-1.5 rounded-full font-medium"
-                        style={{
-                          backgroundColor: isAllergen(ing) ? '#fee2e2' : '#f3f4f6',
-                          color: isAllergen(ing) ? '#991b1b' : '#374151',
-                        }}
-                      >
-                        {isAllergen(ing) ? '⚠ ' : ''}{ing}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 leading-relaxed">{detailItem.description}</p>
-                )}
-              </div>
-
-              {/* Description (if ingredients also exist) */}
-              {detailItem.ingredients && detailItem.ingredients.length > 0 && detailItem.description && (
-                <p className="text-sm text-gray-500 leading-relaxed">{detailItem.description}</p>
-              )}
-
-              {/* Preparation */}
-              {detailItem.preparation && (
-                <div>
-                  <h3 className="font-serif font-bold text-lg text-gray-900 mb-2">Preparation:</h3>
-                  <p className="text-sm text-gray-500 leading-relaxed">{detailItem.preparation}</p>
-                </div>
-              )}
-
-              {/* Portion size pills */}
-              {detailItem.portionSize && (
-                <div>
-                  <h3 className="font-serif font-bold text-lg text-gray-900 mb-3">Select Portion Size</h3>
-                  <div className="flex gap-3">
-                    {['Standard', 'Large', 'Party Pack'].map((size, i) => (
-                      <button
-                        key={size}
-                        className="px-5 py-2.5 rounded-full text-sm font-semibold transition-all"
-                        style={{
-                          backgroundColor: i === 0 ? brand : '#f3f4f6',
-                          color: i === 0 ? '#fff' : '#374151',
-                        }}
-                      >
-                        {size}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Nutrition card */}
-              {(() => {
-                const hasCustom = !!(detailItem.nutrition && (detailItem.nutrition.calories > 0));
-                const nut = hasCustom && detailItem.nutrition ? detailItem.nutrition : estimateNutrition(detailItem.name, detailItem.category);
-                return (
-                  <div className="rounded-2xl p-4 flex items-center gap-3" style={{ backgroundColor: '#f0f4ff' }}>
-                    <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm flex-shrink-0">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={brand} strokeWidth="2" strokeLinecap="round">
-                        <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="font-bold text-sm text-gray-900">
-                        Nutritional Value {!hasCustom && <span className="font-normal text-xs text-gray-400">(Approx.)</span>}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        High in protein · {nut.calories} kcal · {nut.protein}g protein · {nut.carbs}g carbs · {nut.fat}g fat
-                      </p>
-                    </div>
                   </div>
                 );
               })()}
-
-              {/* Pairs well with */}
-              {(() => {
-                const pair = getPairedItem(detailItem);
-                if (!pair) return null;
-                const pairQty = getQty(pair.item._id);
-                return (
-                  <div>
-                    <h3 className="font-serif font-bold text-lg text-gray-900 mb-3">Goes Well With</h3>
-                    {pair.showSocialProof && (
-                      <p className="text-[12px] font-semibold mb-2" style={{ color: brand }}>
-                        👥 Guests who order this often add {pair.item.name}
-                      </p>
-                    )}
-                    <div className="bg-gray-50 rounded-2xl p-3 flex items-center gap-3" style={{ border: '1px solid #e5e7eb' }}>
-                      {pair.item.image && (
-                        <div className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={pair.item.image} alt={pair.item.name} className="w-full h-full object-cover" />
-                        </div>
-                      )}
-                      <div className="flex-1">
-                        <p className="font-bold text-sm text-gray-900">{pair.item.name}</p>
-                        <p className="font-bold text-sm brand-text">₹{pair.item.price}</p>
-                      </div>
-                      {pairQty === 0 ? (
-                        <button onClick={() => handleAdd(pair.item, true, 'cross_sell', pair.item._id)} className="brand-bg text-white text-xs font-bold px-4 py-1.5 rounded-full">
-                          + Add
-                        </button>
-                      ) : (
-                        <div className="flex items-center rounded-full px-1.5 py-1 gap-1 qty-bg">
-                          <button onClick={() => handleRemove(pair.item._id, pairQty)} className="w-6 h-6 flex items-center justify-center qty-icon">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14"/></svg>
-                          </button>
-                          <span className="font-bold text-xs w-5 text-center text-gray-900">{pairQty}</span>
-                          <button onClick={() => handleAddMore(pair.item._id, pairQty)} className="w-6 h-6 flex items-center justify-center qty-icon">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div className="h-2" />
             </div>
 
-<<<<<<< Updated upstream
             {/* Bottom Add to Cart Bar */}
             <div className="border-t border-surface p-4 bg-white flex items-center justify-between">
               <div>
@@ -1352,48 +808,7 @@ export default function MenuList({
                     </button>
                   </div>
                 )}
-=======
-            {/* Fixed Bottom: Qty + Add to Cart */}
-            <div
-              className="px-5 py-4 bg-white flex items-center gap-4"
-              style={{ borderTop: '1px solid #f3f4f6', paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
-            >
-              {/* Qty stepper */}
-              <div className="flex items-center rounded-full border border-gray-200 px-2 py-2 gap-2">
-                <button
-                  onClick={() => { const q = getQty(detailItem._id); if (q > 0) handleRemove(detailItem._id, q); }}
-                  className="w-8 h-8 flex items-center justify-center rounded-full qty-bg qty-icon"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14"/></svg>
-                </button>
-                <span className="font-bold text-lg text-gray-900 w-8 text-center">{getQty(detailItem._id)}</span>
-                <button
-                  onClick={() => {
-                    const q = getQty(detailItem._id);
-                    if (q === 0) handleAdd(detailItem);
-                    else handleAddMore(detailItem._id, q);
-                  }}
-                  className="w-8 h-8 flex items-center justify-center rounded-full qty-bg qty-icon"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                </button>
->>>>>>> Stashed changes
               </div>
-
-              {/* Add to Cart CTA */}
-              <button
-                onClick={() => {
-                  if (getQty(detailItem._id) === 0) handleAdd(detailItem);
-                  else setDetailItem(null);
-                }}
-                className="flex-1 brand-bg text-white rounded-full py-4 font-bold text-[15px] flex items-center justify-between px-6 transition-all active:scale-[0.98] shadow-lg"
-                style={{ boxShadow: `0 6px 20px ${brand}44` }}
-              >
-                <span>Add to cart</span>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>
-                </svg>
-              </button>
             </div>
           </div>
         </div>
