@@ -58,12 +58,14 @@ const eslintConfig = defineConfig([
     },
   },
 
-  // 2. Services (src/features/**/service.ts and src/features/**/services/**)
+  // 2. Services (src/features/**/service.ts, src/features/**/services/**, and src/services/**)
   {
     files: [
       "src/features/**/service.ts",
       "src/features/**/services/**/*.ts",
       "src/features/**/services/**/*.js",
+      "src/services/**/*.ts",
+      "src/services/**/*.js",
     ],
     rules: {
       "no-restricted-imports": [
@@ -111,6 +113,9 @@ const eslintConfig = defineConfig([
       "src/features/**/*",
       "src/shared/seedService.ts", // Seed service is a special seeding utility that needs to seed repositories
       "src/lib/mongodb.ts",
+      "src/services/**/*",
+      "src/repositories/**/*",
+      "src/scripts/**/*",
     ],
     rules: {
       "no-restricted-imports": [

@@ -74,6 +74,7 @@ describe('tenant context validation', () => {
         restaurantId: 'cafe-alpha',
         restaurantName: 'Cafe Alpha',
         email: 'admin@cafealpha.com',
+        role: 'tenant',
       });
 
       const context = await requireTenant();

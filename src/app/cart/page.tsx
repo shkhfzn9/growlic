@@ -9,6 +9,7 @@ import { getUpsellConfig } from '@/actions/upsell';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Minus, Plus, ArrowLeft, ShoppingBag, Loader2, X, Gift, TrendingUp, Sparkles } from 'lucide-react';
+import CustomerNavbar from '@/components/menu/CustomerNavbar';
 
 const DISH_PLACEHOLDER = '/dish_placeholder.jpg';
 
@@ -578,6 +579,12 @@ export default function CartPage() {
 
       dispatch(clearCart());
       setShowModal(false);
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('last_order_id', createdOrder._id);
+        localStorage.setItem('last_order_restaurant_id', cart.restaurantId || '');
+      }
+
       router.push(`/track/${createdOrder._id}?restaurantId=${cart.restaurantId}`);
     } catch (err) {
       console.error(err);
@@ -635,7 +642,7 @@ export default function CartPage() {
         </div>
       </header>
 
-      <div className="flex-1 max-w-2xl mx-auto w-full px-4 py-5 flex flex-col gap-5">
+      <div className="flex-1 max-w-2xl mx-auto w-full px-4 pt-5 pb-28 flex flex-col gap-5">
         {/* Cart Items */}
         <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)] overflow-hidden">
           {cart.items.map((item, idx) => (
@@ -870,6 +877,7 @@ export default function CartPage() {
           </div>
         </div>
       )}
+      <CustomerNavbar />
     </div>
   );
 }

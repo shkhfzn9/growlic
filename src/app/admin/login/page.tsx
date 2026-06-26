@@ -48,10 +48,13 @@ function LoginForm() {
           restaurantId: data.restaurantId,
           restaurantName: data.restaurantName,
           email: data.email,
+          role: data.role || 'restaurant_admin',
         })
       );
 
-      const redirectUrl = searchParams.get('redirect') || '/admin/dashboard';
+      const role = data.role || 'restaurant_admin';
+      const defaultRedirect = role === 'super_admin' ? '/super-admin' : '/admin/dashboard';
+      const redirectUrl = searchParams.get('redirect') || defaultRedirect;
       router.push(redirectUrl);
     } catch (err) {
       console.error(err);

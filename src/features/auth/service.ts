@@ -3,6 +3,7 @@ import * as menuItemRepo from '@/features/menu/repositories/menuRepository';
 import * as discountTierRepo from '@/features/menu/repositories/discountTierRepository';
 import * as comboRuleRepo from '@/features/menu/repositories/comboRuleRepository';
 import * as pairingRuleRepo from '@/features/menu/repositories/pairingRuleRepository';
+import * as bannerRepo from '@/features/menu/repositories/bannerRepository';
 import { hashPassword, comparePassword, signToken, verifyToken } from '@/lib/auth';
 import { AuthenticationError, ConflictError, ValidationError } from '@/shared/errors';
 import { IAdmin } from './types';
@@ -42,15 +43,25 @@ export async function getAdminByRestaurantId(restaurantId: string): Promise<IAdm
 export async function authenticateAdmin(email: string, password?: string) {
   authenticateAdminValidation(email, password);
 
+  console.log('[SERVICE AUTH] Authenticating email:', email);
   const result = await adminRepo.findWithPasswordByEmail(undefined, email);
   if (!result) {
+    console.log('[SERVICE AUTH] Admin document not found for email:', email);
     // Log failed login with fallback restaurant ID when admin is not registered
     await logAction('system', undefined, 'LOGIN_FAILED', null, { email });
     throw new AuthenticationError('Invalid credentials');
   }
 
+  console.log('[SERVICE AUTH] Found admin document:', {
+    email: result.admin.email,
+    restaurantId: result.admin.restaurantId,
+    role: result.admin.role,
+  });
+
   const isMatch = await comparePassword(password!, result.passwordHash);
+  console.log('[SERVICE AUTH] Password match:', isMatch);
   if (!isMatch) {
+    console.log('[SERVICE AUTH] Password mismatch for:', email);
     await logAction(result.admin.restaurantId, result.admin._id, 'LOGIN_FAILED', null, { email });
     throw new AuthenticationError('Invalid credentials');
   }
@@ -59,6 +70,7 @@ export async function authenticateAdmin(email: string, password?: string) {
     email: result.admin.email,
     restaurantId: result.admin.restaurantId,
     restaurantName: result.admin.restaurantName,
+    role: result.admin.role,
   });
 
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
@@ -247,6 +259,37 @@ export async function registerRestaurant(data: {
     active: true,
   });
 
+  // Onboarding Seeds for Banners
+  await bannerRepo.create({
+    restaurantId: tenantId,
+    title: "Free delivery for\ntoday's specials",
+    subtitle: "Up to 3 times per day",
+    buttonText: "Order now",
+    buttonLink: `/menu/${tenantId}`,
+    image: '/dish_placeholder.jpg',
+    active: true,
+  });
+
+  await bannerRepo.create({
+    restaurantId: tenantId,
+    title: "Get 10% OFF on\norders above ₹399!",
+    subtitle: "Discount applied automatically at checkout",
+    buttonText: "Browse Menu",
+    buttonLink: `/menu/${tenantId}`,
+    image: SVG_BOWL,
+    active: true,
+  });
+
+  await bannerRepo.create({
+    restaurantId: tenantId,
+    title: "Add a Drink at 50% OFF\nwith any Momos!",
+    subtitle: "Combo discount active today",
+    buttonText: "Order Momos",
+    buttonLink: `/menu/${tenantId}?category=Classic Momos`,
+    image: SVG_MOMO,
+    active: true,
+  });
+
   return newAdmin;
 }
 
@@ -290,6 +333,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   owner: ['manage_users', 'change_pricing', 'view_analytics', 'edit_menu', 'manage_orders', 'update_order_status'],
   manager: ['edit_menu', 'manage_orders', 'update_order_status'],
   staff: ['update_order_status'],
+  restaurant_admin: ['manage_users', 'change_pricing', 'view_analytics', 'edit_menu', 'manage_orders', 'update_order_status'],
+  super_admin: [],
 };
 
 /**

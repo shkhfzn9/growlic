@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { addItem, updateQuantity, removeItem, setTableId } from '@/redux/cartSlice';
 import Link from 'next/link';
 import { logEvent } from '@/actions/orders';
 import { Search, ShoppingBag, Minus, Plus, X, ChevronLeft, ChevronRight, Flame } from 'lucide-react';
+import CustomerNavbar from './CustomerNavbar';
+import { getActiveBanners } from '@/actions/banners';
 
 const DISH_PLACEHOLDER = '/dish_placeholder.jpg';
 
@@ -174,6 +176,64 @@ export default function MenuList({
   const [selectedDetailedItem, setSelectedDetailedItem] = useState<MenuItem | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
+  const [banners, setBanners] = useState<any[]>([]);
+  const [activeBannerIdx, setActiveBannerIdx] = useState(0);
+
+  const defaultBanners = [
+    {
+      _id: 'default-specials',
+      title: "Free delivery for\ntoday's specials",
+      subtitle: "Up to 3 times per day",
+      buttonText: "Order now",
+      buttonLink: `/menu/${restaurantId}`,
+      image: '/dish_placeholder.jpg'
+    },
+    {
+      _id: 'default-discount',
+      title: "Get 10% OFF on\norders above ₹399!",
+      subtitle: "Discount applied automatically at checkout",
+      buttonText: "Browse Menu",
+      buttonLink: `/menu/${restaurantId}`,
+      image: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjIiLz48dGV4dCB4PSI1MCUiIHk9IjU1JSIgZm9udC1mYW1pbHk9Im1vbm9zcGFjZSIgZm9udC1zaXplPSIzNCIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+8J+NuDwvdGV4dD48L3N2Zz4='
+    },
+    {
+      _id: 'default-combo',
+      title: "Add a Drink at 50% OFF\nwith any Momos!",
+      subtitle: "Combo discount active today",
+      buttonText: "Order Momos",
+      buttonLink: `/menu/${restaurantId}?category=Classic Momos`,
+      image: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjIiLz48dGV4dCB4PSI1MCUiIHk9IjU1JSIgZm9udC1mYW1pbHk9Im1vbm9zcGFjZSIgZm9udC1zaXplPSIzNCIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+8J+lnzwvdGV4dD48L3N2Zz4='
+    }
+  ];
+
+  const displayBanners = banners.length > 0 ? banners : defaultBanners;
+
+  useEffect(() => {
+    const fetchBanners = async () => {
+      try {
+        const activeBanners = await getActiveBanners(restaurantId);
+        setBanners(activeBanners);
+      } catch (err) {
+        console.error('Failed to load advertisements:', err);
+      }
+    };
+    fetchBanners();
+  }, [restaurantId]);
+
+  useEffect(() => {
+    if (activeBannerIdx >= displayBanners.length) {
+      setActiveBannerIdx(0);
+    }
+  }, [displayBanners.length, activeBannerIdx]);
+
+  useEffect(() => {
+    if (displayBanners.length <= 1) return;
+    const interval = setInterval(() => {
+      setActiveBannerIdx((prev) => (prev + 1) % displayBanners.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [displayBanners.length]);
+
   const openDetailedModal = (item: MenuItem) => {
     setSelectedDetailedItem(item);
     setActiveImageIndex(0);
@@ -299,7 +359,7 @@ export default function MenuList({
     : [];
 
   return (
-    <div className="flex flex-col min-h-screen bg-white pb-28">
+    <div className="flex flex-col min-h-screen bg-white pb-32">
       {/* Hero Header */}
       <header className="bg-gradient-to-br from-bg-dark to-bg-darker relative overflow-hidden">
         {/* Wave decoration */}
@@ -356,38 +416,78 @@ export default function MenuList({
         </div>
       </header>
 
-      {/* Promo Banner */}
-      <div className="w-full px-4 py-4 bg-white">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-gradient-to-r from-bg-dark via-bg-dark to-primary rounded-2xl overflow-hidden flex items-stretch h-[140px] shadow-[0_6px_24px_rgba(139,0,0,0.25)]">
-            <div className="w-[60%] p-5 flex flex-col justify-center relative z-10">
-              <h2 className="font-black text-xl text-white leading-tight tracking-tight">
-                Free delivery for<br />
-                <span className="text-cta">today&apos;s specials</span>
-              </h2>
-              <p className="text-[0.7rem] text-white/70 mt-1.5 font-medium">Up to 3 times per day</p>
-              <button className="mt-3 bg-cta text-text-dark text-[0.7rem] font-bold uppercase px-5 py-2.5 rounded-full w-fit active:scale-95 transition-transform shadow-[0_4px_12px_rgba(245,197,24,0.3)]">
-                Order now
-              </button>
-            </div>
-            <div className="w-[40%] relative overflow-hidden flex-shrink-0">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={DISH_PLACEHOLDER}
-                alt="Featured dish"
-                className="w-full h-full object-cover scale-110"
-              />
-              {/* Arc separator */}
-              <svg
-                className="absolute left-0 top-0 h-full w-6"
-                viewBox="0 0 24 100"
-                preserveAspectRatio="none"
-                fill="none"
+      {/* Promo Banner Carousel */}
+      <div className="w-full px-4 py-4 bg-white relative group select-none">
+        <div className="max-w-2xl mx-auto relative overflow-hidden rounded-2xl h-[140px] shadow-[0_6px_24px_rgba(139,0,0,0.25)]">
+          {/* Carousel Slides Container */}
+          <div 
+            className="flex h-full transition-transform duration-500 ease-out"
+            style={{ 
+              transform: `translate3d(-${activeBannerIdx * (100 / (displayBanners.length || 1))}%, 0, 0)`, 
+              width: `${(displayBanners.length || 1) * 100}%` 
+            }}
+          >
+            {displayBanners.map((banner, idx) => (
+              <div 
+                key={banner._id || idx} 
+                className="h-full flex items-stretch relative flex-shrink-0" 
+                style={{ width: `${100 / (displayBanners.length || 1)}%` }}
               >
-                <path d="M24,0 C0,25 0,75 24,100 L0,100 L0,0 Z" fill="#8B0000" />
-              </svg>
-            </div>
+                {/* Slide Content */}
+                <div className="bg-gradient-to-r from-bg-dark via-bg-dark to-primary w-full flex items-stretch">
+                  <div className="w-[60%] p-5 flex flex-col justify-center relative z-10">
+                    <h2 className="font-black text-lg sm:text-xl text-white leading-tight tracking-tight whitespace-pre-line">
+                      {banner.title}
+                    </h2>
+                    {banner.subtitle && (
+                      <p className="text-[0.7rem] text-white/70 mt-1.5 font-medium line-clamp-1">{banner.subtitle}</p>
+                    )}
+                    {banner.buttonLink && (
+                      <Link 
+                        href={banner.buttonLink}
+                        className="mt-3 bg-cta text-text-dark text-[0.7rem] font-bold uppercase px-5 py-2.5 rounded-full w-fit active:scale-95 transition-transform shadow-[0_4px_12px_rgba(245,197,24,0.3)] text-center block"
+                      >
+                        {banner.buttonText || 'Order now'}
+                      </Link>
+                    )}
+                  </div>
+                  <div className="w-[40%] relative overflow-hidden flex-shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={getItemImage(banner.image)}
+                      alt={banner.title}
+                      className="w-full h-full object-cover scale-110"
+                    />
+                    {/* Arc separator */}
+                    <svg
+                      className="absolute left-0 top-0 h-full w-6"
+                      viewBox="0 0 24 100"
+                      preserveAspectRatio="none"
+                      fill="none"
+                    >
+                      <path d="M24,0 C0,25 0,75 24,100 L0,100 L0,0 Z" fill="#8B0000" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
+
+          {/* Slide Indicator Dots */}
+          {displayBanners.length > 1 && (
+            <div className="absolute bottom-3 left-5 flex gap-1.5 z-25">
+              {displayBanners.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setActiveBannerIdx(idx)}
+                  className={`w-1.5 h-1.5 rounded-full transition-all ${
+                    activeBannerIdx === idx ? 'bg-cta w-3' : 'bg-white/40'
+                  }`}
+                  title={`Go to slide ${idx + 1}`}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -508,30 +608,8 @@ export default function MenuList({
         )}
       </main>
 
-      {/* Floating Bottom Cart Bar */}
-      {totalItemsCount > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 p-4">
-          <Link
-            href="/cart"
-            className="max-w-2xl mx-auto flex items-center justify-between bg-primary rounded-2xl px-5 py-4 shadow-[0_8px_30px_rgba(139,0,0,0.4)] active:scale-[0.98] transition-transform"
-          >
-            <div className="flex items-center gap-3">
-              <div className="bg-white/20 rounded-full p-2">
-                <ShoppingBag className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <span className="text-white/80 text-xs font-medium block">
-                  {totalItemsCount} item{totalItemsCount > 1 ? 's' : ''}
-                </span>
-                <span className="text-white font-black text-lg leading-tight">₹{cart.total}</span>
-              </div>
-            </div>
-            <span className="text-white font-bold text-sm uppercase tracking-wide">
-              View Cart →
-            </span>
-          </Link>
-        </div>
-      )}
+      {/* Persistent Customer Navigation Bar */}
+      <CustomerNavbar restaurantId={restaurantId} />
 
       {/* Product Details Modal */}
       {selectedDetailedItem && (

@@ -25,6 +25,8 @@ export function normalizeAdmin(doc: any): IAdmin {
     welcomeMessage: plain.welcomeMessage || 'Welcome to our restaurant!',
     createdAt: plain.createdAt ? new Date(plain.createdAt).toISOString() : undefined,
     updatedAt: plain.updatedAt ? new Date(plain.updatedAt).toISOString() : undefined,
+    active: plain.active !== undefined ? plain.active : true,
+    location: plain.location || 'Tokyo',
   };
 }
 
@@ -113,11 +115,11 @@ export async function create(data: {
   restaurantName: string;
   phone: string;
   designation: string;
-  role?: 'owner' | 'manager' | 'staff';
+  role?: 'owner' | 'manager' | 'staff' | 'restaurant_admin' | 'super_admin';
 }): Promise<IAdmin> {
   await dbConnect();
 
-  let resolvedRole: 'owner' | 'manager' | 'staff' = data.role || 'staff';
+  let resolvedRole: 'owner' | 'manager' | 'staff' | 'restaurant_admin' | 'super_admin' = data.role || 'staff';
   if (!data.role && data.designation) {
     const des = data.designation.toLowerCase().trim();
     if (des === 'owner') resolvedRole = 'owner';
@@ -164,7 +166,7 @@ export async function updatePhoneAndDesignation(
   id: string,
   phone: string,
   designation: string,
-  role?: 'owner' | 'manager' | 'staff'
+  role?: 'owner' | 'manager' | 'staff' | 'restaurant_admin' | 'super_admin'
 ): Promise<IAdmin | null> {
   await dbConnect();
   const updateData: any = { phone: phone.trim(), designation: designation.toLowerCase() };

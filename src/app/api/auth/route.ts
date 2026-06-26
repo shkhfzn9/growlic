@@ -32,6 +32,7 @@ export async function POST(req: Request) {
       restaurantId: admin.restaurantId,
       restaurantName: admin.restaurantName,
       email: admin.email,
+      role: admin.role,
     });
   } catch (error) {
     return handleRouteError(error);

@@ -62,3 +62,16 @@ export interface IComboRule {
   createdAt?: string;
   updatedAt?: string;
 }
+
+export interface IBanner {
+  _id: string;
+  restaurantId: string;
+  title: string;
+  subtitle: string;
+  buttonText: string;
+  buttonLink: string;
+  image: string;
+  active: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}

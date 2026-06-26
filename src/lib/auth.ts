@@ -13,19 +13,28 @@ export async function comparePassword(password: string, hash: string): Promise<b
   return bcrypt.compare(password, hash);
 }
 
-export function signToken(payload: { email: string; restaurantId: string; restaurantName: string }): string {
+export function signToken(payload: { email: string; restaurantId: string; restaurantName: string; role: string }): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 }
 
-export function verifyToken(token: string): { email: string; restaurantId: string; restaurantName: string } | null {
+export function verifyToken(token: string): { email: string; restaurantId: string; restaurantName: string; role: string } | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as { email: string; restaurantId: string; restaurantName: string };
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    if (decoded && typeof decoded === 'object') {
+      return {
+        email: decoded.email || '',
+        restaurantId: decoded.restaurantId || '',
+        restaurantName: decoded.restaurantName || '',
+        role: decoded.role || 'restaurant_admin',
+      };
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
-export function getAuthFromRequest(req: NextRequest): { email: string; restaurantId: string; restaurantName: string } | null {
+export function getAuthFromRequest(req: NextRequest): { email: string; restaurantId: string; restaurantName: string; role: string } | null {
   // Try to read from cookie first
   let token = req.cookies.get('admin_token')?.value;
 

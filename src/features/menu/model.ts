@@ -139,4 +139,31 @@ const PairingRuleSchema: Schema = new Schema<IPairingRule>(
 export const PairingRule: Model<IPairingRule> =
   mongoose.models.PairingRule || mongoose.model<IPairingRule>('PairingRule', PairingRuleSchema);
 
+// 5. Banner Schema
+export interface IBanner extends Document {
+  restaurantId: string;
+  title: string;
+  subtitle: string;
+  buttonText: string;
+  buttonLink: string;
+  image: string;
+  active: boolean;
+}
+
+const BannerSchema: Schema = new Schema<IBanner>(
+  {
+    restaurantId: { type: String, required: true, index: true },
+    title: { type: String, required: true },
+    subtitle: { type: String, default: '' },
+    buttonText: { type: String, default: 'Order Now' },
+    buttonLink: { type: String, default: '' },
+    image: { type: String, default: '' },
+    active: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+export const Banner: Model<IBanner> =
+  mongoose.models.Banner || mongoose.model<IBanner>('Banner', BannerSchema);
+
 export default Menu;

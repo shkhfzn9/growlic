@@ -5,12 +5,14 @@ export interface IAdmin {
   restaurantName: string;
   phone: string;
   designation: string;
-  role: 'owner' | 'manager' | 'staff';
+  role: 'owner' | 'manager' | 'staff' | 'restaurant_admin' | 'super_admin';
   logoUrl?: string;
   primaryColor?: string;
   welcomeMessage?: string;
   createdAt?: string;
   updatedAt?: string;
+  active?: boolean;
+  location?: string;
 }
 
 export interface ISession {

@@ -3,6 +3,7 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 export interface AuthState {
   token: string | null;
   userRole: 'admin' | null;
+  role: string | null;
   isLoggedIn: boolean;
   restaurantId: string | null;
   restaurantName: string | null;
@@ -12,6 +13,7 @@ export interface AuthState {
 const initialState: AuthState = {
   token: null,
   userRole: null,
+  role: null,
   isLoggedIn: false,
   restaurantId: null,
   restaurantName: null,
@@ -24,13 +26,14 @@ const authSlice = createSlice({
   reducers: {
     loginSuccess: (
       state,
-      action: PayloadAction<{ token: string; restaurantId: string; restaurantName: string; email: string }>
+      action: PayloadAction<{ token: string; restaurantId: string; restaurantName: string; email: string; role: string }>
     ) => {
-      const { token, restaurantId, restaurantName, email } = action.payload;
+      const { token, restaurantId, restaurantName, email, role } = action.payload;
       state.token = token;
       state.restaurantId = restaurantId;
       state.restaurantName = restaurantName;
       state.email = email;
+      state.role = role;
       state.userRole = 'admin';
       state.isLoggedIn = true;
 
@@ -39,6 +42,7 @@ const authSlice = createSlice({
         localStorage.setItem('admin_restaurant_id', restaurantId);
         localStorage.setItem('admin_restaurant_name', restaurantName);
         localStorage.setItem('admin_email', email);
+        localStorage.setItem('admin_role', role);
       }
     },
     logout: (state) => {
@@ -46,6 +50,7 @@ const authSlice = createSlice({
       state.restaurantId = null;
       state.restaurantName = null;
       state.email = null;
+      state.role = null;
       state.userRole = null;
       state.isLoggedIn = false;
 
@@ -54,6 +59,7 @@ const authSlice = createSlice({
         localStorage.removeItem('admin_restaurant_id');
         localStorage.removeItem('admin_restaurant_name');
         localStorage.removeItem('admin_email');
+        localStorage.removeItem('admin_role');
       }
     },
     hydrateAuth: (state) => {
@@ -62,12 +68,14 @@ const authSlice = createSlice({
         const restaurantId = localStorage.getItem('admin_restaurant_id');
         const restaurantName = localStorage.getItem('admin_restaurant_name');
         const email = localStorage.getItem('admin_email');
+        const role = localStorage.getItem('admin_role');
 
         if (token && restaurantId && restaurantName) {
           state.token = token;
           state.restaurantId = restaurantId;
           state.restaurantName = restaurantName;
           state.email = email;
+          state.role = role || 'restaurant_admin';
           state.userRole = 'admin';
           state.isLoggedIn = true;
         }

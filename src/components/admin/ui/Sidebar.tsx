@@ -13,6 +13,7 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
+  Megaphone,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -28,6 +29,7 @@ const navLinks = [
   { href: '/admin/customers', label: 'Customers', icon: Users },
   { href: '/admin/settings', label: 'Settings & QR', icon: Settings },
   { href: '/admin/upsell', label: 'Upsell & Rules', icon: TrendingUp },
+  { href: '/admin/promos', label: 'Promos & Ads', icon: Megaphone },
 ];
 
 export default function Sidebar({ restaurantName, email, onLogout }: SidebarProps) {

@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { getOrderById } from '@/actions/orders';
 import Link from 'next/link';
 import { Check, Clock, ChefHat, UtensilsCrossed, PartyPopper, XCircle } from 'lucide-react';
+import CustomerNavbar from './CustomerNavbar';
 
 interface OrderItem {
   menuItemId: string;
@@ -123,7 +124,7 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
   const displayId = order._id.substring(order._id.length - 6).toUpperCase();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-bg-dark to-bg-darker flex flex-col relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-bg-dark to-bg-darker flex flex-col relative overflow-hidden pb-28">
       {/* Wave decoration */}
       <svg className="absolute bottom-0 left-0 w-full h-[40%]" viewBox="0 0 1440 320" preserveAspectRatio="none">
         <path d="M0,160L48,170.7C96,181,192,203,288,197.3C384,192,480,160,576,154.7C672,149,768,171,864,186.7C960,203,1056,213,1152,197.3C1248,181,1344,139,1392,117.3L1440,96L1440,320L0,320Z" fill="#C0181A" fillOpacity="0.15" />
@@ -247,6 +248,7 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
           </Link>
         </div>
       </div>
+      <CustomerNavbar restaurantId={order.restaurantId} />
     </div>
   );
 }
