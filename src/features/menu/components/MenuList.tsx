@@ -7,7 +7,7 @@ import { addItem, updateQuantity, removeItem, setTableId } from '@/redux/cartSli
 import Link from 'next/link';
 import { logEvent } from '@/actions/orders';
 import { Search, ShoppingBag, Minus, Plus, X, ChevronLeft, ChevronRight, Flame } from 'lucide-react';
-import CustomerNavbar from './CustomerNavbar';
+import { CustomerNavbar } from '@/components/layout';
 import { getActiveBanners } from '@/actions/banners';
 
 const DISH_PLACEHOLDER = '/dish_placeholder.jpg';

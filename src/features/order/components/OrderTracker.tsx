@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { getOrderById } from '@/actions/orders';
 import Link from 'next/link';
 import { Check, Clock, ChefHat, UtensilsCrossed, PartyPopper, XCircle } from 'lucide-react';
-import CustomerNavbar from './CustomerNavbar';
+import { CustomerNavbar } from '@/components/layout';
 
 interface OrderItem {
   menuItemId: string;

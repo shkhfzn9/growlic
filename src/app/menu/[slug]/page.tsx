@@ -1,7 +1,7 @@
 import React from 'react';
 import { getAdminByRestaurantId } from '@/features/auth';
 import { getUpsellConfig } from '@/actions/upsell';
-import MenuList from '@/components/menu/MenuList';
+import { MenuList } from '@/features/menu';
 import Link from 'next/link';
 import { AlertTriangle, UtensilsCrossed } from 'lucide-react';
 

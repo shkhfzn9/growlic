@@ -9,7 +9,7 @@ import { getUpsellConfig } from '@/actions/upsell';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Minus, Plus, ArrowLeft, ShoppingBag, Loader2, X, Gift, TrendingUp, Sparkles } from 'lucide-react';
-import CustomerNavbar from '@/components/menu/CustomerNavbar';
+import { CustomerNavbar } from '@/components/layout';
 
 const DISH_PLACEHOLDER = '/dish_placeholder.jpg';
 

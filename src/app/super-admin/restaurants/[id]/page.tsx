@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, Hourglass } from 'lucide-react';
-import { PageHeader } from '@/components/admin/ui';
+import { PageHeader } from '@/components/ui';
 
 export default function RestaurantDetailPlaceholder() {
   const params = useParams();

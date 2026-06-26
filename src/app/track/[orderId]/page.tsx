@@ -1,6 +1,6 @@
 import React from 'react';
 import { getOrderById } from '@/actions/orders';
-import OrderTracker from '@/components/menu/OrderTracker';
+import { OrderTracker } from '@/features/order';
 import Link from 'next/link';
 import { AlertTriangle, Search } from 'lucide-react';
 

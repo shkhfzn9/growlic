@@ -2,9 +2,9 @@
 
 import React, { useEffect } from 'react';
 import { Provider } from 'react-redux';
-import { store } from './store';
-import { hydrateCart } from './cartSlice';
-import { hydrateAuth } from './authSlice';
+import { store } from '@/redux/store';
+import { hydrateCart } from '@/redux/cartSlice';
+import { hydrateAuth } from '@/redux/authSlice';
 
 export function ReduxProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {

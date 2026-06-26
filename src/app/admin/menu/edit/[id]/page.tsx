@@ -1,6 +1,6 @@
 import React from 'react';
 import { getMenuItemById } from '@/actions/menu';
-import EditItemForm from '@/components/admin/EditItemForm';
+import { EditItemForm } from '@/features/menu';
 import Link from 'next/link';
 
 interface PageProps {

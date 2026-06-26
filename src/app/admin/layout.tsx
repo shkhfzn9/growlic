@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { logout } from '@/redux/authSlice';
-import { Sidebar, MobileHeader } from '@/components/admin/ui';
+import { Sidebar, MobileHeader } from '@/components/layout';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
