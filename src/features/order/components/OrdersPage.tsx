@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, Suspense, useRef } from 'react';
+import React, { useEffect, useState, Suspense, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getAdminOrders, updateOrderStatus, updateOrderEstimatedTime } from '../services/order.service';
 import { PageHeader, StatusBadge, AdminButton } from '@/components/ui';
@@ -35,6 +35,11 @@ function OrdersContent() {
   const [customEta, setCustomEta] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+
+  const handleOrderSelect = useCallback((order: Order) => {
+    setSelectedOrder(order);
+    setViewMode('detail');
+  }, []);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -135,6 +140,9 @@ function OrdersContent() {
   // Polling effect (runs every 10 seconds, accesses latest states through refs)
   useEffect(() => {
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
       loadOrders(false);
     }, 10000);
     return () => clearInterval(interval);
@@ -238,35 +246,14 @@ function OrdersContent() {
           <div className={`w-full lg:w-1/2 flex flex-col gap-3 ${viewMode === 'detail' ? 'hidden lg:flex' : 'flex'}`}>
             <div className="bg-white border border-[#E2E6EA] rounded-xl max-h-[600px] overflow-y-auto">
               <div className="divide-y divide-[#E2E6EA]">
-                {orders.map((order) => {
-                  const displayId = order._id.substring(order._id.length - 6).toUpperCase();
-                  const isSelected = selectedOrder?._id === order._id;
-                  const itemNames = order.items.map((i) => i.name).join(', ');
-                  const dateStr = new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-                  return (
-                    <div
-                      key={order._id}
-                      onClick={() => { setSelectedOrder(order); setViewMode('detail'); }}
-                      className={`p-4 flex flex-col gap-1.5 cursor-pointer transition-colors ${
-                        isSelected ? 'bg-[#FEF2F2] border-l-[3px] border-l-[#C0181A]' : 'hover:bg-[#F4F6F9]'
-                      }`}
-                    >
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-semibold text-[#111827]">#{displayId}</span>
-                        <span className="text-[11px] text-[#6B7280]">{dateStr}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-[#111827]">{order.customerName} {order.tableId ? `· Table ${order.tableId}` : ''}</span>
-                        <span className="font-semibold text-[#111827]">₹{order.total}</span>
-                      </div>
-                      <div className="text-[12px] text-[#6B7280] truncate">{itemNames}</div>
-                      <div className="mt-1">
-                        <StatusBadge label={order.status} variant={getStatusVariant(order.status)} />
-                      </div>
-                    </div>
-                  );
-                })}
+                {orders.map((order) => (
+                  <OrderListItem
+                    key={order._id}
+                    order={order}
+                    isSelected={selectedOrder?._id === order._id}
+                    onClick={handleOrderSelect}
+                  />
+                ))}
               </div>
             </div>
 
@@ -420,7 +407,6 @@ function OrdersContent() {
                                   const mins = parseInt(customEta, 10) || 20;
                                   setActionLoading((prev) => ({ ...prev, [selectedOrder._id]: true }));
                                   try {
-                                    await updateOrderStatus(selectedOrder._id, 'accepted');
                                     const updated = await updateOrderEstimatedTime(selectedOrder._id, mins);
                                     setOrders((prev) => prev.map((o) => (o._id === selectedOrder._id ? updated : o)));
                                     setSelectedOrder(updated);
@@ -488,3 +474,37 @@ export default function OrdersPage() {
     </Suspense>
   );
 }
+
+interface OrderListItemProps {
+  order: Order;
+  isSelected: boolean;
+  onClick: (order: Order) => void;
+}
+
+const OrderListItem = React.memo(function OrderListItem({ order, isSelected, onClick }: OrderListItemProps) {
+  const displayId = order._id.substring(order._id.length - 6).toUpperCase();
+  const itemNames = order.items.map((i) => i.name).join(', ');
+  const dateStr = new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  return (
+    <div
+      onClick={() => onClick(order)}
+      className={`p-4 flex flex-col gap-1.5 cursor-pointer transition-colors ${
+        isSelected ? 'bg-[#FEF2F2] border-l-[3px] border-l-[#C0181A]' : 'hover:bg-[#F4F6F9]'
+      }`}
+    >
+      <div className="flex justify-between items-center">
+        <span className="text-sm font-semibold text-[#111827]">#{displayId}</span>
+        <span className="text-[11px] text-[#6B7280]">{dateStr}</span>
+      </div>
+      <div className="flex justify-between items-center text-sm">
+        <span className="text-[#111827]">{order.customerName} {order.tableId ? `· Table ${order.tableId}` : ''}</span>
+        <span className="font-semibold text-[#111827]">₹{order.total}</span>
+      </div>
+      <div className="text-[12px] text-[#6B7280] truncate">{itemNames}</div>
+      <div className="mt-1">
+        <StatusBadge label={order.status} variant={getStatusVariant(order.status)} />
+      </div>
+    </div>
+  );
+});

@@ -41,6 +41,16 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const requestUrl = new URL(event.request.url);
 
+  // Bypass caching for Next.js internal assets (development chunks, HMR, hot updates)
+  if (
+    requestUrl.pathname.startsWith('/_next') ||
+    requestUrl.pathname.includes('webpack-hmr') ||
+    requestUrl.pathname.includes('hot-update')
+  ) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   // Network-First for dynamic endpoints (APIs, Server Actions, Pages)
   if (
     event.request.method !== 'GET' ||

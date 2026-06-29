@@ -2,7 +2,7 @@
   "name": "Growlic - Restaurant SaaS",
   "short_name": "Growlic",
   "description": "Smart digital menu for restaurants with advanced analytics and live order management",
-  "start_url": "/admin/dashboard",
+  "start_url": "/admin/orders",
   "display": "standalone",
   "background_color": "#F4F6F9",
   "theme_color": "#C0181A",

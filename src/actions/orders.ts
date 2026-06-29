@@ -67,8 +67,8 @@ export async function createOrder(data: {
 }) {
   try {
     const order = await orderService.createOrder(data);
-    revalidatePath(`/admin/dashboard`);
-    revalidatePath(`/admin/orders`);
+    // revalidatePath(`/admin/dashboard`);
+    // revalidatePath(`/admin/orders`);
     return JSON.parse(JSON.stringify(order));
   } catch (error) {
     console.error('Error creating order action:', error);
@@ -140,8 +140,8 @@ export async function updateOrderStatus(id: string, status: 'received' | 'accept
     // Audit log order status change
     await logAction(admin.restaurantId, admin.userId, 'ORDER_STATUS_CHANGED', existing, order);
 
-    revalidatePath(`/admin/dashboard`);
-    revalidatePath(`/admin/orders`);
+    // revalidatePath(`/admin/dashboard`);
+    // revalidatePath(`/admin/orders`);
     return JSON.parse(JSON.stringify(order));
   } catch (error) {
     console.error('Error updating order status action:', error);
@@ -172,8 +172,8 @@ export async function updateOrderEstimatedTime(id: string, minutes: number) {
     // Audit log order status change (ETA change)
     await logAction(admin.restaurantId, admin.userId, 'ORDER_STATUS_CHANGED', existing, order);
 
-    revalidatePath(`/admin/dashboard`);
-    revalidatePath(`/admin/orders`);
+    // revalidatePath(`/admin/dashboard`);
+    // revalidatePath(`/admin/orders`);
     return JSON.parse(JSON.stringify(order));
   } catch (error) {
     console.error('Error updating order estimated time action:', error);

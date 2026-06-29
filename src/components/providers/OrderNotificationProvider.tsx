@@ -215,7 +215,20 @@ export default function OrderNotificationProvider({ children }: { children: Reac
       return;
     }
 
+    let intervalId: any = null;
+    let lastCheckedAt = 0;
+
     const checkIncomingOrders = async () => {
+      const timestamp = Date.now();
+      // Throttle manual trigger checks to at most once per 5 seconds
+      if (!intervalId && timestamp - lastCheckedAt < 5000) {
+        return;
+      }
+      lastCheckedAt = timestamp;
+
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
       try {
         // Fetch up to 50 active received orders
         const result = await getAdminOrders(50, 0, 'received');
@@ -227,6 +240,20 @@ export default function OrderNotificationProvider({ children }: { children: Reac
         );
 
         setActiveAlertOrders(unacknowledged);
+
+        // Dynamic polling interval:
+        // - If we have active unacknowledged received orders, poll fast (5s) to keep alerts responsive.
+        // - If there are zero received orders, clear interval entirely (0 background requests).
+        if (unacknowledged.length > 0) {
+          if (!intervalId) {
+            intervalId = setInterval(checkIncomingOrders, 5000);
+          }
+        } else {
+          if (intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
+        }
       } catch (err) {
         console.error('[Alert] Error polling new orders:', err);
       }
@@ -235,10 +262,25 @@ export default function OrderNotificationProvider({ children }: { children: Reac
     // Run first check immediately
     checkIncomingOrders();
 
-    // Poll every 10 seconds to detect new orders
-    const interval = setInterval(checkIncomingOrders, 10000);
+    // Trigger single check on window focus/click to wake up interval if a new order arrived
+    const handleActivity = () => {
+      checkIncomingOrders();
+    };
 
-    return () => clearInterval(interval);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', handleActivity);
+      window.addEventListener('click', handleActivity);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', handleActivity);
+        window.removeEventListener('click', handleActivity);
+      }
+    };
   }, [auth.isLoggedIn, auth.restaurantId, acknowledgedIds, isAdminRoute]);
 
   // Stop alert for a specific order (Add to acknowledged lists)
@@ -264,7 +306,6 @@ export default function OrderNotificationProvider({ children }: { children: Reac
 
     setActionLoading((prev) => ({ ...prev, [orderId]: true }));
     try {
-      await updateOrderStatus(orderId, 'accepted');
       await updateOrderEstimatedTime(orderId, minutes);
       acknowledgeOrder(orderId);
       router.push(`/admin/orders?highlight=${orderId}`);

@@ -53,7 +53,7 @@ function LoginForm() {
       );
 
       const role = data.role || 'restaurant_admin';
-      const defaultRedirect = role === 'super_admin' ? '/super-admin' : '/admin/dashboard';
+      const defaultRedirect = role === 'super_admin' ? '/super-admin' : '/admin/orders';
       const redirectUrl = searchParams.get('redirect') || defaultRedirect;
       router.push(redirectUrl);
     } catch (err) {

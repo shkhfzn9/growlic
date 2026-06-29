@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { addItem, updateQuantity, removeItem, setTableId } from '@/redux/cartSlice';
@@ -167,7 +167,7 @@ export default function MenuList({
   upsellData,
 }: MenuListProps) {
   const dispatch = useDispatch();
-  const cart = useSelector((state: RootState) => state.cart);
+  const cartIsEmpty = useSelector((state: RootState) => state.cart.items.length === 0);
 
   React.useEffect(() => {
     dispatch(setTableId(table || null));
@@ -318,13 +318,8 @@ export default function MenuList({
     return matchesCategory && matchesSearch && item.available;
   });
 
-  const getItemQuantity = (itemId: string) => {
-    const item = cart.items.find((i) => i.id === itemId);
-    return item ? item.quantity : 0;
-  };
-
-  const handleAddOne = (item: MenuItem, originatedFromNudge = false, nudgeType?: 'cross_sell' | 'threshold_discount' | 'combo_freebie', nudgeRuleId?: string) => {
-    if (cart.items.length === 0) {
+  const handleAddOne = useCallback((item: MenuItem, originatedFromNudge = false, nudgeType?: 'cross_sell' | 'threshold_discount' | 'combo_freebie', nudgeRuleId?: string) => {
+    if (cartIsEmpty) {
       logEvent(restaurantId, 'cart_create').catch((e) => console.error('Error logging cart create:', e));
     }
     dispatch(
@@ -343,21 +338,19 @@ export default function MenuList({
         restaurantName,
       })
     );
-  };
+  }, [dispatch, restaurantId, restaurantName, cartIsEmpty]);
 
-  const handleRemoveOne = (itemId: string, currentQty: number) => {
+  const handleRemoveOne = useCallback((itemId: string, currentQty: number) => {
     if (currentQty <= 1) {
       dispatch(removeItem(itemId));
     } else {
       dispatch(updateQuantity({ id: itemId, quantity: currentQty - 1 }));
     }
-  };
+  }, [dispatch]);
 
-  const handleAddMore = (itemId: string, currentQty: number) => {
+  const handleAddMore = useCallback((itemId: string, currentQty: number) => {
     dispatch(updateQuantity({ id: itemId, quantity: currentQty + 1 }));
-  };
-
-  const totalItemsCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
+  }, [dispatch]);
 
   const slides = selectedDetailedItem
     ? [getItemImage(selectedDetailedItem.image), ...(selectedDetailedItem.images || []).map(img => getItemImage(img))].filter(Boolean)
@@ -535,367 +528,408 @@ export default function MenuList({
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {filteredItems.map((item) => {
-              const qty = getItemQuantity(item._id);
-              const tag = getItemTag(item.name, item.category, item.price);
-              return (
-                <div
-                  key={item._id}
-                  className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-3.5 flex gap-3.5"
-                >
-                  {/* Image */}
-                  <div
-                    onClick={() => openDetailedModal(item)}
-                    className="w-[90px] h-[90px] rounded-xl overflow-hidden flex-shrink-0 cursor-pointer"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={getItemImage(item.image)}
-                      alt={item.name}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-
-                  {/* Details */}
-                  <div className="flex-1 flex flex-col justify-between min-w-0">
-                    <div>
-                      {tag && (
-                        <span className={`text-[0.6rem] font-bold tracking-wider px-2 py-0.5 rounded-full inline-block mb-1.5 ${tag.bg}`}>
-                          {tag.text}
-                        </span>
-                      )}
-                      <h3
-                        onClick={() => openDetailedModal(item)}
-                        className="font-bold text-sm text-text-dark leading-tight cursor-pointer hover:text-primary transition-colors line-clamp-1"
-                      >
-                        {item.name}
-                      </h3>
-                      <p className="text-xs text-text-dark/60 mt-0.5 line-clamp-2 leading-relaxed">
-                        {item.description}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center justify-between mt-2">
-                      <span className="font-black text-base text-text-dark">
-                        ₹{item.price}
-                      </span>
-
-                      {qty === 0 ? (
-                        <button
-                          onClick={() => handleAddOne(item)}
-                          className="bg-primary text-white text-xs font-bold px-4 py-2 rounded-lg uppercase tracking-wide active:scale-95 transition-transform"
-                        >
-                          Add
-                        </button>
-                      ) : (
-                        <div className="flex items-center gap-0 bg-primary rounded-lg overflow-hidden">
-                          <button
-                            onClick={() => handleRemoveOne(item._id, qty)}
-                            className="text-white px-2.5 py-2 active:bg-bg-dark transition-colors"
-                          >
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                          <span className="text-white font-bold text-sm px-2 min-w-[24px] text-center">{qty}</span>
-                          <button
-                            onClick={() => handleAddMore(item._id, qty)}
-                            className="text-white px-2.5 py-2 active:bg-bg-dark transition-colors"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {filteredItems.map((item) => (
+              <MenuItemCard
+                key={item._id}
+                item={item}
+                onAddOne={handleAddOne}
+                onRemoveOne={handleRemoveOne}
+                onAddMore={handleAddMore}
+                onOpenModal={openDetailedModal}
+              />
+            ))}
           </div>
         )}
       </main>
 
       {/* Persistent Customer Navigation Bar */}
       <CustomerNavbar restaurantId={restaurantId} />
-
       {/* Product Details Modal */}
       {selectedDetailedItem && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm"
-          onClick={() => setSelectedDetailedItem(null)}
-        >
-          <div
-            className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Image Slider */}
-            {slides.length > 0 && (
-              <div className="relative w-full h-56 overflow-hidden bg-surface">
-                <div
-                  className="flex h-full transition-transform duration-300 ease-out"
-                  style={{ transform: `translate3d(-${activeImageIndex * 100}%, 0, 0)` }}
-                >
-                  {slides.map((slide, idx) => (
-                    <div key={idx} className="w-full h-full flex-shrink-0">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={slide}
-                        alt={`${selectedDetailedItem.name} slide ${idx + 1}`}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                {/* Close button */}
-                <button
-                  onClick={() => setSelectedDetailedItem(null)}
-                  className="absolute top-3 right-3 bg-black/40 backdrop-blur-sm text-white rounded-full p-2 z-10"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-
-                {slides.length > 1 && (
-                  <>
-                    <button
-                      onClick={() => setActiveImageIndex((prev) => (prev - 1 + slides.length) % slides.length)}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 rounded-full p-1.5 shadow-md z-10"
-                    >
-                      <ChevronLeft className="w-4 h-4 text-text-dark" />
-                    </button>
-                    <button
-                      onClick={() => setActiveImageIndex((prev) => (prev + 1) % slides.length)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 rounded-full p-1.5 shadow-md z-10"
-                    >
-                      <ChevronRight className="w-4 h-4 text-text-dark" />
-                    </button>
-                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
-                      {slides.map((_, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => setActiveImageIndex(idx)}
-                          className={`w-2 h-2 rounded-full transition-all ${
-                            activeImageIndex === idx ? 'bg-white scale-125' : 'bg-white/50'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Modal Body */}
-            <div className="p-5 flex-1 overflow-y-auto">
-              {/* Header info */}
-              <div className="flex items-start justify-between gap-3 mb-4">
-                <div>
-                  <span className="text-[0.65rem] text-primary font-bold uppercase tracking-wider">
-                    {selectedDetailedItem.category}
-                  </span>
-                  <h3 className="font-black text-xl text-text-dark leading-tight mt-0.5">
-                    {selectedDetailedItem.name}
-                  </h3>
-                </div>
-                <span className="font-black text-xl text-primary shrink-0">
-                  ₹{selectedDetailedItem.price}
-                </span>
-              </div>
-
-              {/* Quick info row */}
-              <div className="flex items-center gap-4 mb-4 flex-wrap">
-                {selectedDetailedItem.spiceLevel !== undefined && selectedDetailedItem.spiceLevel > 0 && (
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: selectedDetailedItem.spiceLevel }).map((_, i) => (
-                      <Flame key={i} className="w-3.5 h-3.5 text-primary fill-primary" />
-                    ))}
-                  </div>
-                )}
-                <span className="text-xs text-text-dark/60">
-                  {selectedDetailedItem.portionSize || 'Good for 1'}
-                </span>
-                <span className="text-xs text-text-dark/60">
-                  ~{selectedDetailedItem.prepTimeMin || 10}-{selectedDetailedItem.prepTimeMax || 12} min
-                </span>
-              </div>
-
-              {/* Chef's Note */}
-              {selectedDetailedItem.chefNote && (
-                <div className="bg-cta/10 rounded-xl p-3 mb-4">
-                  <p className="text-xs text-text-dark italic leading-relaxed">
-                    &ldquo;{selectedDetailedItem.chefNote}&rdquo; — Chef
-                  </p>
-                </div>
-              )}
-
-              {/* Description */}
-              <p className="text-sm text-text-dark/70 leading-relaxed mb-4">{selectedDetailedItem.description}</p>
-
-              {/* Preparation */}
-              {selectedDetailedItem.preparation && (
-                <div className="mb-4">
-                  <h4 className="text-[0.65rem] font-bold uppercase text-bg-dark tracking-wider mb-1">Preparation</h4>
-                  <p className="text-xs text-text-dark/70 leading-relaxed">{selectedDetailedItem.preparation}</p>
-                </div>
-              )}
-
-              {/* Ingredients */}
-              {selectedDetailedItem.ingredients && selectedDetailedItem.ingredients.length > 0 && (
-                <div className="mb-4">
-                  <h4 className="text-[0.65rem] font-bold uppercase text-bg-dark tracking-wider mb-2">Ingredients</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {selectedDetailedItem.ingredients.map((ing, idx) => {
-                      const allergen = isAllergen(ing);
-                      return (
-                        <span
-                          key={idx}
-                          className={`text-[0.65rem] px-2 py-1 rounded-full ${
-                            allergen ? 'bg-primary/10 text-primary font-bold' : 'bg-surface text-text-dark/70'
-                          }`}
-                        >
-                          {highlightAllergens(ing)}
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Nutrition */}
-              {(() => {
-                const hasCustomNutrition = !!(selectedDetailedItem.nutrition &&
-                  (selectedDetailedItem.nutrition.calories > 0 ||
-                   selectedDetailedItem.nutrition.protein > 0 ||
-                   selectedDetailedItem.nutrition.carbs > 0 ||
-                   selectedDetailedItem.nutrition.fat > 0));
-
-                const displayNutrition = hasCustomNutrition && selectedDetailedItem.nutrition
-                  ? selectedDetailedItem.nutrition
-                  : estimateNutrition(selectedDetailedItem.name, selectedDetailedItem.category);
-
-                return (
-                  <div className="mb-4">
-                    <h4 className="text-[0.65rem] font-bold uppercase text-bg-dark tracking-wider mb-2">
-                      Nutrition {hasCustomNutrition ? '' : '(Approx)'}
-                    </h4>
-                    <div className="grid grid-cols-4 gap-2">
-                      {[
-                        { label: 'Cal', value: displayNutrition.calories },
-                        { label: 'Protein', value: `${displayNutrition.protein}g` },
-                        { label: 'Carbs', value: `${displayNutrition.carbs}g` },
-                        { label: 'Fat', value: `${displayNutrition.fat}g` },
-                      ].map((n) => (
-                        <div key={n.label} className="bg-surface rounded-lg p-2 text-center">
-                          <span className="text-[0.6rem] text-text-dark/50 uppercase block">{n.label}</span>
-                          <span className="text-sm font-bold text-text-dark">{n.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Goes Well With */}
-              {(() => {
-                const pairedData = getPairedItem(selectedDetailedItem);
-                if (!pairedData) return null;
-
-                const pairedItem = pairedData.item;
-                const showAnySocialProof = !selectedDetailedItem.chefNote;
-                const pairedQty = getItemQuantity(pairedItem._id);
-
-                return (
-                  <div className="border-t border-surface pt-4 mt-2">
-                    <h4 className="text-[0.65rem] font-bold uppercase text-bg-dark tracking-wider mb-2">
-                      Goes Well With
-                    </h4>
-
-                    {showAnySocialProof && (
-                      <p className="text-[0.65rem] text-text-dark/50 mb-2">
-                        {pairedData.showSocialProof
-                          ? `Most people order this with ${pairedItem.name}`
-                          : `Popular choice recommended with this item`}
-                      </p>
-                    )}
-
-                    <div className="bg-surface rounded-xl p-3 flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={getItemImage(pairedItem.image)} alt={pairedItem.name} className="w-full h-full object-cover" />
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <h5 className="font-bold text-sm text-text-dark truncate">{pairedItem.name}</h5>
-                        <span className="text-xs font-bold text-primary">₹{pairedItem.price}</span>
-                      </div>
-
-                      <div>
-                        {pairedQty === 0 ? (
-                          <button
-                            onClick={() => handleAddOne(pairedItem, true, 'cross_sell', pairedItem._id)}
-                            className="bg-primary text-white text-[0.65rem] font-bold px-3 py-1.5 rounded-lg uppercase active:scale-95 transition-transform"
-                          >
-                            + Add
-                          </button>
-                        ) : (
-                          <div className="flex items-center gap-0 bg-primary rounded-lg overflow-hidden">
-                            <button
-                              onClick={() => handleRemoveOne(pairedItem._id, pairedQty)}
-                              className="text-white px-2 py-1.5"
-                            >
-                              <Minus className="w-3 h-3" />
-                            </button>
-                            <span className="text-white font-bold text-xs px-1.5">{pairedQty}</span>
-                            <button
-                              onClick={() => handleAddMore(pairedItem._id, pairedQty)}
-                              className="text-white px-2 py-1.5"
-                            >
-                              <Plus className="w-3 h-3" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Bottom Add to Cart Bar */}
-            <div className="border-t border-surface p-4 bg-white flex items-center justify-between">
-              <div>
-                <span className="text-[0.6rem] text-text-dark/50 uppercase">Total</span>
-                <span className="block font-black text-lg text-text-dark">₹{selectedDetailedItem.price}</span>
-              </div>
-
-              <div>
-                {getItemQuantity(selectedDetailedItem._id) === 0 ? (
-                  <button
-                    onClick={() => handleAddOne(selectedDetailedItem)}
-                    className="bg-cta text-text-dark font-bold text-sm px-6 py-3 rounded-xl uppercase tracking-wide active:scale-95 transition-transform"
-                  >
-                    Add to Cart
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-0 bg-primary rounded-xl overflow-hidden">
-                    <button
-                      onClick={() => handleRemoveOne(selectedDetailedItem._id, getItemQuantity(selectedDetailedItem._id))}
-                      className="text-white px-3.5 py-3"
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                    <span className="text-white font-bold text-base px-3">{getItemQuantity(selectedDetailedItem._id)}</span>
-                    <button
-                      onClick={() => handleAddMore(selectedDetailedItem._id, getItemQuantity(selectedDetailedItem._id))}
-                      className="text-white px-3.5 py-3"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <ProductDetailsModal
+          item={selectedDetailedItem}
+          restaurantId={restaurantId}
+          restaurantName={restaurantName}
+          slides={slides}
+          activeImageIndex={activeImageIndex}
+          setActiveImageIndex={setActiveImageIndex}
+          onClose={() => setSelectedDetailedItem(null)}
+          onAddOne={handleAddOne}
+          onRemoveOne={handleRemoveOne}
+          onAddMore={handleAddMore}
+          pairedData={getPairedItem(selectedDetailedItem)}
+        />
       )}
     </div>
   );
 }
+
+interface MenuItemCardProps {
+  item: MenuItem;
+  onAddOne: (item: MenuItem) => void;
+  onRemoveOne: (itemId: string, currentQty: number) => void;
+  onAddMore: (itemId: string, currentQty: number) => void;
+  onOpenModal: (item: MenuItem) => void;
+}
+
+const MenuItemCard = React.memo(function MenuItemCard({
+  item,
+  onAddOne,
+  onRemoveOne,
+  onAddMore,
+  onOpenModal,
+}: MenuItemCardProps) {
+  const qty = useSelector((state: RootState) =>
+    state.cart.items.find((i) => i.id === item._id)?.quantity || 0
+  );
+
+  const tag = getItemTag(item.name, item.category, item.price);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-3.5 flex gap-3.5 animate-in fade-in duration-300">
+      {/* Image */}
+      <div
+        onClick={() => onOpenModal(item)}
+        className="w-[90px] h-[90px] rounded-xl overflow-hidden flex-shrink-0 cursor-pointer"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={getItemImage(item.image)}
+          alt={item.name}
+          className="w-full h-full object-cover"
+        />
+      </div>
+
+      {/* Details */}
+      <div className="flex-1 flex flex-col justify-between min-w-0">
+        <div>
+          {tag && (
+            <span className={`text-[0.6rem] font-bold tracking-wider px-2 py-0.5 rounded-full inline-block mb-1.5 ${tag.bg}`}>
+              {tag.text}
+            </span>
+          )}
+          <h3
+            onClick={() => onOpenModal(item)}
+            className="font-bold text-sm text-text-dark leading-tight cursor-pointer hover:text-primary transition-colors line-clamp-1"
+          >
+            {item.name}
+          </h3>
+          <p className="text-xs text-text-dark/60 mt-0.5 line-clamp-2 leading-relaxed">
+            {item.description}
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between mt-2">
+          <span className="font-black text-base text-text-dark">
+            ₹{item.price}
+          </span>
+
+          {qty === 0 ? (
+            <button
+              onClick={() => onAddOne(item)}
+              className="bg-primary text-white text-xs font-bold px-4 py-2 rounded-lg uppercase tracking-wide active:scale-95 transition-transform"
+            >
+              Add
+            </button>
+          ) : (
+            <div className="flex items-center gap-0 bg-primary rounded-lg overflow-hidden">
+              <button
+                onClick={() => onRemoveOne(item._id, qty)}
+                className="text-white px-2.5 py-2 active:bg-bg-dark transition-colors"
+              >
+                <Minus className="w-3.5 h-3.5" />
+              </button>
+              <span className="text-white font-bold text-sm px-2 min-w-[24px] text-center">{qty}</span>
+              <button
+                onClick={() => onAddMore(item._id, qty)}
+                className="text-white px-2.5 py-2 active:bg-bg-dark transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+interface ProductDetailsModalProps {
+  item: MenuItem;
+  restaurantId: string;
+  restaurantName: string;
+  slides: string[];
+  activeImageIndex: number;
+  setActiveImageIndex: React.Dispatch<React.SetStateAction<number>>;
+  onClose: () => void;
+  onAddOne: (item: MenuItem, originatedFromNudge?: boolean, nudgeType?: any, nudgeRuleId?: string) => void;
+  onRemoveOne: (itemId: string, currentQty: number) => void;
+  onAddMore: (itemId: string, currentQty: number) => void;
+  pairedData: any;
+}
+
+const ProductDetailsModal = React.memo(function ProductDetailsModal({
+  item,
+  restaurantId,
+  restaurantName,
+  slides,
+  activeImageIndex,
+  setActiveImageIndex,
+  onClose,
+  onAddOne,
+  onRemoveOne,
+  onAddMore,
+  pairedData,
+}: ProductDetailsModalProps) {
+  const qty = useSelector((state: RootState) =>
+    state.cart.items.find((i) => i.id === item._id)?.quantity || 0
+  );
+
+  const pairedQty = useSelector((state: RootState) =>
+    pairedData?.item
+      ? (state.cart.items.find((i) => i.id === pairedData.item._id)?.quantity || 0)
+      : 0
+  );
+
+  const showAnySocialProof = !item.chefNote;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Image Slider */}
+        {slides.length > 0 && (
+          <div className="relative w-full h-56 overflow-hidden bg-surface">
+            <div
+              className="flex h-full transition-transform duration-300 ease-out"
+              style={{ transform: `translate3d(-${activeImageIndex * 100}%, 0, 0)` }}
+            >
+              {slides.map((slide, idx) => (
+                <div key={idx} className="w-full h-full flex-shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={slide}
+                    alt={`${item.name} slide ${idx + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Close button */}
+            <button
+              onClick={onClose}
+              className="absolute top-3 right-3 bg-black/40 backdrop-blur-sm text-white rounded-full p-2 z-10"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {slides.length > 1 && (
+              <>
+                <button
+                  onClick={() => setActiveImageIndex((prev) => (prev - 1 + slides.length) % slides.length)}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 rounded-full p-1.5 shadow-md z-10"
+                >
+                  <ChevronLeft className="w-4 h-4 text-text-dark" />
+                </button>
+                <button
+                  onClick={() => setActiveImageIndex((prev) => (prev + 1) % slides.length)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 rounded-full p-1.5 shadow-md z-10"
+                >
+                  <ChevronRight className="w-4 h-4 text-text-dark" />
+                </button>
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+                  {slides.map((_, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setActiveImageIndex(idx)}
+                      className={`w-2 h-2 rounded-full transition-all ${
+                        activeImageIndex === idx ? 'bg-white scale-125' : 'bg-white/50'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Modal Body */}
+        <div className="p-5 flex-1 overflow-y-auto">
+          {/* Header info */}
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <span className="text-[0.65rem] text-primary font-bold uppercase tracking-wider">
+                {item.category}
+              </span>
+              <h3 className="font-black text-xl text-text-dark leading-tight mt-0.5">
+                {item.name}
+              </h3>
+            </div>
+            <span className="font-black text-xl text-primary shrink-0">
+              ₹{item.price}
+            </span>
+          </div>
+
+          {/* Quick info row */}
+          <div className="flex items-center gap-4 mb-4 flex-wrap">
+            {item.spiceLevel !== undefined && item.spiceLevel > 0 && (
+              <div className="flex items-center gap-1">
+                {Array.from({ length: item.spiceLevel }).map((_, i) => (
+                  <Flame key={i} className="w-3.5 h-3.5 text-primary fill-primary" />
+                ))}
+              </div>
+            )}
+            <span className="text-xs text-text-dark/60">
+              {item.portionSize || 'Good for 1'}
+            </span>
+            <span className="text-xs text-text-dark/60">
+              ~{item.prepTimeMin || 10}-{item.prepTimeMax || 12} min
+            </span>
+          </div>
+
+          {/* Chef's Note */}
+          {item.chefNote && (
+            <div className="bg-cta/10 rounded-xl p-3 mb-4">
+              <p className="text-xs text-text-dark italic leading-relaxed">
+                &ldquo;{item.chefNote}&rdquo; — Chef
+              </p>
+            </div>
+          )}
+
+          {/* Description */}
+          <p className="text-sm text-text-dark/70 leading-relaxed mb-4">{item.description}</p>
+
+          {/* Preparation */}
+          {item.preparation && (
+            <div className="mb-4">
+              <h4 className="text-[0.65rem] font-bold uppercase text-bg-dark tracking-wider mb-1">Preparation</h4>
+              <p className="text-xs text-text-dark/70 leading-relaxed">{item.preparation}</p>
+            </div>
+          )}
+
+          {/* Ingredients */}
+          {item.ingredients && item.ingredients.length > 0 && (
+            <div className="mb-4">
+              <h4 className="text-[0.65rem] font-bold uppercase text-bg-dark tracking-wider mb-2">Ingredients</h4>
+              <div className="flex flex-wrap gap-1.5">
+                {item.ingredients.map((ing, idx) => {
+                  const allergen = isAllergen(ing);
+                  return (
+                    <span
+                      key={idx}
+                      className={`text-[0.65rem] px-2 py-1 rounded-full ${
+                        allergen ? 'bg-primary/10 text-primary font-bold border border-primary/20' : 'bg-surface text-text-dark/70'
+                      }`}
+                    >
+                      {highlightAllergens(ing)}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Cross Sell Suggestions */}
+          {pairedData && (() => {
+            const pairedItem = pairedData.item;
+            return (
+              <div className="border-t border-surface pt-4 mt-2">
+                <h4 className="text-[0.65rem] font-bold uppercase text-bg-dark tracking-wider mb-2">
+                  Goes Well With
+                </h4>
+
+                {showAnySocialProof && (
+                  <p className="text-[0.65rem] text-text-dark/50 mb-2">
+                    {pairedData.showSocialProof
+                      ? `Most people order this with ${pairedItem.name}`
+                      : `Popular choice recommended with this item`}
+                  </p>
+                )}
+
+                <div className="bg-surface rounded-xl p-3 flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={getItemImage(pairedItem.image)} alt={pairedItem.name} className="w-full h-full object-cover" />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <h5 className="font-bold text-sm text-text-dark truncate">{pairedItem.name}</h5>
+                    <span className="text-xs font-bold text-primary">₹{pairedItem.price}</span>
+                  </div>
+
+                  <div>
+                    {pairedQty === 0 ? (
+                      <button
+                        onClick={() => onAddOne(pairedItem, true, 'cross_sell', pairedItem._id)}
+                        className="bg-primary text-white text-[0.65rem] font-bold px-3 py-1.5 rounded-lg uppercase active:scale-95 transition-transform"
+                      >
+                        + Add
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-0 bg-primary rounded-lg overflow-hidden">
+                        <button
+                          onClick={() => onRemoveOne(pairedItem._id, pairedQty)}
+                          className="text-white px-2 py-1.5"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="text-white font-bold text-xs px-1.5">{pairedQty}</span>
+                        <button
+                          onClick={() => onAddMore(pairedItem._id, pairedQty)}
+                          className="text-white px-2 py-1.5"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Bottom Add to Cart Bar */}
+        <div className="border-t border-surface p-4 bg-white flex items-center justify-between">
+          <div>
+            <span className="text-[0.6rem] text-text-dark/50 uppercase">Total</span>
+            <span className="block font-black text-lg text-text-dark">₹{item.price}</span>
+          </div>
+
+          <div>
+            {qty === 0 ? (
+              <button
+                onClick={() => onAddOne(item)}
+                className="bg-cta text-text-dark font-bold text-sm px-6 py-3 rounded-xl uppercase tracking-wide active:scale-95 transition-transform"
+              >
+                Add to Cart
+              </button>
+            ) : (
+              <div className="flex items-center gap-0 bg-primary rounded-xl overflow-hidden">
+                <button
+                  onClick={() => onRemoveOne(item._id, qty)}
+                  className="text-white px-3.5 py-3"
+                >
+                  <Minus className="w-4 h-4" />
+                </button>
+                <span className="text-white font-bold text-base px-3">{qty}</span>
+                <button
+                  onClick={() => onAddMore(item._id, qty)}
+                  className="text-white px-3.5 py-3"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});

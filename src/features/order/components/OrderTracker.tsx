@@ -55,7 +55,7 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
       } catch (err) {
         console.error('Error polling order status:', err);
       }
-    }, 2000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [orderId, order.status, order.restaurantId]);
@@ -175,27 +175,24 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
                   <div key={step.key} className="flex items-center gap-3 relative">
                     {/* Connector line */}
                     {index > 0 && (
-                      <div className={`absolute left-[15px] -top-3 w-0.5 h-3 ${
-                        index <= currentStepIndex ? 'bg-primary' : 'bg-surface'
-                      }`} />
+                      <div className={`absolute left-[15px] -top-3 w-0.5 h-3 ${index <= currentStepIndex ? 'bg-primary' : 'bg-surface'
+                        }`} />
                     )}
 
                     {/* Circle */}
                     <div
-                      className={`w-[30px] h-[30px] rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-                        isCompleted
+                      className={`w-[30px] h-[30px] rounded-full flex items-center justify-center flex-shrink-0 transition-all ${isCompleted
                           ? 'bg-primary text-white'
                           : 'bg-surface text-text-dark/30'
-                      } ${isCurrent ? 'ring-4 ring-primary/20' : ''}`}
+                        } ${isCurrent ? 'ring-4 ring-primary/20' : ''}`}
                     >
                       {step.icon}
                     </div>
 
                     {/* Label */}
                     <span
-                      className={`text-sm ${
-                        isCurrent ? 'font-black text-text-dark' : isCompleted ? 'font-bold text-text-dark' : 'text-text-dark/40'
-                      }`}
+                      className={`text-sm ${isCurrent ? 'font-black text-text-dark' : isCompleted ? 'font-bold text-text-dark' : 'text-text-dark/40'
+                        }`}
                     >
                       {step.label}
                     </span>
