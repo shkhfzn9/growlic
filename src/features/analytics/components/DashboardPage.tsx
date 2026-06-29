@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { getDashboardMetrics, updateOrderStatus } from '@/actions/orders';
+import { getDashboardMetrics, updateOrderStatus, updateOrderEstimatedTime } from '@/actions/orders';
+import { useOrderNotification } from '@/components/providers';
 import Link from 'next/link';
 import {
   ChevronDown,
@@ -196,6 +197,7 @@ function Section({ title, badge, description, defaultOpen = false, children }: {
 }
 
 export default function DashboardPage() {
+  const { acknowledgeOrder } = useOrderNotification();
   const [datePreset, setDatePreset] = useState<'7d' | '30d' | 'custom'>('30d');
 
   const getInitialDates = () => {
@@ -266,14 +268,14 @@ export default function DashboardPage() {
     switch (currentStatus) {
       case 'received': nextStatus = 'accepted'; break;
       case 'accepted': nextStatus = 'preparing'; break;
-      case 'preparing': nextStatus = 'ready'; break;
-      case 'ready': nextStatus = 'completed'; break;
+      case 'preparing': nextStatus = 'completed'; break;
       default: return;
     }
     setActionLoading(prev => ({ ...prev, [orderId]: true }));
     try {
       await updateOrderStatus(orderId, nextStatus);
       await fetchMetrics(false);
+      acknowledgeOrder(orderId);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update order status';
       alert(message);
@@ -288,6 +290,7 @@ export default function DashboardPage() {
       try {
         await updateOrderStatus(orderId, 'cancelled');
         await fetchMetrics(false);
+        acknowledgeOrder(orderId);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to cancel order';
         alert(message);
@@ -703,20 +706,56 @@ export default function DashboardPage() {
                               {isActionLoading ? (
                                 <span className="text-[11px] text-[#6B7280] animate-pulse">Updating...</span>
                               ) : (
-                                <div className="flex gap-1 justify-end">
+                                <div className="flex gap-1 justify-end items-center">
                                   {order.status === 'received' && (
-                                    <button onClick={() => handleStatusTransition(order._id, 'received')} className="px-2 py-1 text-[11px] font-medium bg-[#C0181A] text-white rounded hover:bg-[#A01416] transition-colors">Accept</button>
+                                    <div className="flex items-center gap-1">
+                                      <select
+                                        id={`dash-eta-${order._id}`}
+                                        className="bg-white border border-[#E2E6EA] hover:border-green-500/30 rounded text-[10px] px-1 py-0.5 font-semibold text-[#374151] outline-none transition-all cursor-pointer"
+                                        defaultValue="20"
+                                      >
+                                        <option value="15">15m</option>
+                                        <option value="20">20m</option>
+                                        <option value="30">30m</option>
+                                        <option value="45">45m</option>
+                                        <option value="60">60m</option>
+                                      </select>
+                                      <button
+                                        onClick={async () => {
+                                          const selectEl = document.getElementById(`dash-eta-${order._id}`) as HTMLSelectElement | null;
+                                          const mins = selectEl ? parseInt(selectEl.value, 10) : 20;
+                                          setActionLoading(prev => ({ ...prev, [order._id]: true }));
+                                          try {
+                                            await updateOrderStatus(order._id, 'accepted');
+                                            await updateOrderEstimatedTime(order._id, mins);
+                                            await fetchMetrics(false);
+                                            acknowledgeOrder(order._id);
+                                          } catch (err) {
+                                            const message = err instanceof Error ? err.message : 'Failed to accept order';
+                                            alert(message);
+                                          } finally {
+                                            setActionLoading(prev => ({ ...prev, [order._id]: false }));
+                                          }
+                                        }}
+                                        className="px-2 py-1 text-[11px] font-medium bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
+                                      >
+                                        Accept
+                                      </button>
+                                      <button
+                                        onClick={() => handleCancelOrder(order._id)}
+                                        className="px-2 py-1 text-[11px] font-medium bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                                      >
+                                        Reject
+                                      </button>
+                                    </div>
                                   )}
                                   {order.status === 'accepted' && (
                                     <button onClick={() => handleStatusTransition(order._id, 'accepted')} className="px-2 py-1 text-[11px] font-medium bg-[#C0181A] text-white rounded hover:bg-[#A01416] transition-colors">Prepare</button>
                                   )}
                                   {order.status === 'preparing' && (
-                                    <button onClick={() => handleStatusTransition(order._id, 'preparing')} className="px-2 py-1 text-[11px] font-medium bg-[#C0181A] text-white rounded hover:bg-[#A01416] transition-colors">Ready</button>
+                                    <button onClick={() => handleStatusTransition(order._id, 'preparing')} className="px-2 py-1 text-[11px] font-medium bg-green-600 hover:bg-green-700 text-white rounded transition-colors">Mark Ready</button>
                                   )}
-                                  {order.status === 'ready' && (
-                                    <button onClick={() => handleStatusTransition(order._id, 'ready')} className="px-2 py-1 text-[11px] font-medium bg-[#16A34A] text-white rounded hover:bg-[#16A34A]/90 transition-colors">Complete</button>
-                                  )}
-                                  {['received', 'accepted', 'preparing', 'ready'].includes(order.status) && (
+                                  {['accepted', 'preparing'].includes(order.status) && (
                                     <button onClick={() => handleCancelOrder(order._id)} className="px-2 py-1 text-[11px] font-medium text-[#DC2626] bg-[#FEF2F2] rounded hover:bg-[#DC2626] hover:text-white transition-colors">Cancel</button>
                                   )}
                                   {['completed', 'cancelled'].includes(order.status) && (

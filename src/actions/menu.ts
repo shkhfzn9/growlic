@@ -238,3 +238,34 @@ export async function deleteMenuItem(id: string) {
   }
 }
 
+/**
+ * Server action to retrieve the entire client menu context (admin config, active banners, and upsell data)
+ * in a single batch request to reduce roundtrips.
+ * 
+ * @param restaurantId The restaurant slug ID.
+ * @returns An object containing the serialized admin, active banners, and upsell configuration.
+ */
+export async function getRestaurantMenuContext(restaurantId: string) {
+  try {
+    if (!restaurantId) {
+      throw new Error('Restaurant ID is required');
+    }
+
+    const [admin, banners, upsellConfig] = await Promise.all([
+      getAdminByRestaurantId(restaurantId),
+      menuService.getActiveBanners(restaurantId),
+      menuService.getUpsellConfig(restaurantId),
+    ]);
+
+    return JSON.parse(JSON.stringify({
+      admin,
+      banners,
+      upsellConfig,
+    }));
+  } catch (error) {
+    console.error('Error fetching restaurant menu context action:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch restaurant menu context';
+    throw new Error(message);
+  }
+}
+

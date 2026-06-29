@@ -1,6 +1,5 @@
 import React from 'react';
-import { getAdminByRestaurantId } from '@/features/auth';
-import { getUpsellConfig } from '@/actions/upsell';
+import { getRestaurantMenuContext } from '@/actions/menu';
 import { MenuList } from '@/features/menu';
 import Link from 'next/link';
 import { AlertTriangle, UtensilsCrossed } from 'lucide-react';
@@ -44,14 +43,17 @@ export default async function MenuPage({ params, searchParams }: PageProps) {
   let restaurantName = 'Tokyo Momos';
   let hasError = false;
   let upsellDataResult: any = null;
+  let banners: any[] = [];
 
   let logoUrl = '';
   let primaryColor = '#C0181A';
   let welcomeMessage = 'Welcome to our restaurant!';
 
   try {
-    const admin = await getAdminByRestaurantId(slug);
-    upsellDataResult = await getUpsellConfig(slug);
+    const context = await getRestaurantMenuContext(slug);
+    const admin = context.admin;
+    upsellDataResult = context.upsellConfig;
+    banners = context.banners;
     menuItems = upsellDataResult.menuItems;
 
     if (admin) {
@@ -126,6 +128,7 @@ export default async function MenuPage({ params, searchParams }: PageProps) {
   return (
     <MenuList
       initialItems={menuItems}
+      initialBanners={banners}
       restaurantName={restaurantName}
       restaurantId={slug}
       table={table}

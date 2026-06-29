@@ -32,10 +32,8 @@ interface OrderTrackerProps {
 }
 
 const STATUS_STEPS: Array<{ key: OrderData['status']; label: string; icon: React.ReactNode }> = [
-  { key: 'received', label: 'Received', icon: <Check className="w-4 h-4" /> },
   { key: 'accepted', label: 'Accepted', icon: <Clock className="w-4 h-4" /> },
   { key: 'preparing', label: 'Preparing', icon: <ChefHat className="w-4 h-4" /> },
-  { key: 'ready', label: 'Ready', icon: <UtensilsCrossed className="w-4 h-4" /> },
   { key: 'completed', label: 'Completed', icon: <PartyPopper className="w-4 h-4" /> },
 ];
 
@@ -103,9 +101,8 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
       case 'preparing':
         return 'Freshly cooking your order now.';
       case 'ready':
-        return 'Your meal is hot and ready for pickup!';
       case 'completed':
-        return 'Order picked up. Thank you for dining!';
+        return 'Your meal is hot and ready for pickup!';
       case 'cancelled':
         return 'Order has been cancelled.';
       default:
@@ -116,7 +113,8 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
   const timeLeft = getTimeLeft();
 
   const getStepIndex = (status: OrderData['status']) => {
-    if (status === 'cancelled') return -1;
+    if (status === 'cancelled' || status === 'received') return -1;
+    if (status === 'ready') return 2; // Map ready (legacy) to Completed step
     return STATUS_STEPS.findIndex((step) => step.key === status);
   };
 
@@ -149,15 +147,9 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
             </div>
           )}
 
-          {order.status === 'ready' && (
+          {(order.status === 'ready' || order.status === 'completed') && (
             <div className="bg-cta/20 rounded-xl p-4 text-center">
               <span className="font-black text-sm text-text-dark uppercase">Your Order is Ready for Pickup!</span>
-            </div>
-          )}
-
-          {order.status === 'completed' && (
-            <div className="bg-surface rounded-xl p-4 text-center">
-              <span className="font-bold text-sm text-text-dark/60 uppercase">Order Completed</span>
             </div>
           )}
 

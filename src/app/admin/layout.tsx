@@ -6,6 +6,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { logout } from '@/redux/authSlice';
 import { Sidebar, MobileHeader } from '@/components/layout';
+import { OrderNotificationProvider } from '@/components/providers';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -30,20 +31,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-[#F4F6F9]">
-      <MobileHeader
-        restaurantName={auth.restaurantName || undefined}
-        email={auth.email || undefined}
-        onLogout={handleLogout}
-      />
-      <Sidebar
-        restaurantName={auth.restaurantName || undefined}
-        email={auth.email || undefined}
-        onLogout={handleLogout}
-      />
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto min-h-screen">
-        <div className="max-w-[1200px] mx-auto">{children}</div>
-      </main>
-    </div>
+    <OrderNotificationProvider>
+      <div className="flex flex-col md:flex-row min-h-screen bg-[#F4F6F9]">
+        <MobileHeader
+          restaurantName={auth.restaurantName || undefined}
+          email={auth.email || undefined}
+          onLogout={handleLogout}
+        />
+        <Sidebar
+          restaurantName={auth.restaurantName || undefined}
+          email={auth.email || undefined}
+          onLogout={handleLogout}
+        />
+        <main className="flex-1 p-4 md:p-8 overflow-y-auto min-h-screen">
+          <div className="max-w-[1200px] mx-auto">{children}</div>
+        </main>
+      </div>
+    </OrderNotificationProvider>
   );
 }

@@ -23,8 +23,8 @@ interface SidebarProps {
 }
 
 const navLinks = [
-  { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
+  { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/menu', label: 'Menu', icon: UtensilsCrossed },
   { href: '/admin/customers', label: 'Customers', icon: Users },
   { href: '/admin/settings', label: 'Settings & QR', icon: Settings },

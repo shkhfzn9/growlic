@@ -141,6 +141,7 @@ const getItemTag = (name: string, category: string, price: number) => {
 
 interface MenuListProps {
   initialItems: MenuItem[];
+  initialBanners?: any[];
   restaurantName: string;
   restaurantId: string;
   table?: string;
@@ -157,6 +158,7 @@ interface MenuListProps {
 
 export default function MenuList({
   initialItems,
+  initialBanners,
   restaurantName,
   restaurantId,
   table,
@@ -176,7 +178,7 @@ export default function MenuList({
   const [selectedDetailedItem, setSelectedDetailedItem] = useState<MenuItem | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
-  const [banners, setBanners] = useState<any[]>([]);
+  const [banners, setBanners] = useState<any[]>(initialBanners || []);
   const [activeBannerIdx, setActiveBannerIdx] = useState(0);
 
   const defaultBanners = [
@@ -209,6 +211,9 @@ export default function MenuList({
   const displayBanners = banners.length > 0 ? banners : defaultBanners;
 
   useEffect(() => {
+    if (initialBanners && initialBanners.length > 0) {
+      return;
+    }
     const fetchBanners = async () => {
       try {
         const activeBanners = await getActiveBanners(restaurantId);
@@ -218,7 +223,7 @@ export default function MenuList({
       }
     };
     fetchBanners();
-  }, [restaurantId]);
+  }, [restaurantId, initialBanners]);
 
   useEffect(() => {
     if (activeBannerIdx >= displayBanners.length) {

@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useEffect, useState, Suspense } from 'react';
+import React, { useEffect, useState, Suspense, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getAdminOrders, updateOrderStatus, updateOrderEstimatedTime } from '../services/order.service';
 import { PageHeader, StatusBadge, AdminButton } from '@/components/ui';
+import { useOrderNotification } from '@/components/providers';
 import { Clock, ArrowLeft } from 'lucide-react';
 import { OrderItem, Order } from '../types/order.types';
 
@@ -24,6 +25,7 @@ function getStatusVariant(status: Order['status']) {
 function OrdersContent() {
   const searchParams = useSearchParams();
   const highlightId = searchParams.get('highlight');
+  const { acknowledgeOrder } = useOrderNotification();
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -38,29 +40,82 @@ function OrdersContent() {
   const [totalCount, setTotalCount] = useState(0);
   const limit = 50;
 
-  const loadOrders = async (showLoading = false, pageNum = 1) => {
+  // Refs to avoid stale closures in background polling and loading callbacks
+  const filterRef = useRef(filter);
+  const currentPageRef = useRef(currentPage);
+  const selectedOrderRef = useRef(selectedOrder);
+  const highlightIdRef = useRef(highlightId);
+
+  useEffect(() => { filterRef.current = filter; }, [filter]);
+  useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
+  useEffect(() => { selectedOrderRef.current = selectedOrder; }, [selectedOrder]);
+  useEffect(() => { highlightIdRef.current = highlightId; }, [highlightId]);
+
+  // Live timer state for countdown
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getTimeLeft = (order: Order) => {
+    if (!order.estimatedTime || ['ready', 'completed', 'cancelled'].includes(order.status)) {
+      return null;
+    }
+
+    const placedTime = new Date(order.createdAt).getTime();
+    const prepDurationMs = order.estimatedTime * 60 * 1000;
+    const targetTime = placedTime + prepDurationMs;
+    const difference = targetTime - now;
+
+    if (difference <= 0) {
+      return 'ALMOST READY';
+    }
+
+    const minutes = Math.floor(difference / 1000 / 60);
+    const seconds = Math.floor((difference / 1000) % 60);
+
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const loadOrders = async (showLoading = false, pageNum?: number) => {
+    const activePage = pageNum !== undefined ? pageNum : currentPageRef.current;
+    const activeFilter = filterRef.current;
+    const activeHighlightId = highlightIdRef.current;
+
     if (showLoading) setLoading(true);
     try {
-      const skipNum = (pageNum - 1) * limit;
-      const data = await getAdminOrders(limit, skipNum, filter);
+      const skipNum = (activePage - 1) * limit;
+      const data = await getAdminOrders(limit, skipNum, activeFilter);
       const fetchedOrders = data.orders || [];
       const total = data.totalCount || 0;
 
       setOrders(fetchedOrders);
       setTotalCount(total);
-      setCurrentPage(pageNum);
+      setCurrentPage(activePage);
 
-      if (highlightId && showLoading) {
-        const found = fetchedOrders.find((o: Order) => o._id === highlightId);
+      const currentSelected = selectedOrderRef.current;
+
+      if (activeHighlightId && showLoading) {
+        const found = fetchedOrders.find((o: Order) => o._id === activeHighlightId);
         if (found) {
           setSelectedOrder(found);
           setViewMode('detail');
         }
-      } else if (!selectedOrder && fetchedOrders.length > 0 && showLoading) {
-        setSelectedOrder(fetchedOrders[0]);
-      } else if (selectedOrder) {
-        const updated = fetchedOrders.find((o: Order) => o._id === selectedOrder._id);
-        if (updated) setSelectedOrder(updated);
+      } else if (!currentSelected && fetchedOrders.length > 0) {
+        if (showLoading) {
+          setSelectedOrder(fetchedOrders[0]);
+        }
+      } else if (currentSelected) {
+        const updated = fetchedOrders.find((o: Order) => o._id === currentSelected._id);
+        if (updated) {
+          setSelectedOrder(updated);
+        } else if (showLoading) {
+          setSelectedOrder(fetchedOrders[0] || null);
+        }
       }
 
       setError('');
@@ -72,15 +127,18 @@ function OrdersContent() {
     }
   };
 
+  // Consolidated loading effect (runs when filter, page, or highlightId change)
   useEffect(() => {
-    loadOrders(true, 1);
-  }, [filter]);
+    loadOrders(true, currentPage);
+  }, [filter, currentPage, highlightId]);
 
+  // Polling effect (runs every 10 seconds, accesses latest states through refs)
   useEffect(() => {
-    Promise.resolve().then(() => loadOrders(true, currentPage));
-    const interval = setInterval(() => { loadOrders(false, currentPage); }, 10000);
+    const interval = setInterval(() => {
+      loadOrders(false);
+    }, 10000);
     return () => clearInterval(interval);
-  }, [highlightId, currentPage]);
+  }, []);
 
   const handleStatusChange = async (orderId: string, nextStatus: Order['status']) => {
     setActionLoading((prev) => ({ ...prev, [orderId]: true }));
@@ -88,6 +146,7 @@ function OrdersContent() {
       const updated = await updateOrderStatus(orderId, nextStatus);
       setOrders((prev) => prev.map((o) => (o._id === orderId ? updated : o)));
       setSelectedOrder(updated);
+      acknowledgeOrder(orderId);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update order status';
       alert(message);
@@ -96,20 +155,7 @@ function OrdersContent() {
     }
   };
 
-  const handleEtaChange = async (orderId: string, minutes: number) => {
-    setActionLoading((prev) => ({ ...prev, [orderId]: true }));
-    try {
-      const updated = await updateOrderEstimatedTime(orderId, minutes);
-      setOrders((prev) => prev.map((o) => (o._id === orderId ? updated : o)));
-      setSelectedOrder(updated);
-      setCustomEta('');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to update preparation time';
-      alert(message);
-    } finally {
-      setActionLoading((prev) => ({ ...prev, [orderId]: false }));
-    }
-  };
+
 
   const handleCancelOrder = async (orderId: string) => {
     if (confirm('Are you sure you want to cancel this order?')) {
@@ -118,6 +164,7 @@ function OrdersContent() {
         const updated = await updateOrderStatus(orderId, 'cancelled');
         setOrders((prev) => prev.map((o) => (o._id === orderId ? updated : o)));
         setSelectedOrder(updated);
+        acknowledgeOrder(orderId);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to cancel order';
         alert(message);
@@ -161,11 +208,14 @@ function OrdersContent() {
 
       {/* Filter Tabs */}
       <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {(['all', 'received', 'accepted', 'preparing', 'ready', 'completed', 'cancelled'] as FilterStatus[]).map(
+        {(['all', 'received', 'accepted', 'preparing', 'completed', 'cancelled'] as FilterStatus[]).map(
           (status) => (
             <button
               key={status}
-              onClick={() => setFilter(status)}
+              onClick={() => {
+                setFilter(status);
+                setCurrentPage(1);
+              }}
               className={`px-3.5 py-2 text-xs font-medium rounded-lg whitespace-nowrap transition-colors capitalize ${
                 filter === status
                   ? 'bg-[#111827] text-white'
@@ -300,48 +350,28 @@ function OrdersContent() {
                   </div>
                 </div>
 
-                {/* ETA Controls */}
-                {['received', 'accepted', 'preparing'].includes(selectedOrder.status) && (
+                {/* Preparation Timer */}
+                {['accepted', 'preparing'].includes(selectedOrder.status) && selectedOrder.estimatedTime && (
                   <div className="border-t border-[#E2E6EA] pt-4">
-                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] mb-2">Set Preparation ETA</h3>
-                    {actionLoading[selectedOrder._id] ? (
-                      <span className="text-xs text-[#6B7280] animate-pulse">Updating...</span>
-                    ) : (
-                      <div className="flex flex-col gap-2">
-                        <div className="flex flex-wrap gap-1.5">
-                          {[10, 15, 20, 30, 45, 60].map((mins) => (
-                            <button
-                              key={mins}
-                              onClick={() => handleEtaChange(selectedOrder._id, mins)}
-                              className="px-3 py-1.5 text-xs font-medium bg-white border border-[#E2E6EA] rounded-lg hover:bg-[#F4F6F9] transition-colors"
-                            >
-                              {mins} min
-                            </button>
-                          ))}
+                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] mb-2">Preparation Timer</h3>
+                    <div className="bg-gradient-to-r from-[#FEF2F2] to-[#FFF5F5] border border-[#FEE2E2] rounded-xl p-4 flex items-center justify-between shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-[#C0181A]/10 rounded-lg text-[#C0181A]">
+                          <Clock className="w-5 h-5 animate-pulse" />
                         </div>
-                        <div className="flex gap-2 items-center">
-                          <input
-                            type="number"
-                            min="1"
-                            max="180"
-                            placeholder="Custom minutes"
-                            value={customEta}
-                            onChange={(e) => setCustomEta(e.target.value)}
-                            className="px-3 py-1.5 text-xs border border-[#E2E6EA] rounded-lg w-32 outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A]"
-                          />
-                          <AdminButton
-                            size="sm"
-                            onClick={() => {
-                              const val = parseInt(customEta);
-                              if (val > 0) handleEtaChange(selectedOrder._id, val);
-                              else alert('Please enter valid minutes');
-                            }}
-                          >
-                            Set
-                          </AdminButton>
+                        <div>
+                          <span className="text-xs text-[#6B7280] block font-medium">Time Remaining</span>
+                          <span className="text-2xl font-black text-[#111827] tracking-tight tabular-nums">
+                            {getTimeLeft(selectedOrder) || `${selectedOrder.estimatedTime}:00`}
+                          </span>
                         </div>
                       </div>
-                    )}
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-[#C0181A] bg-[#C0181A]/10 px-2.5 py-1 rounded-full font-semibold">
+                          ETA: {selectedOrder.estimatedTime} min
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -351,25 +381,85 @@ function OrdersContent() {
                   {actionLoading[selectedOrder._id] ? (
                     <span className="text-xs text-[#6B7280] animate-pulse">Updating...</span>
                   ) : (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-col gap-3">
                       {selectedOrder.status === 'received' && (
-                        <AdminButton onClick={() => handleStatusChange(selectedOrder._id, 'accepted')}>Accept Order</AdminButton>
+                        <div className="bg-[#F9FAFB] p-3 rounded-lg border border-[#E2E6EA] w-full">
+                          <label className="text-[11px] font-bold text-[#374151] uppercase tracking-wider block mb-2">Set Preparation Time</label>
+                          <div className="flex flex-col gap-2">
+                            <div className="flex flex-wrap gap-1.5">
+                              {[15, 20, 30, 45, 60].map((mins) => (
+                                <button
+                                  key={mins}
+                                  type="button"
+                                  onClick={() => setCustomEta(mins.toString())}
+                                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors border ${
+                                    customEta === mins.toString()
+                                      ? 'bg-green-600 text-white border-green-600'
+                                      : 'bg-white text-[#374151] border-[#E2E6EA] hover:bg-[#F4F6F9]'
+                                  }`}
+                                >
+                                  {mins} min
+                                </button>
+                              ))}
+                            </div>
+                            <div className="flex gap-2 items-center">
+                              <input
+                                type="number"
+                                min="1"
+                                max="180"
+                                placeholder="Custom minutes"
+                                value={customEta}
+                                onChange={(e) => setCustomEta(e.target.value)}
+                                className="px-3 py-1.5 text-xs border border-[#E2E6EA] rounded-lg w-32 outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981]"
+                              />
+                            </div>
+                            <div className="flex gap-2 items-center mt-2 border-t border-[#E2E6EA] pt-2">
+                              <AdminButton
+                                variant="success"
+                                onClick={async () => {
+                                  const mins = parseInt(customEta, 10) || 20;
+                                  setActionLoading((prev) => ({ ...prev, [selectedOrder._id]: true }));
+                                  try {
+                                    await updateOrderStatus(selectedOrder._id, 'accepted');
+                                    const updated = await updateOrderEstimatedTime(selectedOrder._id, mins);
+                                    setOrders((prev) => prev.map((o) => (o._id === selectedOrder._id ? updated : o)));
+                                    setSelectedOrder(updated);
+                                    acknowledgeOrder(selectedOrder._id);
+                                    setCustomEta('');
+                                  } catch (err) {
+                                    const message = err instanceof Error ? err.message : 'Failed to accept order';
+                                    alert(message);
+                                  } finally {
+                                    setActionLoading((prev) => ({ ...prev, [selectedOrder._id]: false }));
+                                  }
+                                }}
+                              >
+                                Accept Order
+                              </AdminButton>
+                              <AdminButton
+                                variant="dangerSolid"
+                                onClick={() => handleCancelOrder(selectedOrder._id)}
+                              >
+                                Reject Order
+                              </AdminButton>
+                            </div>
+                          </div>
+                        </div>
                       )}
-                      {selectedOrder.status === 'accepted' && (
-                        <AdminButton onClick={() => handleStatusChange(selectedOrder._id, 'preparing')}>Start Preparing</AdminButton>
-                      )}
-                      {selectedOrder.status === 'preparing' && (
-                        <AdminButton onClick={() => handleStatusChange(selectedOrder._id, 'ready')}>Mark Ready</AdminButton>
-                      )}
-                      {selectedOrder.status === 'ready' && (
-                        <AdminButton onClick={() => handleStatusChange(selectedOrder._id, 'completed')}>Complete</AdminButton>
-                      )}
-                      {['received', 'accepted', 'preparing', 'ready'].includes(selectedOrder.status) && (
-                        <AdminButton variant="danger" onClick={() => handleCancelOrder(selectedOrder._id)}>Cancel</AdminButton>
-                      )}
-                      {['completed', 'cancelled'].includes(selectedOrder.status) && (
-                        <span className="text-sm text-[#6B7280]">This order is finalized.</span>
-                      )}
+                      <div className="flex flex-wrap gap-2">
+                        {selectedOrder.status === 'accepted' && (
+                          <AdminButton onClick={() => handleStatusChange(selectedOrder._id, 'preparing')}>Start Preparing</AdminButton>
+                        )}
+                        {selectedOrder.status === 'preparing' && (
+                          <AdminButton variant="success" onClick={() => handleStatusChange(selectedOrder._id, 'completed')}>Mark Ready</AdminButton>
+                        )}
+                        {['accepted', 'preparing'].includes(selectedOrder.status) && (
+                          <AdminButton variant="danger" onClick={() => handleCancelOrder(selectedOrder._id)}>Cancel</AdminButton>
+                        )}
+                        {['completed', 'cancelled'].includes(selectedOrder.status) && (
+                          <span className="text-sm text-[#6B7280]">This order is finalized.</span>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

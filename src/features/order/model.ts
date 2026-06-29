@@ -57,6 +57,7 @@ const OrderSchema: Schema = new Schema<IOrderDocument>(
 );
 
 OrderSchema.index({ restaurantId: 1, createdAt: -1 });
+OrderSchema.index({ restaurantId: 1, status: 1, createdAt: -1 });
 
 const Order: Model<IOrderDocument> = mongoose.models.Order || mongoose.model<IOrderDocument>('Order', OrderSchema);
 

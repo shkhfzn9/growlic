@@ -2,7 +2,7 @@
 
 import React from 'react';
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success' | 'dangerSolid';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface AdminButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -17,6 +17,8 @@ const variantStyles: Record<ButtonVariant, string> = {
   secondary: 'bg-white text-[#111827] border border-[#E2E6EA] hover:bg-[#F4F6F9] focus:ring-[#E2E6EA]',
   ghost: 'bg-transparent text-[#6B7280] hover:bg-[#F4F6F9] hover:text-[#111827] focus:ring-[#E2E6EA]',
   danger: 'bg-[#FEF2F2] text-[#DC2626] border border-[#DC2626]/20 hover:bg-[#DC2626] hover:text-white focus:ring-[#DC2626]/30',
+  success: 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500/30',
+  dangerSolid: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500/30',
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
