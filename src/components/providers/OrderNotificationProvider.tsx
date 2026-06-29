@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { getAdminOrders, updateOrderStatus, updateOrderEstimatedTime } from '@/actions/orders';
@@ -51,6 +51,50 @@ export default function OrderNotificationProvider({ children }: { children: Reac
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const synthIntervalRef = useRef<any>(null);
+  const intervalId = useRef<any>(null);
+  const lastCheckedAt = useRef<number>(0);
+
+  const unlockAudio = useCallback(() => {
+    // 1. Try unlocking Audio Element
+    if (audioRef.current) {
+      audioRef.current.play()
+        .then(() => {
+          audioRef.current?.pause();
+          setAudioUnlocked(true);
+          console.log('[Alert] HTML5 Audio playback unlocked successfully.');
+        })
+        .catch((err) => {
+          console.log('[Alert] HTML5 Audio unlock blocked or failed:', err.message);
+        });
+    }
+
+    // 2. Try unlocking Web Audio API Context (synthesizer fallback)
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextClass) {
+        if (!audioCtxRef.current) {
+          audioCtxRef.current = new AudioContextClass();
+        }
+        if (audioCtxRef.current.state === 'suspended') {
+          audioCtxRef.current.resume().then(() => {
+            setAudioUnlocked(true);
+            console.log('[Alert] Web Audio API context resumed successfully.');
+          });
+        } else {
+          setAudioUnlocked(true);
+        }
+      }
+    } catch (e) {
+      console.error('[Alert] Web Audio API init failed:', e);
+    }
+
+    // Remove window event listeners
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    }
+  }, []);
 
   // Initialize acknowledged IDs list from localStorage
   useEffect(() => {
@@ -89,46 +133,6 @@ export default function OrderNotificationProvider({ children }: { children: Reac
       console.warn('[Alert] Failed to load mixkit-church-bell-calling-603.wav. Falling back to Web Audio API synthesis.');
       setAudioError(true);
     });
-
-    const unlockAudio = () => {
-      // 1. Try unlocking Audio Element
-      if (audioRef.current) {
-        audioRef.current.play()
-          .then(() => {
-            audioRef.current?.pause();
-            setAudioUnlocked(true);
-            console.log('[Alert] HTML5 Audio playback unlocked successfully.');
-          })
-          .catch((err) => {
-            console.log('[Alert] HTML5 Audio unlock blocked or failed:', err.message);
-          });
-      }
-
-      // 2. Try unlocking Web Audio API Context (synthesizer fallback)
-      try {
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioContextClass) {
-          if (!audioCtxRef.current) {
-            audioCtxRef.current = new AudioContextClass();
-          }
-          if (audioCtxRef.current.state === 'suspended') {
-            audioCtxRef.current.resume().then(() => {
-              setAudioUnlocked(true);
-              console.log('[Alert] Web Audio API context resumed successfully.');
-            });
-          } else {
-            setAudioUnlocked(true);
-          }
-        }
-      } catch (e) {
-        console.error('[Alert] Web Audio API init failed:', e);
-      }
-
-      // Remove event listeners after first user interaction
-      window.removeEventListener('click', unlockAudio);
-      window.removeEventListener('touchstart', unlockAudio);
-      window.removeEventListener('keydown', unlockAudio);
-    };
 
     window.addEventListener('click', unlockAudio);
     window.addEventListener('touchstart', unlockAudio);
@@ -215,16 +219,13 @@ export default function OrderNotificationProvider({ children }: { children: Reac
       return;
     }
 
-    let intervalId: any = null;
-    let lastCheckedAt = 0;
-
     const checkIncomingOrders = async () => {
       const timestamp = Date.now();
       // Throttle manual trigger checks to at most once per 5 seconds
-      if (!intervalId && timestamp - lastCheckedAt < 5000) {
+      if (!intervalId.current && timestamp - lastCheckedAt.current < 5000) {
         return;
       }
-      lastCheckedAt = timestamp;
+      lastCheckedAt.current = timestamp;
 
       if (typeof document !== 'undefined' && document.hidden) {
         return;
@@ -245,13 +246,13 @@ export default function OrderNotificationProvider({ children }: { children: Reac
         // - If we have active unacknowledged received orders, poll fast (5s) to keep alerts responsive.
         // - If there are zero received orders, clear interval entirely (0 background requests).
         if (unacknowledged.length > 0) {
-          if (!intervalId) {
-            intervalId = setInterval(checkIncomingOrders, 5000);
+          if (!intervalId.current) {
+            intervalId.current = setInterval(checkIncomingOrders, 5000);
           }
         } else {
-          if (intervalId) {
-            clearInterval(intervalId);
-            intervalId = null;
+          if (intervalId.current) {
+            clearInterval(intervalId.current);
+            intervalId.current = null;
           }
         }
       } catch (err) {
@@ -273,8 +274,9 @@ export default function OrderNotificationProvider({ children }: { children: Reac
     }
 
     return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
+      if (intervalId.current) {
+        clearInterval(intervalId.current);
+        intervalId.current = null;
       }
       if (typeof window !== 'undefined') {
         window.removeEventListener('focus', handleActivity);
@@ -345,12 +347,31 @@ export default function OrderNotificationProvider({ children }: { children: Reac
 
       {/* 1. Global Interactivity Warning Banner */}
       {!audioUnlocked && auth.isLoggedIn && isAdminRoute && (
-        <div className="fixed top-4 right-4 left-4 md:left-auto md:max-w-sm bg-[#FFFBEB] border border-[#D97706]/20 rounded-xl p-3 shadow-lg z-50 flex items-center gap-2.5 animate-bounce">
-          <AlertCircle className="w-5 h-5 text-[#D97706] flex-shrink-0" />
-          <div className="flex-1">
-            <p className="text-[12px] font-bold text-[#D97706]">Sound Alerts Suspended</p>
-            <p className="text-[10px] text-[#D97706]/80 mt-0.5">Click anywhere on the dashboard screen to activate bell sound notifications.</p>
+        <div 
+          onClick={unlockAudio}
+          onTouchStart={unlockAudio}
+          className="fixed top-4 right-4 left-4 md:left-auto md:max-w-sm bg-[#FFFBEB] border border-[#D97706]/20 rounded-xl p-3 shadow-lg z-50 flex items-center justify-between gap-2.5 animate-bounce cursor-pointer hover:bg-[#FFFDF5] active:scale-[0.98] transition-all"
+        >
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <AlertCircle className="w-5 h-5 text-[#D97706] flex-shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[12px] font-bold text-[#D97706]">Sound Alerts Suspended</p>
+              <p className="text-[10px] text-[#D97706]/80 mt-0.5 truncate">Tap here or click anywhere to activate chimes.</p>
+            </div>
           </div>
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              unlockAudio();
+            }}
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              unlockAudio();
+            }}
+            className="px-2.5 py-1 text-[10px] font-bold bg-[#D97706] hover:bg-[#B45309] text-white rounded-lg transition-colors flex-shrink-0"
+          >
+            Enable
+          </button>
         </div>
       )}
 
