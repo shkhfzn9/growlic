@@ -27,6 +27,9 @@ export function normalizeAdmin(doc: any): IAdmin {
     updatedAt: plain.updatedAt ? new Date(plain.updatedAt).toISOString() : undefined,
     active: plain.active !== undefined ? plain.active : true,
     location: plain.location || 'Tokyo',
+    loyaltyEnabled: plain.loyaltyEnabled !== undefined ? !!plain.loyaltyEnabled : false,
+    stampsRequired: plain.stampsRequired ?? 8,
+    discountPercentage: plain.discountPercentage ?? 20,
   };
 }
 
@@ -240,6 +243,9 @@ export async function updateBranding(
     logoUrl?: string;
     primaryColor?: string;
     welcomeMessage?: string;
+    loyaltyEnabled?: boolean;
+    stampsRequired?: number;
+    discountPercentage?: number;
   }
 ): Promise<IAdmin | null> {
   await dbConnect();
@@ -250,6 +256,9 @@ export async function updateBranding(
         logoUrl: data.logoUrl,
         primaryColor: data.primaryColor,
         welcomeMessage: data.welcomeMessage,
+        loyaltyEnabled: data.loyaltyEnabled,
+        stampsRequired: data.stampsRequired,
+        discountPercentage: data.discountPercentage,
       }
     },
     { new: true }

@@ -40,6 +40,9 @@ export async function saveRestaurantBranding(data: {
   logoUrl?: string;
   primaryColor?: string;
   welcomeMessage?: string;
+  loyaltyEnabled?: boolean;
+  stampsRequired?: number;
+  discountPercentage?: number;
 }) {
   try {
     const admin = await checkAdminAuth();

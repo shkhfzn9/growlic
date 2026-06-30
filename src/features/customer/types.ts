@@ -5,6 +5,10 @@ export interface ICustomer {
   phone: string;
   totalOrders: number;
   totalSpent: number;
+  stampCount: number;
+  lastStampDate: string | null;
+  hasPendingDiscount: boolean;
+  totalRedemptions: number;
   createdAt?: string;
   updatedAt?: string;
 }

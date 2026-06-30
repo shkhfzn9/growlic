@@ -6,6 +6,10 @@ export interface ICustomerDocument extends Document {
   phone: string;
   totalOrders: number;
   totalSpent: number;
+  stampCount: number;
+  lastStampDate: Date | null;
+  hasPendingDiscount: boolean;
+  totalRedemptions: number;
 }
 
 const CustomerSchema: Schema = new Schema<ICustomerDocument>(
@@ -15,6 +19,10 @@ const CustomerSchema: Schema = new Schema<ICustomerDocument>(
     phone: { type: String, required: true, index: true },
     totalOrders: { type: Number, default: 0 },
     totalSpent: { type: Number, default: 0 },
+    stampCount: { type: Number, default: 0 },
+    lastStampDate: { type: Date, default: null },
+    hasPendingDiscount: { type: Boolean, default: false },
+    totalRedemptions: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

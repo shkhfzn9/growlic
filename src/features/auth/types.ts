@@ -9,6 +9,9 @@ export interface IAdmin {
   logoUrl?: string;
   primaryColor?: string;
   welcomeMessage?: string;
+  loyaltyEnabled?: boolean;
+  stampsRequired?: number;
+  discountPercentage?: number;
   createdAt?: string;
   updatedAt?: string;
   active?: boolean;

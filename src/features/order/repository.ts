@@ -247,3 +247,53 @@ export async function deleteByRestaurantId(restaurantId: string): Promise<boolea
   const result = await Order.deleteMany({ restaurantId });
   return result.deletedCount > 0;
 }
+
+/**
+ * Retrieves all order documents matching a customer's phone number.
+ * Enforces tenant isolation if restaurantId is provided.
+ * 
+ * @param restaurantId Optional scope parameter.
+ * @param phone The target customer phone number.
+ * @returns Array of normalized order records.
+ */
+export async function findByCustomerPhone(restaurantId: string | undefined, phone: string): Promise<IOrder[]> {
+  await dbConnect();
+  const query: any = { customerPhone: phone };
+  if (restaurantId) {
+    query.restaurantId = restaurantId.toLowerCase();
+  }
+  const docs = await Order.find(query).sort({ createdAt: -1 });
+  return docs.map(normalizeOrder);
+}
+
+/**
+ * Updates customerPhone and customerName on all orders belonging to a phone number.
+ */
+export async function updateOrdersCustomerDetails(
+  restaurantId: string,
+  oldPhone: string,
+  newName: string,
+  newPhone: string
+): Promise<void> {
+  await dbConnect();
+  await Order.updateMany(
+    { restaurantId, customerPhone: oldPhone.trim() },
+    { $set: { customerName: newName.trim(), customerPhone: newPhone.trim() } }
+  );
+}
+
+/**
+ * Updates customerName on all orders belonging to a phone number.
+ */
+export async function updateOrdersCustomerName(
+  restaurantId: string,
+  phone: string,
+  newName: string
+): Promise<void> {
+  await dbConnect();
+  await Order.updateMany(
+    { restaurantId, customerPhone: phone.trim() },
+    { $set: { customerName: newName.trim() } }
+  );
+}
+

@@ -3,6 +3,7 @@ import * as customerRepo from '@/features/customer/repository';
 import { NotFoundError } from '@/shared/errors';
 import { IOrder } from './types';
 import { validateCreateOrderPayload, validateOrderId, validateRestaurantId } from './validation';
+import { getAdminByRestaurantId } from '@/features/auth';
 
 /**
  * Places a new order inside the system.
@@ -15,6 +16,7 @@ export async function createOrder(data: {
   restaurantId: string;
   customerName: string;
   customerPhone: string;
+  customerOldPhone?: string;
   tableId?: string;
   items: Array<{
     menuItemId: string;
@@ -30,9 +32,34 @@ export async function createOrder(data: {
   total: number;
 }): Promise<IOrder> {
   validateCreateOrderPayload(data);
-  const { restaurantId, customerName, customerPhone, tableId, items, subtotal, total } = data;
+  const { restaurantId, customerName, customerPhone, customerOldPhone, tableId, items, subtotal, total } = data;
 
-  // 1. Create order
+  const trimmedPhone = customerPhone.trim();
+  const trimmedName = customerName.trim();
+  const trimmedOldPhone = customerOldPhone?.trim();
+
+  // 1. Handle profile updates if they override their cached details
+  if (trimmedOldPhone && trimmedOldPhone !== trimmedPhone) {
+    const oldCustomer = await customerRepo.findByPhone(restaurantId, trimmedOldPhone);
+    if (oldCustomer) {
+      const newPhoneExists = await customerRepo.findByPhone(restaurantId, trimmedPhone);
+      if (!newPhoneExists) {
+        // Update the existing customer document with the new name and phone number
+        await customerRepo.updateNameAndPhone(restaurantId, oldCustomer._id, trimmedName, trimmedPhone);
+        // Retroactively update past orders to the new details
+        await orderRepo.updateOrdersCustomerDetails(restaurantId, trimmedOldPhone, trimmedName, trimmedPhone);
+      }
+    }
+  } else {
+    // Phone number is the same (or no old phone provided), but they might have changed their name
+    const existingCustomer = await customerRepo.findByPhone(restaurantId, trimmedPhone);
+    if (existingCustomer && existingCustomer.name !== trimmedName) {
+      await customerRepo.updateName(restaurantId, existingCustomer._id, trimmedName);
+      await orderRepo.updateOrdersCustomerName(restaurantId, trimmedPhone, trimmedName);
+    }
+  }
+
+  // 2. Create order
   const order = await orderRepo.create({
     restaurantId,
     customerName,
@@ -44,10 +71,7 @@ export async function createOrder(data: {
     status: 'received',
   });
 
-  // 2. Track customer spent
-  const trimmedPhone = customerPhone.trim();
-  const trimmedName = customerName.trim();
-
+  // 3. Track customer spent and handle loyalty discount reset
   const customer = await customerRepo.findByPhone(restaurantId, trimmedPhone);
   if (customer) {
     await customerRepo.updateStats(
@@ -56,6 +80,9 @@ export async function createOrder(data: {
       customer.totalOrders + 1,
       customer.totalSpent + total
     );
+    if (customer.hasPendingDiscount) {
+      await customerRepo.resetPendingDiscount(restaurantId, customer._id);
+    }
   } else {
     await customerRepo.create({
       restaurantId,
@@ -122,6 +149,35 @@ export async function updateOrderStatus(id: string, restaurantId: string, status
   if (!updated) {
     throw new NotFoundError('Order not found');
   }
+
+  // Stamp Earning logic trigger on order completion
+  if (status === 'completed') {
+    try {
+      const admin = await getAdminByRestaurantId(restaurantId);
+      if (admin && admin.loyaltyEnabled) {
+        const stampsRequired = admin.stampsRequired ?? 8;
+        const phone = order.customerPhone.trim();
+        const customer = await customerRepo.findByPhone(restaurantId, phone);
+        if (customer) {
+          // If stamp count is already at max threshold, they must redeem first, so do not add more stamps
+          if (customer.stampCount < stampsRequired) {
+            // Check if they placed an order and earned a stamp today
+            const todayStr = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
+            const lastStampStr = customer.lastStampDate 
+              ? new Date(customer.lastStampDate).toISOString().split('T')[0] 
+              : '';
+            
+            if (todayStr !== lastStampStr) {
+              await customerRepo.awardStamp(restaurantId, customer._id, new Date());
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error awarding stamp on order completion:', err);
+    }
+  }
+
   return updated;
 }
 
@@ -147,3 +203,18 @@ export async function updateOrderEstimatedTime(id: string, restaurantId: string,
   }
   return updated;
 }
+
+/**
+ * Retrieves past orders associated with a customer's phone number.
+ * 
+ * @param phone The unique customer phone number.
+ * @param restaurantId Optional restaurant slug ID.
+ * @returns Normalized orders array.
+ */
+export async function getOrdersByCustomerPhone(phone: string, restaurantId?: string): Promise<IOrder[]> {
+  if (!phone || phone.trim().length < 8) {
+    throw new Error('Valid phone number is required');
+  }
+  return orderRepo.findByCustomerPhone(restaurantId, phone.trim());
+}
+

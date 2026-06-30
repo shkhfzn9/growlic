@@ -47,6 +47,7 @@ export default function OrderNotificationProvider({ children }: { children: Reac
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [audioError, setAudioError] = useState(false);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const [mounted, setMounted] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -98,6 +99,7 @@ export default function OrderNotificationProvider({ children }: { children: Reac
 
   // Initialize acknowledged IDs list from localStorage
   useEffect(() => {
+    setMounted(true);
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('growlic_acknowledged_orders');
       if (stored) {
@@ -346,7 +348,7 @@ export default function OrderNotificationProvider({ children }: { children: Reac
       {children}
 
       {/* 1. Global Interactivity Warning Banner */}
-      {!audioUnlocked && auth.isLoggedIn && isAdminRoute && (
+      {mounted && !audioUnlocked && auth.isLoggedIn && isAdminRoute && (
         <div 
           onClick={unlockAudio}
           onTouchStart={unlockAudio}
@@ -376,7 +378,7 @@ export default function OrderNotificationProvider({ children }: { children: Reac
       )}
 
       {/* 2. Floating Kitchen Alert Modal */}
-      {activeAlertOrders.length > 0 && isAdminRoute && (
+      {mounted && activeAlertOrders.length > 0 && isAdminRoute && (
         <div className="fixed top-20 right-6 left-6 md:left-auto md:max-w-md bg-[#FEF2F2] border-2 border-[#C0181A] rounded-xl p-5 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200">
           <div className="flex gap-3 items-start">
             <div className="bg-[#C0181A] p-2.5 rounded-lg text-white animate-pulse flex-shrink-0">

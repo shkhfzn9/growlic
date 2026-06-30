@@ -8,6 +8,7 @@ import * as analyticsService from '@/features/analytics';
 import * as eventService from '@/features/analytics';
 import { validateSession, can, getAdminByRestaurantId } from '@/features/auth';
 import { logAction } from '@/features/audit';
+import * as customerRepo from '@/features/customer/repository';
 
 /**
  * Validates the admin's authentication cookie ('admin_token') and decodes its payload.
@@ -51,6 +52,7 @@ export async function createOrder(data: {
   restaurantId: string;
   customerName: string;
   customerPhone: string;
+  customerOldPhone?: string;
   tableId?: string;
   items: Array<{
     menuItemId: string;
@@ -231,4 +233,123 @@ export async function logEvent(
     return { success: false };
   }
 }
+
+/**
+ * Server action to retrieve order histories associated with a customer's phone number.
+ * 
+ * @param phone The unique customer phone number.
+ * @param restaurantId Optional restaurant slug ID.
+ * @returns Serialized, plain array of order history.
+ */
+export async function getOrdersByCustomerPhone(phone: string, restaurantId?: string) {
+  try {
+    const orders = await orderService.getOrdersByCustomerPhone(phone, restaurantId);
+    return JSON.parse(JSON.stringify(orders));
+  } catch (error) {
+    console.error('Error fetching customer orders action:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch order history';
+    throw new Error(message);
+  }
+}
+
+/**
+ * Server action to fetch customer loyalty profile details and restaurant loyalty configuration.
+ */
+export async function getCustomerLoyaltyInfo(phone: string, restaurantId: string) {
+  try {
+    if (!phone || !restaurantId) {
+      throw new Error('Phone number and Restaurant ID are required');
+    }
+    const [customer, admin] = await Promise.all([
+      customerRepo.findByPhone(restaurantId, phone),
+      getAdminByRestaurantId(restaurantId),
+    ]);
+
+    return {
+      customer: customer ? JSON.parse(JSON.stringify(customer)) : null,
+      loyaltyEnabled: admin?.loyaltyEnabled ?? false,
+      stampsRequired: admin?.stampsRequired ?? 8,
+      discountPercentage: admin?.discountPercentage ?? 20,
+    };
+  } catch (error) {
+    console.error('Error fetching customer loyalty info:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch loyalty details';
+    throw new Error(message);
+  }
+}
+
+/**
+ * Server action to manually redeem loyalty stamps for a customer discount reward.
+ */
+export async function redeemLoyaltyReward(phone: string, restaurantId: string) {
+  try {
+    if (!phone || !restaurantId) {
+      throw new Error('Phone number and Restaurant ID are required');
+    }
+    const admin = await getAdminByRestaurantId(restaurantId);
+    if (!admin || !admin.loyaltyEnabled) {
+      throw new Error('Loyalty program is currently disabled');
+    }
+
+    const customer = await customerRepo.findByPhone(restaurantId, phone);
+    if (!customer) {
+      throw new Error('Customer profile not found');
+    }
+
+    const stampsRequired = admin.stampsRequired ?? 8;
+    if (customer.stampCount < stampsRequired) {
+      throw new Error(`Insufficient stamps collected (${customer.stampCount}/${stampsRequired})`);
+    }
+
+    const updated = await customerRepo.redeemReward(restaurantId, customer._id);
+    
+    // Revalidate customer history and settings paths
+    revalidatePath(`/orders`);
+    return JSON.parse(JSON.stringify(updated));
+  } catch (error) {
+    console.error('Error redeeming loyalty reward:', error);
+    const message = error instanceof Error ? error.message : 'Failed to redeem reward';
+    throw new Error(message);
+  }
+}
+
+/**
+ * Server action to fetch all loyalty summaries for a customer across all restaurants.
+ */
+export async function getCustomerLoyaltySummary(phone: string) {
+  try {
+    if (!phone) {
+      throw new Error('Phone number is required');
+    }
+    const trimmedPhone = phone.trim();
+    // Find all customer records for this phone number
+    const customerDocs = await customerRepo.findManyByPhoneAcrossRestaurants(trimmedPhone);
+
+    // Resolve restaurant details and filter for active loyalty programs
+    const summaryPromises = customerDocs.map(async (cust) => {
+      const admin = await getAdminByRestaurantId(cust.restaurantId);
+      if (admin && admin.loyaltyEnabled) {
+        return {
+          restaurantId: cust.restaurantId,
+          restaurantName: admin.restaurantName,
+          logoUrl: admin.logoUrl || '',
+          stampCount: cust.stampCount ?? 0,
+          stampsRequired: admin.stampsRequired ?? 8,
+          discountPercentage: admin.discountPercentage ?? 20,
+          hasPendingDiscount: cust.hasPendingDiscount ?? false,
+          totalRedemptions: cust.totalRedemptions ?? 0,
+        };
+      }
+      return null;
+    });
+
+    const summaries = await Promise.all(summaryPromises);
+    return summaries.filter((s): s is NonNullable<typeof s> => s !== null);
+  } catch (error) {
+    console.error('Error fetching customer loyalty summary:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch loyalty summary';
+    throw new Error(message);
+  }
+}
+
 

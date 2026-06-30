@@ -132,9 +132,16 @@ function OrdersContent() {
     }
   };
 
+  // Tracks initial mount to show skeleton loader only once
+  const isInitialMount = useRef(true);
+
   // Consolidated loading effect (runs when filter, page, or highlightId change)
   useEffect(() => {
-    loadOrders(true, currentPage);
+    const showLoading = isInitialMount.current;
+    loadOrders(showLoading, currentPage);
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+    }
   }, [filter, currentPage, highlightId]);
 
   // Polling effect (runs every 10 seconds, accesses latest states through refs)

@@ -14,6 +14,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const dispatch = useDispatch();
   const auth = useSelector((state: RootState) => state.auth);
 
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
   if (pathname === '/admin/login' || pathname === '/admin/register') {
     return <>{children}</>;
   }
@@ -33,16 +39,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <OrderNotificationProvider>
       <div className="flex flex-col md:flex-row min-h-screen bg-[#F4F6F9]">
-        <MobileHeader
-          restaurantName={auth.restaurantName || undefined}
-          email={auth.email || undefined}
-          onLogout={handleLogout}
-        />
-        <Sidebar
-          restaurantName={auth.restaurantName || undefined}
-          email={auth.email || undefined}
-          onLogout={handleLogout}
-        />
+        {mounted && (
+          <>
+            <MobileHeader
+              restaurantName={auth.restaurantName || undefined}
+              email={auth.email || undefined}
+              onLogout={handleLogout}
+            />
+            <Sidebar
+              restaurantName={auth.restaurantName || undefined}
+              email={auth.email || undefined}
+              onLogout={handleLogout}
+            />
+          </>
+        )}
         <main className="flex-1 p-4 md:p-8 overflow-y-auto min-h-screen">
           <div className="max-w-[1200px] mx-auto">{children}</div>
         </main>

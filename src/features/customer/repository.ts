@@ -19,6 +19,10 @@ export function normalizeCustomer(doc: any): ICustomer {
     phone: plain.phone,
     totalOrders: plain.totalOrders ?? 0,
     totalSpent: plain.totalSpent ?? 0,
+    stampCount: plain.stampCount ?? 0,
+    lastStampDate: plain.lastStampDate ? new Date(plain.lastStampDate).toISOString() : null,
+    hasPendingDiscount: !!plain.hasPendingDiscount,
+    totalRedemptions: plain.totalRedemptions ?? 0,
     createdAt: plain.createdAt ? new Date(plain.createdAt).toISOString() : undefined,
     updatedAt: plain.updatedAt ? new Date(plain.updatedAt).toISOString() : undefined,
   };
@@ -131,4 +135,103 @@ export async function findManyByPhones(restaurantId: string, phones: string[]): 
     phone: { $in: phones.map(p => p.trim()) },
   });
   return docs.map(normalizeCustomer);
+}
+
+/**
+ * Increments the customer's stamp count and updates the last stamp date.
+ */
+export async function awardStamp(
+  restaurantId: string,
+  id: string,
+  date: Date
+): Promise<ICustomer | null> {
+  await dbConnect();
+  const doc = await Customer.findOneAndUpdate(
+    { _id: id, restaurantId },
+    { 
+      $inc: { stampCount: 1 },
+      $set: { lastStampDate: date }
+    },
+    { new: true }
+  );
+  return doc ? normalizeCustomer(doc) : null;
+}
+
+/**
+ * Resets stamps, sets hasPendingDiscount to true, and increments redemptions.
+ */
+export async function redeemReward(
+  restaurantId: string,
+  id: string
+): Promise<ICustomer | null> {
+  await dbConnect();
+  const doc = await Customer.findOneAndUpdate(
+    { _id: id, restaurantId },
+    { 
+      $set: { stampCount: 0, hasPendingDiscount: true },
+      $inc: { totalRedemptions: 1 }
+    },
+    { new: true }
+  );
+  return doc ? normalizeCustomer(doc) : null;
+}
+
+/**
+ * Clears the customer's pending discount flag.
+ */
+export async function resetPendingDiscount(
+  restaurantId: string,
+  id: string
+): Promise<ICustomer | null> {
+  await dbConnect();
+  const doc = await Customer.findOneAndUpdate(
+    { _id: id, restaurantId },
+    { $set: { hasPendingDiscount: false } },
+    { new: true }
+  );
+  return doc ? normalizeCustomer(doc) : null;
+}
+
+/**
+ * Finds all customer documents matching a phone number across any restaurant.
+ */
+export async function findManyByPhoneAcrossRestaurants(phone: string): Promise<ICustomer[]> {
+  await dbConnect();
+  const docs = await Customer.find({ phone: phone.trim() });
+  return docs.map(normalizeCustomer);
+}
+
+/**
+ * Updates a customer's name and phone number.
+ */
+export async function updateNameAndPhone(
+  restaurantId: string,
+  id: string,
+  name: string,
+  phone: string
+): Promise<ICustomer | null> {
+  await dbConnect();
+  const doc = await Customer.findOneAndUpdate(
+    { _id: id, restaurantId },
+    { $set: { name: name.trim(), phone: phone.trim() } },
+    { new: true }
+  );
+  return doc ? normalizeCustomer(doc) : null;
+}
+
+/**
+ * Updates a customer's name.
+ */
+export async function updateName(
+  restaurantId: string,
+  id: string,
+  name: string
+): Promise<ICustomer | null> {
+  await dbConnect();
+  const doc = await Customer.findOneAndUpdate(
+    { _id: id, restaurantId },
+    { $set: { name: name.trim() } },
+    { new: true }
+  );
+  return doc ? normalizeCustomer(doc) : null;
 }

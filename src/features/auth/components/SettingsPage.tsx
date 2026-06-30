@@ -17,6 +17,12 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
+  const [stampsRequired, setStampsRequired] = useState(8);
+  const [discountPercentage, setDiscountPercentage] = useState(20);
+  const [loyaltySaving, setLoyaltySaving] = useState(false);
+  const [loyaltySaveSuccess, setLoyaltySaveSuccess] = useState(false);
+
   const [tables, setTables] = useState<string[]>(['1', '2', '3', '4', '5']);
   const [newTableLabel, setNewTableLabel] = useState('');
   const [qrUrls, setQrUrls] = useState<Record<string, string>>({});
@@ -29,6 +35,9 @@ export default function SettingsPage() {
           setLogoUrl(details.logoUrl || '');
           setPrimaryColor(details.primaryColor || '#000000');
           setWelcomeMessage(details.welcomeMessage || 'Welcome to our restaurant!');
+          setLoyaltyEnabled(!!details.loyaltyEnabled);
+          setStampsRequired(details.stampsRequired ?? 8);
+          setDiscountPercentage(details.discountPercentage ?? 20);
         }
       } catch (err) {
         console.error('Failed to load branding settings:', err);
@@ -90,7 +99,14 @@ export default function SettingsPage() {
     setSaving(true);
     setSaveSuccess(false);
     try {
-      await saveRestaurantBranding({ logoUrl, primaryColor, welcomeMessage });
+      await saveRestaurantBranding({ 
+        logoUrl, 
+        primaryColor, 
+        welcomeMessage,
+        loyaltyEnabled,
+        stampsRequired,
+        discountPercentage
+      });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
@@ -98,6 +114,40 @@ export default function SettingsPage() {
       alert('Failed to save settings: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveLoyalty = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loyaltyEnabled) {
+      if (stampsRequired <= 0) {
+        alert('Stamps required must be greater than 0.');
+        return;
+      }
+      if (discountPercentage < 1 || discountPercentage > 100) {
+        alert('Discount percentage must be between 1 and 100.');
+        return;
+      }
+    }
+
+    setLoyaltySaving(true);
+    setLoyaltySaveSuccess(false);
+    try {
+      await saveRestaurantBranding({
+        logoUrl,
+        primaryColor,
+        welcomeMessage,
+        loyaltyEnabled,
+        stampsRequired,
+        discountPercentage
+      });
+      setLoyaltySaveSuccess(true);
+      setTimeout(() => setLoyaltySaveSuccess(false), 3000);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save settings: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setLoyaltySaving(false);
     }
   };
 
@@ -193,6 +243,74 @@ export default function SettingsPage() {
 
         <AdminButton type="submit" loading={saving} className="w-full">
           Save Branding
+        </AdminButton>
+      </form>
+
+      {/* Loyalty Program */}
+      <form onSubmit={handleSaveLoyalty} className="bg-white border border-[#E2E6EA] rounded-xl p-6 flex flex-col gap-5">
+        <div>
+          <h2 className="text-[15px] font-semibold text-[#111827]">Loyalty Program Settings</h2>
+          <p className="text-[13px] text-[#6B7280] mt-0.5">Enable and configure customer stamps loyalty rewards</p>
+        </div>
+
+        {loyaltySaveSuccess && (
+          <div className="flex items-center gap-2 bg-[#F0FDF4] border border-[#16A34A]/20 rounded-lg p-3 text-sm text-[#16A34A] font-medium">
+            <CheckCircle className="w-4 h-4" /> Loyalty settings saved successfully
+          </div>
+        )}
+
+        <div className="flex items-center justify-between p-3.5 bg-[#F4F6F9] rounded-lg border border-[#E2E6EA]">
+          <div>
+            <span className="text-sm font-semibold text-[#111827] block">Enable Loyalty Program</span>
+            <span className="text-xs text-[#6B7280]">Customers will earn stamps and redeem discounts</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setLoyaltyEnabled(!loyaltyEnabled)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+              loyaltyEnabled ? 'bg-[#C0181A]' : 'bg-[#E2E6EA]'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                loyaltyEnabled ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+
+        {loyaltyEnabled && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Stamps Required</label>
+              <input
+                type="number"
+                min="1"
+                placeholder="8"
+                value={stampsRequired}
+                onChange={(e) => setStampsRequired(parseInt(e.target.value) || 0)}
+                className="px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors"
+                required
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Discount Percentage (%)</label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                placeholder="20"
+                value={discountPercentage}
+                onChange={(e) => setDiscountPercentage(parseInt(e.target.value) || 0)}
+                className="px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors"
+                required
+              />
+            </div>
+          </div>
+        )}
+
+        <AdminButton type="submit" loading={loyaltySaving} className="w-full">
+          Save Loyalty Settings
         </AdminButton>
       </form>
 

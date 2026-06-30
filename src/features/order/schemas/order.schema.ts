@@ -4,6 +4,7 @@ export interface CreateOrderPayload {
   restaurantId: string;
   customerName: string;
   customerPhone: string;
+  customerOldPhone?: string;
   tableId?: string;
   items: Array<{
     menuItemId: string;

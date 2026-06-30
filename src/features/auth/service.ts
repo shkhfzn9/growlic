@@ -370,6 +370,9 @@ export async function updateRestaurantBranding(
     logoUrl?: string;
     primaryColor?: string;
     welcomeMessage?: string;
+    loyaltyEnabled?: boolean;
+    stampsRequired?: number;
+    discountPercentage?: number;
   }
 ) {
   if (!restaurantId) {

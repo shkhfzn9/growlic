@@ -5,7 +5,7 @@ import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { UtensilsCrossed, ShoppingBag, Receipt } from 'lucide-react';
+import { UtensilsCrossed, ShoppingBag, Receipt, Award } from 'lucide-react';
 
 interface CustomerNavbarProps {
   restaurantId?: string;
@@ -16,8 +16,9 @@ export default function CustomerNavbar({ restaurantId }: CustomerNavbarProps) {
   const cart = useSelector((state: RootState) => state.cart);
   
   const [lastOrder, setLastOrder] = useState<{ id: string; restaurantId: string } | null>(null);
+  const [hasPhone, setHasPhone] = useState(false);
 
-  // Load last order details from localStorage
+  // Load last order details and check phone cache from localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const id = localStorage.getItem('last_order_id');
@@ -25,6 +26,8 @@ export default function CustomerNavbar({ restaurantId }: CustomerNavbarProps) {
       if (id) {
         setLastOrder({ id, restaurantId: restId || '' });
       }
+      const phone = localStorage.getItem('customer_phone');
+      setHasPhone(!!phone);
     }
   }, [pathname]); // Refresh on navigation/pathname changes
 
@@ -49,7 +52,8 @@ export default function CustomerNavbar({ restaurantId }: CustomerNavbarProps) {
   // Active state flags
   const isMenuActive = pathname.startsWith('/menu/');
   const isCartActive = pathname === '/cart';
-  const isOrderActive = pathname.startsWith('/track/');
+  const isStampsActive = pathname === '/stamps';
+  const isOrdersActive = pathname === '/orders';
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-sm bg-gradient-to-r from-[#8B0000]/95 via-[#7B0000]/95 to-[#6B0000]/95 border border-white/15 rounded-full py-2.5 px-6 flex items-center justify-around shadow-[0_12px_40px_rgba(107,0,0,0.5)] backdrop-blur-md">
@@ -88,18 +92,34 @@ export default function CustomerNavbar({ restaurantId }: CustomerNavbarProps) {
         }`} />
       </Link>
 
-      {/* Track Order Link (visible only if there's a recent order) */}
-      {lastOrder && (
+      {/* Stamps Link */}
+      {(lastOrder || hasPhone) && (
         <Link
-          href={`/track/${lastOrder.id}?restaurantId=${lastOrder.restaurantId}`}
+          href="/stamps"
           className={`flex flex-col items-center gap-0.5 transition-all duration-200 active:scale-95 ${
-            isOrderActive ? 'text-[#F5C518]' : 'text-white/60 hover:text-white'
+            isStampsActive ? 'text-[#F5C518]' : 'text-white/60 hover:text-white'
+          }`}
+        >
+          <Award className="w-5 h-5" />
+          <span className="text-[10px] font-bold uppercase tracking-wider">Stamps</span>
+          <span className={`w-1 h-1 rounded-full bg-[#F5C518] transition-all duration-300 ${
+            isStampsActive ? 'scale-100 opacity-100 mt-0.5' : 'scale-0 opacity-0 h-0 mt-0'
+          }`} />
+        </Link>
+      )}
+
+      {/* Orders Link (visible if there's a recent order or they are logged in with phone) */}
+      {(lastOrder || hasPhone) && (
+        <Link
+          href={`/orders?restaurantId=${currentRestaurantId}`}
+          className={`flex flex-col items-center gap-0.5 transition-all duration-200 active:scale-95 ${
+            isOrdersActive ? 'text-[#F5C518]' : 'text-white/60 hover:text-white'
           }`}
         >
           <Receipt className="w-5 h-5" />
-          <span className="text-[10px] font-bold uppercase tracking-wider">My Order</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider">Orders</span>
           <span className={`w-1 h-1 rounded-full bg-[#F5C518] transition-all duration-300 ${
-            isOrderActive ? 'scale-100 opacity-100 mt-0.5' : 'scale-0 opacity-0 h-0 mt-0'
+            isOrdersActive ? 'scale-100 opacity-100 mt-0.5' : 'scale-0 opacity-0 h-0 mt-0'
           }`} />
         </Link>
       )}

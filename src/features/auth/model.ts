@@ -13,6 +13,9 @@ export interface IAdminDocument extends Document {
   welcomeMessage?: string;
   active?: boolean;
   location?: string;
+  loyaltyEnabled?: boolean;
+  stampsRequired?: number;
+  discountPercentage?: number;
 }
 
 const AdminSchema: Schema = new Schema<IAdminDocument>(
@@ -29,6 +32,9 @@ const AdminSchema: Schema = new Schema<IAdminDocument>(
     welcomeMessage: { type: String, default: 'Welcome to our restaurant!' },
     active: { type: Boolean, default: true, required: true },
     location: { type: String, default: 'Tokyo', required: true },
+    loyaltyEnabled: { type: Boolean, default: false },
+    stampsRequired: { type: Number, default: 8 },
+    discountPercentage: { type: Number, default: 20 },
   },
   { timestamps: true }
 );

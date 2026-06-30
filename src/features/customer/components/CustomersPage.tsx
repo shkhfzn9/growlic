@@ -93,6 +93,9 @@ export default function CustomersPage() {
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Phone</th>
                   <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Orders</th>
                   <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Total Spent</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Stamps</th>
+                  <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Redeemed</th>
+                  <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Reward</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E2E6EA]">
@@ -102,6 +105,17 @@ export default function CustomersPage() {
                     <td className="px-4 py-3.5 text-[#6B7280] font-mono text-[13px]">{cust.phone}</td>
                     <td className="px-4 py-3.5 text-right text-[#111827]">{cust.totalOrders}</td>
                     <td className="px-4 py-3.5 text-right font-semibold text-[#111827]">₹{cust.totalSpent}</td>
+                    <td className="px-4 py-3.5 text-right text-[#111827] font-mono">{cust.stampCount ?? 0}</td>
+                    <td className="px-4 py-3.5 text-center text-[#111827] font-mono">{cust.totalRedemptions ?? 0}</td>
+                    <td className="px-4 py-3.5 text-center">
+                      {cust.hasPendingDiscount ? (
+                        <span className="bg-[#FEF3C7] text-[#D97706] text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                          Discount Active
+                        </span>
+                      ) : (
+                        <span className="text-[#9CA3AF] text-[11px] font-medium">-</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

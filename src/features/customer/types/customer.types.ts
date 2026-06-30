@@ -4,4 +4,7 @@ export interface Customer {
   phone: string;
   totalOrders: number;
   totalSpent: number;
+  stampCount?: number;
+  hasPendingDiscount?: boolean;
+  totalRedemptions?: number;
 }

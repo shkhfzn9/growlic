@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { updateQuantity, removeItem, clearCart, addItem } from '@/redux/cartSlice';
-import { createOrder, logEvent } from '@/actions/orders';
+import { createOrder, logEvent, getCustomerLoyaltyInfo } from '@/actions/orders';
 import { getUpsellConfig } from '@/actions/upsell';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -87,6 +87,55 @@ export default function CartPage() {
   const [formError, setFormError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [offersLoading, setOffersLoading] = useState(true);
+  const [isCachedUser, setIsCachedUser] = useState(false);
+  const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [originalCachedPhone, setOriginalCachedPhone] = useState('');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  const [loyaltyInfo, setLoyaltyInfo] = useState<{
+    customer: {
+      stampCount: number;
+      hasPendingDiscount: boolean;
+      totalRedemptions: number;
+    } | null;
+    loyaltyEnabled: boolean;
+    stampsRequired: number;
+    discountPercentage: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const cachedName = localStorage.getItem('customer_name');
+      const cachedPhone = localStorage.getItem('customer_phone');
+      if (cachedName && cachedPhone) {
+        setName(cachedName);
+        setPhone(cachedPhone);
+        setOriginalCachedPhone(cachedPhone);
+        setIsCachedUser(true);
+        if (cart.restaurantId) {
+          getCustomerLoyaltyInfo(cachedPhone, cart.restaurantId)
+            .then(setLoyaltyInfo)
+            .catch((err) => console.error('Error fetching loyalty details inside cart:', err));
+        }
+      }
+    }
+  }, [cart.restaurantId]);
+
+  useEffect(() => {
+    if (phone.length === 10 && cart.restaurantId) {
+      getCustomerLoyaltyInfo(phone, cart.restaurantId)
+        .then((info) => {
+          setLoyaltyInfo(info);
+          if (info.customer) {
+            setName(info.customer.name);
+          }
+        })
+        .catch((err) => console.error('Error loading loyalty details on input:', err));
+    }
+  }, [phone, cart.restaurantId]);
 
   useEffect(() => {
     if (cart.restaurantId) {
@@ -537,6 +586,15 @@ export default function CartPage() {
     }
   };
 
+  const loyaltyDiscount = React.useMemo(() => {
+    if (loyaltyInfo?.loyaltyEnabled && loyaltyInfo?.customer?.hasPendingDiscount && items.length > 0) {
+      return Math.round(subtotal * (loyaltyInfo.discountPercentage / 100));
+    }
+    return 0;
+  }, [loyaltyInfo, subtotal, items]);
+
+  const finalDiscountedTotal = Math.max(0, evaluationResult.discountedTotal - loyaltyDiscount);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
@@ -563,6 +621,7 @@ export default function CartPage() {
         restaurantId: cart.restaurantId,
         customerName: name.trim(),
         customerPhone: phone.trim(),
+        customerOldPhone: originalCachedPhone ? originalCachedPhone.trim() : undefined,
         tableId: cart.tableId || undefined,
         items: cart.items.map((item) => ({
           menuItemId: item.id,
@@ -572,7 +631,7 @@ export default function CartPage() {
           image: item.image,
         })),
         subtotal: subtotal,
-        total: evaluationResult.discountedTotal,
+        total: finalDiscountedTotal,
       };
 
       const createdOrder = await createOrder(orderPayload);
@@ -583,6 +642,11 @@ export default function CartPage() {
       if (typeof window !== 'undefined') {
         localStorage.setItem('last_order_id', createdOrder._id);
         localStorage.setItem('last_order_restaurant_id', cart.restaurantId || '');
+        localStorage.setItem('customer_name', name.trim());
+        localStorage.setItem('customer_phone', phone.trim());
+        setOriginalCachedPhone(phone.trim());
+        setIsCachedUser(true);
+        setIsEditingDetails(false);
       }
 
       router.push(`/track/${createdOrder._id}?restaurantId=${cart.restaurantId}`);
@@ -595,6 +659,14 @@ export default function CartPage() {
   };
 
   const menuUrl = cart.restaurantId ? `/menu/${cart.restaurantId}` : '/menu/tokyo-momos';
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-bg-dark to-bg-darker flex flex-col items-center justify-center p-6 relative overflow-hidden">
+        <Loader2 className="w-8 h-8 text-white/50 animate-spin" />
+      </div>
+    );
+  }
 
   if (cart.items.length === 0) {
     return (
@@ -677,6 +749,19 @@ export default function CartPage() {
             </div>
           ))}
 
+          {/* Loyalty Discount Banner */}
+          {loyaltyInfo?.loyaltyEnabled && loyaltyInfo?.customer?.hasPendingDiscount && (
+            <div className="bg-green-50 border-t border-b border-green-200/50 p-4 text-green-800 flex items-center gap-3">
+              <Sparkles className="w-5 h-5 text-[#F5C518] fill-current animate-pulse flex-shrink-0" />
+              <div>
+                <span className="font-bold text-xs uppercase tracking-wide block">Loyalty Reward Active!</span>
+                <p className="text-[11px] text-green-600 font-semibold leading-tight mt-0.5">
+                  A {loyaltyInfo.discountPercentage}% discount has been applied to this order since you redeemed your stamps.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Totals */}
           <div className="border-t border-surface bg-surface/50 p-4 flex flex-col gap-2">
             <div className="flex justify-between text-sm text-text-dark/60">
@@ -693,9 +778,19 @@ export default function CartPage() {
               </div>
             ))}
 
+            {loyaltyDiscount > 0 && (
+              <div className="flex justify-between text-xs text-green-700 font-bold">
+                <span className="flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-[#F5C518] fill-current animate-pulse" />
+                  Loyalty Reward ({loyaltyInfo?.discountPercentage}% Off)
+                </span>
+                <span>-₹{loyaltyDiscount}</span>
+              </div>
+            )}
+
             <div className="flex justify-between items-center border-t border-text-dark/10 pt-2 mt-1">
               <span className="font-black text-lg text-text-dark">Total</span>
-              <span className="font-black text-xl text-text-dark">₹{evaluationResult.discountedTotal}</span>
+              <span className="font-black text-xl text-text-dark">₹{finalDiscountedTotal}</span>
             </div>
           </div>
         </div>
@@ -836,44 +931,89 @@ export default function CartPage() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[0.7rem] uppercase font-bold text-bg-dark tracking-[0.02em]">Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. John Doe"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  disabled={loading}
-                  className="bg-surface border-[1.5px] border-transparent rounded-[10px] px-4 py-3 text-sm text-text-dark outline-none transition-colors focus:border-primary placeholder:text-text-dark/40"
-                  required
-                  autoFocus
-                />
-              </div>
+            {isCachedUser && !isEditingDetails ? (
+              <div className="flex flex-col gap-4">
+                <div className="bg-surface rounded-xl p-4 border border-text-dark/5">
+                  <span className="text-[0.65rem] text-text-dark/40 uppercase font-bold tracking-wider">Ordering As</span>
+                  <p className="font-bold text-base text-text-dark mt-0.5">{name}</p>
+                  <p className="text-xs text-text-dark/60 mt-0.5">{phone}</p>
+                </div>
+                
+                <p className="text-xs text-text-dark/50 text-center px-2">
+                  Confirm your details above. Your details are cached on this device for a faster checkout.
+                </p>
 
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[0.7rem] uppercase font-bold text-bg-dark tracking-[0.02em]">Phone Number</label>
-                <input
-                  type="tel"
-                  maxLength={10}
-                  placeholder="e.g. 9876543210"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                  disabled={loading}
-                  className="bg-surface border-[1.5px] border-transparent rounded-[10px] px-4 py-3 text-sm text-text-dark outline-none transition-colors focus:border-primary placeholder:text-text-dark/40"
-                  required
-                />
-              </div>
+                <div className="flex flex-col gap-2 mt-2">
+                  <button
+                    onClick={(e) => {
+                      handleSubmit(e);
+                    }}
+                    disabled={loading}
+                    className="w-full bg-cta text-text-dark font-bold text-sm py-4 rounded-xl uppercase tracking-wide active:scale-[0.97] transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {loading ? 'Placing Order...' : 'Confirm & Place Order'}
+                  </button>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-cta text-text-dark font-bold text-sm py-4 rounded-xl uppercase tracking-wide mt-2 active:scale-[0.97] transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                {loading ? 'Placing Order...' : 'Confirm & Place Order'}
-              </button>
-            </form>
+                  <button
+                    onClick={() => setIsEditingDetails(true)}
+                    disabled={loading}
+                    className="w-full bg-surface text-text-dark font-bold text-xs py-3 rounded-xl hover:bg-surface/80 transition-colors"
+                  >
+                    Change Details
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[0.7rem] uppercase font-bold text-bg-dark tracking-[0.02em]">Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. John Doe"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    disabled={loading}
+                    className="bg-surface border-[1.5px] border-transparent rounded-[10px] px-4 py-3 text-sm text-text-dark outline-none transition-colors focus:border-primary placeholder:text-text-dark/40"
+                    required
+                    autoFocus
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[0.7rem] uppercase font-bold text-bg-dark tracking-[0.02em]">Phone Number</label>
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    placeholder="e.g. 9876543210"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+                    disabled={loading}
+                    className="bg-surface border-[1.5px] border-transparent rounded-[10px] px-4 py-3 text-sm text-text-dark outline-none transition-colors focus:border-primary placeholder:text-text-dark/40"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-cta text-text-dark font-bold text-sm py-4 rounded-xl uppercase tracking-wide mt-2 active:scale-[0.97] transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {loading ? 'Placing Order...' : 'Confirm & Place Order'}
+                </button>
+
+                {isCachedUser && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingDetails(false)}
+                    className="text-xs text-text-dark/50 hover:text-text-dark text-center mt-1 underline"
+                  >
+                    Cancel Edit
+                  </button>
+                )}
+              </form>
+            )}
           </div>
         </div>
       )}
