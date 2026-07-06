@@ -325,6 +325,12 @@ function OrdersContent() {
                       Table {selectedOrder.tableId}
                     </span>
                   )}
+                  {selectedOrder.notes && (
+                    <div className="mt-3 p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-[#C0181A]">
+                      <span className="font-extrabold uppercase tracking-wide block mb-1">Note to Chef:</span>
+                      <p className="italic font-medium leading-relaxed">"{selectedOrder.notes}"</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Receipt */}

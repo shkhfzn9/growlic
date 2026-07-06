@@ -10,6 +10,7 @@ export interface IAdmin {
   primaryColor?: string;
   welcomeMessage?: string;
   loyaltyEnabled?: boolean;
+  callStaffEnabled?: boolean;
   stampsRequired?: number;
   discountPercentage?: number;
   createdAt?: string;

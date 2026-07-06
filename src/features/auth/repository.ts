@@ -28,6 +28,7 @@ export function normalizeAdmin(doc: any): IAdmin {
     active: plain.active !== undefined ? plain.active : true,
     location: plain.location || 'Tokyo',
     loyaltyEnabled: plain.loyaltyEnabled !== undefined ? !!plain.loyaltyEnabled : false,
+    callStaffEnabled: plain.callStaffEnabled !== false,
     stampsRequired: plain.stampsRequired ?? 8,
     discountPercentage: plain.discountPercentage ?? 20,
   };
@@ -244,6 +245,7 @@ export async function updateBranding(
     primaryColor?: string;
     welcomeMessage?: string;
     loyaltyEnabled?: boolean;
+    callStaffEnabled?: boolean;
     stampsRequired?: number;
     discountPercentage?: number;
   }
@@ -257,6 +259,7 @@ export async function updateBranding(
         primaryColor: data.primaryColor,
         welcomeMessage: data.welcomeMessage,
         loyaltyEnabled: data.loyaltyEnabled,
+        callStaffEnabled: data.callStaffEnabled,
         stampsRequired: data.stampsRequired,
         discountPercentage: data.discountPercentage,
       }

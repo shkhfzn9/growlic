@@ -17,6 +17,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  const [callStaffEnabled, setCallStaffEnabled] = useState(true);
+
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
   const [stampsRequired, setStampsRequired] = useState(8);
   const [discountPercentage, setDiscountPercentage] = useState(20);
@@ -36,6 +38,7 @@ export default function SettingsPage() {
           setPrimaryColor(details.primaryColor || '#000000');
           setWelcomeMessage(details.welcomeMessage || 'Welcome to our restaurant!');
           setLoyaltyEnabled(!!details.loyaltyEnabled);
+          setCallStaffEnabled(details.callStaffEnabled !== false);
           setStampsRequired(details.stampsRequired ?? 8);
           setDiscountPercentage(details.discountPercentage ?? 20);
         }
@@ -104,6 +107,7 @@ export default function SettingsPage() {
         primaryColor, 
         welcomeMessage,
         loyaltyEnabled,
+        callStaffEnabled,
         stampsRequired,
         discountPercentage
       });
@@ -138,6 +142,7 @@ export default function SettingsPage() {
         primaryColor,
         welcomeMessage,
         loyaltyEnabled,
+        callStaffEnabled,
         stampsRequired,
         discountPercentage
       });
@@ -239,6 +244,20 @@ export default function SettingsPage() {
               className="px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors"
             />
           </div>
+        </div>
+
+        <div className="flex items-center gap-3 bg-[#F4F6F9] border border-[#E2E6EA] rounded-lg p-4">
+          <input
+            type="checkbox"
+            id="callStaffEnabled"
+            checked={callStaffEnabled}
+            onChange={(e) => setCallStaffEnabled(e.target.checked)}
+            className="w-4.5 h-4.5 text-[#C0181A] border-gray-300 rounded focus:ring-[#C0181A]/20 cursor-pointer"
+          />
+          <label htmlFor="callStaffEnabled" className="text-sm font-semibold text-[#111827] cursor-pointer select-none">
+            Enable "Call Staff" Button on Customer App
+            <span className="text-xs text-[#6B7280] font-normal block mt-0.5">Allow customers to ring staff alerts from their table</span>
+          </label>
         </div>
 
         <AdminButton type="submit" loading={saving} className="w-full">

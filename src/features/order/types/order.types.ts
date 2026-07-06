@@ -16,6 +16,7 @@ export interface Order {
   discountApplied: number;
   total: number;
   status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+  notes?: string;
   createdAt: string;
   updatedAt: string;
   estimatedTime?: number;

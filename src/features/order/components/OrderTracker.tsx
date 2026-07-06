@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { getOrderById } from '@/actions/orders';
+import { getOrderById, getCustomerLoyaltyInfo } from '@/actions/orders';
 import Link from 'next/link';
 import { Check, Clock, ChefHat, UtensilsCrossed, PartyPopper, XCircle } from 'lucide-react';
 import { CustomerNavbar } from '@/components/layout';
+import { TRACK_NUDGES } from '../constants/trackNudges';
 
 interface OrderItem {
   menuItemId: string;
@@ -23,6 +24,7 @@ interface OrderData {
   total: number;
   status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
   estimatedTime?: number;
+  notes?: string;
   createdAt: string;
 }
 
@@ -40,6 +42,39 @@ const STATUS_STEPS: Array<{ key: OrderData['status']; label: string; icon: React
 export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProps) {
   const [order, setOrder] = useState<OrderData>(initialOrder);
   const [now, setNow] = useState(() => Date.now());
+  const [currentNudgeIdx, setCurrentNudgeIdx] = useState(0);
+  const [loyaltyInfo, setLoyaltyInfo] = useState<{
+    loyaltyEnabled: boolean;
+    stampsRequired: number;
+    stampCount: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (order.customerPhone && order.restaurantId) {
+      getCustomerLoyaltyInfo(order.customerPhone, order.restaurantId)
+        .then((info) => {
+          if (info && info.loyaltyEnabled) {
+            setLoyaltyInfo({
+              loyaltyEnabled: true,
+              stampsRequired: info.stampsRequired || 8,
+              stampCount: info.customer?.stampCount || 0,
+            });
+          }
+        })
+        .catch((err) => console.error('Error fetching tracker loyalty info:', err));
+    }
+  }, [order.customerPhone, order.restaurantId]);
+
+  useEffect(() => {
+    const isPreparing = !['ready', 'completed', 'cancelled'].includes(order.status);
+    if (!isPreparing) return;
+
+    const interval = setInterval(() => {
+      setCurrentNudgeIdx((prev) => (prev + 1) % TRACK_NUDGES.length);
+    }, 6000);
+
+    return () => clearInterval(interval);
+  }, [order.status]);
 
   useEffect(() => {
     if (order.status === 'completed' || order.status === 'cancelled') {
@@ -164,6 +199,76 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
             </div>
           )}
 
+          {/* Stamps Progress Tracker */}
+          {loyaltyInfo && loyaltyInfo.loyaltyEnabled && (
+            <div className="bg-[#FAF9F5] border border-amber-200/40 rounded-xl p-4 flex flex-col gap-3 shadow-inner">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-amber-800 font-extrabold uppercase tracking-wider flex items-center gap-1">
+                  ✨ Stamp Reward Progress
+                </span>
+                <span className="text-[10px] text-gray-500 font-bold">
+                  {loyaltyInfo.stampCount} / {loyaltyInfo.stampsRequired} Stamps
+                </span>
+              </div>
+
+              {/* Stamp Line */}
+              <div className="relative py-4 px-2 flex items-center justify-between">
+                {/* Connecting Line Track */}
+                <div className="absolute left-4 right-4 h-0.5 bg-gray-200 top-1/2 -translate-y-1/2" />
+                <div 
+                  className="absolute left-4 h-0.5 bg-[#C0181A] top-1/2 -translate-y-1/2 transition-all duration-500"
+                  style={{ 
+                    width: `${Math.min(100, Math.max(0, ((loyaltyInfo.stampCount - 1) / (loyaltyInfo.stampsRequired - 1)) * 100))}%` 
+                  }}
+                />
+
+                {/* Stamp Circles */}
+                {Array.from({ length: loyaltyInfo.stampsRequired }).map((_, idx) => {
+                  const stampNumber = idx + 1;
+                  const isCollected = stampNumber <= loyaltyInfo.stampCount;
+                  const isCurrent = stampNumber === loyaltyInfo.stampCount;
+
+                  return (
+                    <div key={idx} className="relative z-10 flex flex-col items-center">
+                      <div
+                        className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-[9px] transition-all duration-300 ${
+                          isCollected
+                            ? 'bg-[#C0181A] text-white shadow-md scale-110'
+                            : 'bg-white border-2 border-gray-200 text-gray-400'
+                        } ${isCurrent ? 'ring-2 ring-[#C0181A]/40' : ''}`}
+                      >
+                        {stampNumber}
+                      </div>
+
+                      {/* Pointer Indicator */}
+                      {isCurrent && (
+                        <div className="absolute -bottom-4 animate-bounce flex flex-col items-center">
+                          <span className="text-[7px] bg-[#C0181A] text-white px-1.5 py-0.2 rounded font-black uppercase tracking-tighter whitespace-nowrap shadow-sm">
+                            You
+                          </span>
+                          <div className="w-1 h-1 bg-[#C0181A] rotate-45 -mt-0.5" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <p className="text-[9px] text-gray-500 font-semibold text-center mt-2 leading-relaxed">
+                Each order gets you closer to a free meal! {loyaltyInfo.stampsRequired - loyaltyInfo.stampCount} stamps left to unlock your discount.
+              </p>
+            </div>
+          )}
+
+          {/* Moving Nudges Ticker */}
+          {!['ready', 'completed', 'cancelled'].includes(order.status) && (
+            <div className="bg-[#FFFDF5] border border-[#F5C518]/30 rounded-xl p-3.5 shadow-sm overflow-hidden relative min-h-[56px] flex items-center justify-center transition-all duration-300">
+              <div key={currentNudgeIdx} className="text-center text-xs text-amber-900 font-bold leading-relaxed animate-in fade-in slide-in-from-right-4 duration-350">
+                {TRACK_NUDGES[currentNudgeIdx].text}
+              </div>
+            </div>
+          )}
+
           {/* Progress Steps */}
           {order.status !== 'cancelled' && (
             <div className="flex flex-col gap-0 py-2">
@@ -202,11 +307,46 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
             </div>
           )}
 
+          {/* QR Payment Block */}
+          {!['ready', 'completed', 'cancelled'].includes(order.status) && (
+            <div className="border-t border-surface pt-4 flex flex-col items-center text-center">
+              <div className="bg-[#FEF2F2] border border-[#FECACA] rounded-2xl p-4 w-full flex flex-col items-center gap-3">
+                <span className="text-[10px] bg-[#C0181A] text-white px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider">
+                  Quick Pay
+                </span>
+                
+                {/* QR Code Container */}
+                <div className="relative bg-white p-2.5 rounded-xl border border-gray-100 shadow-inner">
+                  <img
+                    src="/1783337039466.png"
+                    alt="PhonePe Payment QR"
+                    className="w-64 h-64 object-contain rounded-lg"
+                  />
+                </div>
+
+                <div className="max-w-[280px]">
+                  <p className="text-xs font-black text-gray-900 leading-snug">
+                    Pay using PhonePe QR to begin preparation
+                  </p>
+                  <p className="text-[10px] text-gray-500 font-medium mt-1 leading-relaxed">
+                    Scan to pay now. Showing payment confirmation to the staff starts prep immediately and guarantees a seamless pickup without waiting!
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Customer Details */}
           <div className="border-t border-surface pt-4">
             <h3 className="text-[0.65rem] font-bold uppercase text-bg-dark tracking-wider mb-2">Customer</h3>
             <p className="text-sm text-text-dark font-medium">{order.customerName}</p>
             <p className="text-xs text-text-dark/60">{order.customerPhone}</p>
+            {order.notes && (
+              <div className="mt-3 p-3 bg-[#FFFBEB] border border-[#F5C518]/20 rounded-xl text-xs text-[#D97706] font-semibold leading-relaxed">
+                <span className="font-extrabold uppercase block text-[9px] text-[#B45309] tracking-wider mb-0.5">Note to Chef:</span>
+                <p className="italic">"{order.notes}"</p>
+              </div>
+            )}
           </div>
 
           {/* Order Items */}

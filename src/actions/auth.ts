@@ -41,6 +41,7 @@ export async function saveRestaurantBranding(data: {
   primaryColor?: string;
   welcomeMessage?: string;
   loyaltyEnabled?: boolean;
+  callStaffEnabled?: boolean;
   stampsRequired?: number;
   discountPercentage?: number;
 }) {

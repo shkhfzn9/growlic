@@ -14,6 +14,7 @@ export interface IAdminDocument extends Document {
   active?: boolean;
   location?: string;
   loyaltyEnabled?: boolean;
+  callStaffEnabled?: boolean;
   stampsRequired?: number;
   discountPercentage?: number;
 }
@@ -33,6 +34,7 @@ const AdminSchema: Schema = new Schema<IAdminDocument>(
     active: { type: Boolean, default: true, required: true },
     location: { type: String, default: 'Tokyo', required: true },
     loyaltyEnabled: { type: Boolean, default: false },
+    callStaffEnabled: { type: Boolean, default: true },
     stampsRequired: { type: Number, default: 8 },
     discountPercentage: { type: Number, default: 20 },
   },

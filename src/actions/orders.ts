@@ -66,6 +66,7 @@ export async function createOrder(data: {
   }>;
   subtotal: number;
   total: number;
+  notes?: string;
 }) {
   try {
     const order = await orderService.createOrder(data);
@@ -349,6 +350,41 @@ export async function getCustomerLoyaltySummary(phone: string) {
     console.error('Error fetching customer loyalty summary:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch loyalty summary';
     throw new Error(message);
+  }
+}
+
+export async function callStaffAction(restaurantId: string, tableId: string) {
+  try {
+    const result = await orderService.createStaffCall(restaurantId, tableId);
+    return JSON.parse(JSON.stringify(result));
+  } catch (error) {
+    console.error('Error creating staff call action:', error);
+    throw new Error(error instanceof Error ? error.message : 'Failed to call staff');
+  }
+}
+
+export async function getPendingStaffCallsAction(restaurantId: string) {
+  try {
+    const admin = await checkAdminAuth();
+    if (admin.restaurantId.toLowerCase() !== restaurantId.toLowerCase()) {
+      throw new Error('Unauthorized restaurant access');
+    }
+    const result = await orderService.getPendingStaffCalls(restaurantId);
+    return JSON.parse(JSON.stringify(result));
+  } catch (error) {
+    console.error('Error getting pending staff calls:', error);
+    throw new Error(error instanceof Error ? error.message : 'Failed to get staff calls');
+  }
+}
+
+export async function resolveStaffCallAction(callId: string, status: 'accepted' | 'rejected') {
+  try {
+    const admin = await checkAdminAuth();
+    const result = await orderService.updateStaffCallStatus(callId, status);
+    return JSON.parse(JSON.stringify(result));
+  } catch (error) {
+    console.error('Error resolving staff call:', error);
+    throw new Error(error instanceof Error ? error.message : 'Failed to resolve staff call');
   }
 }
 

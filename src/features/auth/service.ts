@@ -371,6 +371,7 @@ export async function updateRestaurantBranding(
     primaryColor?: string;
     welcomeMessage?: string;
     loyaltyEnabled?: boolean;
+    callStaffEnabled?: boolean;
     stampsRequired?: number;
     discountPercentage?: number;
   }

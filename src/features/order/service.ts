@@ -30,9 +30,10 @@ export async function createOrder(data: {
   }>;
   subtotal: number;
   total: number;
+  notes?: string;
 }): Promise<IOrder> {
   validateCreateOrderPayload(data);
-  const { restaurantId, customerName, customerPhone, customerOldPhone, tableId, items, subtotal, total } = data;
+  const { restaurantId, customerName, customerPhone, customerOldPhone, tableId, items, subtotal, total, notes } = data;
 
   const trimmedPhone = customerPhone.trim();
   const trimmedName = customerName.trim();
@@ -69,6 +70,7 @@ export async function createOrder(data: {
     subtotal,
     total,
     status: 'received',
+    notes,
   });
 
   // 3. Track customer spent and handle loyalty discount reset
@@ -216,5 +218,17 @@ export async function getOrdersByCustomerPhone(phone: string, restaurantId?: str
     throw new Error('Valid phone number is required');
   }
   return orderRepo.findByCustomerPhone(restaurantId, phone.trim());
+}
+
+export async function createStaffCall(restaurantId: string, tableId: string) {
+  return orderRepo.createStaffCall(restaurantId, tableId);
+}
+
+export async function getPendingStaffCalls(restaurantId: string) {
+  return orderRepo.getPendingStaffCalls(restaurantId);
+}
+
+export async function updateStaffCallStatus(callId: string, status: 'accepted' | 'rejected') {
+  return orderRepo.updateStaffCallStatus(callId, status);
 }
 

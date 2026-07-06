@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
-import { getAdminOrders, updateOrderStatus, updateOrderEstimatedTime } from '@/actions/orders';
+import { getAdminOrders, updateOrderStatus, updateOrderEstimatedTime, getPendingStaffCallsAction, resolveStaffCallAction } from '@/actions/orders';
 import { BellRing, VolumeX, Volume2, AlertCircle } from 'lucide-react';
 import { AdminButton } from '../ui';
 import { usePathname, useRouter } from 'next/navigation';
@@ -17,6 +17,7 @@ interface Order {
   items: Array<{ name: string; quantity: number }>;
   total: number;
   status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+  notes?: string;
   createdAt: string;
 }
 
@@ -44,6 +45,10 @@ export default function OrderNotificationProvider({ children }: { children: Reac
 
   const [activeAlertOrders, setActiveAlertOrders] = useState<Order[]>([]);
   const [acknowledgedIds, setAcknowledgedIds] = useState<string[]>([]);
+
+  const [activeStaffCalls, setActiveStaffCalls] = useState<any[]>([]);
+  const [acknowledgedCallIds, setAcknowledgedCallIds] = useState<string[]>([]);
+
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [audioError, setAudioError] = useState(false);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
@@ -107,6 +112,14 @@ export default function OrderNotificationProvider({ children }: { children: Reac
           setAcknowledgedIds(JSON.parse(stored));
         } catch (e) {
           console.error('Failed to parse acknowledged order IDs from localStorage:', e);
+        }
+      }
+      const storedCalls = localStorage.getItem('growlic_acknowledged_calls');
+      if (storedCalls) {
+        try {
+          setAcknowledgedCallIds(JSON.parse(storedCalls));
+        } catch (e) {
+          console.error('Failed to parse acknowledged call IDs from localStorage:', e);
         }
       }
     }
@@ -183,7 +196,8 @@ export default function OrderNotificationProvider({ children }: { children: Reac
   // Loop Audio playback or trigger synthesis based on active alert status
   useEffect(() => {
     const hasUnacknowledgedOrders = activeAlertOrders.length > 0;
-    const shouldPlay = hasUnacknowledgedOrders && isAdminRoute;
+    const hasUnacknowledgedCalls = activeStaffCalls.length > 0;
+    const shouldPlay = (hasUnacknowledgedOrders || hasUnacknowledgedCalls) && isAdminRoute;
 
     if (shouldPlay && audioUnlocked) {
       if (audioError) {
@@ -211,17 +225,18 @@ export default function OrderNotificationProvider({ children }: { children: Reac
         synthIntervalRef.current = null;
       }
     }
-  }, [activeAlertOrders, audioUnlocked, audioError, isAdminRoute]);
+  }, [activeAlertOrders, activeStaffCalls, audioUnlocked, audioError, isAdminRoute]);
 
-  // Polling mechanism to check for incoming orders
+  // Polling mechanism to check for incoming orders and staff calls
   useEffect(() => {
     if (!auth.isLoggedIn || !auth.restaurantId || !isAdminRoute) {
       // Clear alert state if logged out or not on admin route
       setActiveAlertOrders([]);
+      setActiveStaffCalls([]);
       return;
     }
 
-    const checkIncomingOrders = async () => {
+    const checkIncomingOrdersAndCalls = async () => {
       const timestamp = Date.now();
       // Throttle manual trigger checks to at most once per 5 seconds
       if (!intervalId.current && timestamp - lastCheckedAt.current < 5000) {
@@ -233,23 +248,34 @@ export default function OrderNotificationProvider({ children }: { children: Reac
         return;
       }
       try {
-        // Fetch up to 50 active received orders
-        const result = await getAdminOrders(50, 0, 'received');
-        const incomingOrders: Order[] = result.orders || [];
+        // Fetch received orders and pending staff calls in parallel
+        const [ordersResult, staffCallsResult] = await Promise.all([
+          getAdminOrders(50, 0, 'received'),
+          getPendingStaffCallsAction(auth.restaurantId || ''),
+        ]);
 
-        // Filter out orders that have already been manually acknowledged
+        const incomingOrders: Order[] = ordersResult.orders || [];
+        const incomingCalls: any[] = staffCallsResult || [];
+
+        // Filter out orders/calls that have already been acknowledged
         const unacknowledged = incomingOrders.filter(
           (order) => order.status === 'received' && !acknowledgedIds.includes(order._id)
         );
+        const unacknowledgedCalls = incomingCalls.filter(
+          (call) => call.status === 'pending' && !acknowledgedCallIds.includes(call._id)
+        );
 
         setActiveAlertOrders(unacknowledged);
+        setActiveStaffCalls(unacknowledgedCalls);
+
+        const totalUnacknowledged = unacknowledged.length + unacknowledgedCalls.length;
 
         // Dynamic polling interval:
-        // - If we have active unacknowledged received orders, poll fast (5s) to keep alerts responsive.
-        // - If there are zero received orders, clear interval entirely (0 background requests).
-        if (unacknowledged.length > 0) {
+        // - If we have active alerts, poll fast (5s) to keep alerts responsive.
+        // - If there are zero received alerts, clear interval entirely (0 background requests).
+        if (totalUnacknowledged > 0) {
           if (!intervalId.current) {
-            intervalId.current = setInterval(checkIncomingOrders, 5000);
+            intervalId.current = setInterval(checkIncomingOrdersAndCalls, 5000);
           }
         } else {
           if (intervalId.current) {
@@ -258,16 +284,16 @@ export default function OrderNotificationProvider({ children }: { children: Reac
           }
         }
       } catch (err) {
-        console.error('[Alert] Error polling new orders:', err);
+        console.error('[Alert] Error polling new orders and staff calls:', err);
       }
     };
 
     // Run first check immediately
-    checkIncomingOrders();
+    checkIncomingOrdersAndCalls();
 
-    // Trigger single check on window focus/click to wake up interval if a new order arrived
+    // Trigger single check on window focus/click to wake up interval
     const handleActivity = () => {
-      checkIncomingOrders();
+      checkIncomingOrdersAndCalls();
     };
 
     if (typeof window !== 'undefined') {
@@ -285,7 +311,7 @@ export default function OrderNotificationProvider({ children }: { children: Reac
         window.removeEventListener('click', handleActivity);
       }
     };
-  }, [auth.isLoggedIn, auth.restaurantId, acknowledgedIds, isAdminRoute]);
+  }, [auth.isLoggedIn, auth.restaurantId, acknowledgedIds, acknowledgedCallIds, isAdminRoute]);
 
   // Stop alert for a specific order (Add to acknowledged lists)
   const acknowledgeOrder = (orderId: string) => {
@@ -379,7 +405,7 @@ export default function OrderNotificationProvider({ children }: { children: Reac
 
       {/* 2. Floating Kitchen Alert Modal */}
       {mounted && activeAlertOrders.length > 0 && isAdminRoute && (
-        <div className="fixed top-20 right-6 left-6 md:left-auto md:max-w-md bg-[#FEF2F2] border-2 border-[#C0181A] rounded-xl p-5 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed top-20 right-6 left-6 md:left-auto md:max-w-xl bg-[#FEF2F2] border-2 border-[#C0181A] rounded-xl p-5 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200">
           <div className="flex gap-3 items-start">
             <div className="bg-[#C0181A] p-2.5 rounded-lg text-white animate-pulse flex-shrink-0">
               <BellRing className="w-6 h-6" />
@@ -395,19 +421,28 @@ export default function OrderNotificationProvider({ children }: { children: Reac
               </p>
 
               {/* Scrollable list of active orders */}
-              <div className="flex flex-col gap-1.5 mt-3 max-h-36 overflow-y-auto pr-1">
+              <div className="flex flex-col gap-2.5 mt-3 max-h-[60vh] overflow-y-auto pr-1">
                 {activeAlertOrders.map((order) => {
                   const itemsSummary = order.items.map((i) => `${i.name} (${i.quantity}x)`).join(', ');
                   const isLoading = actionLoading[order._id];
                   return (
-                    <div key={order._id} className="bg-white border border-[#C0181A]/20 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div key={order._id} className="bg-white border border-[#C0181A]/20 rounded-lg p-3 flex flex-col justify-between gap-3 shadow-sm">
                       <div className="min-w-0 flex-1">
-                        <span className="text-[11px] font-bold text-[#111827] block">
-                          Table {order.tableId || 'Takeaway'} ({order.customerName || 'Guest'})
-                        </span>
-                        <span className="text-[10px] text-[#6B7280] block truncate sm:max-w-[200px]" title={itemsSummary}>
+                        <div className="flex items-center justify-between border-b border-gray-100 pb-1.5 mb-1.5">
+                          <span className="text-xs font-bold text-[#111827]">
+                            Table {order.tableId || 'Takeaway'} ({order.customerName || 'Guest'})
+                          </span>
+                          <span className="text-xs font-black text-[#C0181A]">₹{order.total}</span>
+                        </div>
+                        <span className="text-[11px] text-[#4B5563] block font-medium mb-1.5" title={itemsSummary}>
                           {itemsSummary}
                         </span>
+                        {order.notes && (
+                          <div className="mt-2.5 p-2.5 bg-red-50/70 border border-red-100 rounded-lg text-[10px] text-[#C0181A] font-semibold leading-relaxed">
+                            <span className="font-extrabold uppercase block tracking-wider text-[8px] mb-0.5">Chef Note:</span>
+                            <p className="italic">"{order.notes}"</p>
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0 justify-between sm:justify-start w-full sm:w-auto pt-2 sm:pt-0 border-t border-dashed border-gray-100 sm:border-0">
                         <select
@@ -434,6 +469,93 @@ export default function OrderNotificationProvider({ children }: { children: Reac
                           className="px-3 py-1 text-[10px] font-bold bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50 transition-all flex-1 sm:flex-none"
                         >
                           {isLoading ? '...' : 'Reject'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Floating Staff Call Alert Modal */}
+      {mounted && activeStaffCalls.length > 0 && isAdminRoute && (
+        <div className="fixed bottom-24 right-6 left-6 md:left-auto md:max-w-md bg-[#FFFBEB] border-2 border-[#D97706] rounded-xl p-5 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex gap-3 items-start">
+            <div className="bg-[#D97706] p-2.5 rounded-lg text-white animate-pulse flex-shrink-0">
+              <BellRing className="w-6 h-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-[15px] font-black text-[#D97706] uppercase tracking-wide">
+                Customer Calling Staff!
+              </h3>
+              <p className="text-xs text-[#374151] mt-1 font-semibold">
+                {activeStaffCalls.length === 1
+                  ? `Customer at Table ${activeStaffCalls[0].tableId} is requesting assistance.`
+                  : `${activeStaffCalls.length} tables are calling for assistance.`}
+              </p>
+
+              <div className="flex flex-col gap-2 mt-3 max-h-36 overflow-y-auto pr-1">
+                {activeStaffCalls.map((call) => {
+                  const isCallLoading = actionLoading[call._id];
+                  return (
+                    <div key={call._id} className="bg-white border border-[#D97706]/20 rounded-lg p-3 flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-xs font-bold text-[#111827] block">
+                          Table {call.tableId}
+                        </span>
+                        <span className="text-[10px] text-[#6B7280] block">
+                          Needs assistance
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          disabled={isCallLoading}
+                          onClick={async () => {
+                            setActionLoading((prev) => ({ ...prev, [call._id]: true }));
+                            try {
+                              await resolveStaffCallAction(call._id, 'accepted');
+                              setAcknowledgedCallIds((prev) => {
+                                const updated = [...prev, call._id];
+                                localStorage.setItem('growlic_acknowledged_calls', JSON.stringify(updated));
+                                return updated;
+                              });
+                              setActiveStaffCalls((prev) => prev.filter((c) => c._id !== call._id));
+                            } catch (err) {
+                              console.error('Failed to accept staff call:', err);
+                            } finally {
+                              setActionLoading((prev) => ({ ...prev, [call._id]: false }));
+                            }
+                          }}
+                          className="px-3 py-1.5 text-[10px] font-bold bg-green-600 hover:bg-green-700 text-white rounded disabled:opacity-50 transition-all"
+                        >
+                          Accept
+                        </button>
+                        <button
+                          disabled={isCallLoading}
+                          onClick={async () => {
+                            if (confirm('Dismiss/Reject this call alert?')) {
+                              setActionLoading((prev) => ({ ...prev, [call._id]: true }));
+                              try {
+                                await resolveStaffCallAction(call._id, 'rejected');
+                                setAcknowledgedCallIds((prev) => {
+                                  const updated = [...prev, call._id];
+                                  localStorage.setItem('growlic_acknowledged_calls', JSON.stringify(updated));
+                                  return updated;
+                                });
+                                setActiveStaffCalls((prev) => prev.filter((c) => c._id !== call._id));
+                              } catch (err) {
+                                console.error('Failed to reject staff call:', err);
+                              } finally {
+                                setActionLoading((prev) => ({ ...prev, [call._id]: false }));
+                              }
+                            }
+                          }}
+                          className="px-3 py-1.5 text-[10px] font-bold bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50 transition-all"
+                        >
+                          Reject
                         </button>
                       </div>
                     </div>

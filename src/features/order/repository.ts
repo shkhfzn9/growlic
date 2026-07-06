@@ -1,5 +1,5 @@
 import dbConnect from '@/lib/mongodb';
-import Order from './model';
+import Order, { StaffCall } from './model';
 import { IOrder } from './types';
 
 /**
@@ -32,6 +32,7 @@ export function normalizeOrder(doc: any): IOrder {
     subtotal: plain.subtotal,
     total: plain.total,
     status: plain.status,
+    notes: plain.notes || '',
     estimatedTime: plain.estimatedTime ?? 0,
     createdAt: plain.createdAt ? new Date(plain.createdAt).toISOString() : '',
     updatedAt: plain.updatedAt ? new Date(plain.updatedAt).toISOString() : '',
@@ -62,6 +63,7 @@ export async function create(data: {
   subtotal: number;
   total: number;
   status?: IOrder['status'];
+  notes?: string;
 }): Promise<IOrder> {
   await dbConnect();
   const doc = await Order.create({
@@ -73,6 +75,7 @@ export async function create(data: {
     subtotal: data.subtotal,
     total: data.total,
     status: data.status || 'received',
+    notes: data.notes || '',
   });
   return normalizeOrder(doc);
 }
@@ -295,5 +298,44 @@ export async function updateOrdersCustomerName(
     { restaurantId, customerPhone: phone.trim() },
     { $set: { customerName: newName.trim() } }
   );
+}
+
+export function normalizeStaffCall(doc: any) {
+  const plain = doc.toObject ? doc.toObject() : doc;
+  return {
+    _id: plain._id.toString(),
+    restaurantId: plain.restaurantId,
+    tableId: plain.tableId,
+    status: plain.status,
+    createdAt: plain.createdAt ? new Date(plain.createdAt).toISOString() : '',
+    updatedAt: plain.updatedAt ? new Date(plain.updatedAt).toISOString() : '',
+  };
+}
+
+export async function createStaffCall(restaurantId: string, tableId: string) {
+  await dbConnect();
+  // Clear any existing pending calls for the same table to avoid duplicate alerts
+  await StaffCall.deleteMany({ restaurantId: restaurantId.toLowerCase(), tableId, status: 'pending' });
+  const doc = await StaffCall.create({
+    restaurantId: restaurantId.toLowerCase(),
+    tableId,
+    status: 'pending',
+  });
+  return normalizeStaffCall(doc);
+}
+
+export async function getPendingStaffCalls(restaurantId: string) {
+  await dbConnect();
+  const docs = await StaffCall.find({
+    restaurantId: restaurantId.toLowerCase(),
+    status: 'pending',
+  }).sort({ createdAt: 1 });
+  return docs.map(normalizeStaffCall);
+}
+
+export async function updateStaffCallStatus(callId: string, status: 'accepted' | 'rejected') {
+  await dbConnect();
+  const doc = await StaffCall.findByIdAndUpdate(callId, { status }, { new: true });
+  return doc ? normalizeStaffCall(doc) : null;
 }
 

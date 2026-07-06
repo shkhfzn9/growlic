@@ -14,6 +14,7 @@ export interface CreateOrderPayload {
   }>;
   subtotal: number;
   total: number;
+  notes?: string;
 }
 
 export const orderSchemas = {

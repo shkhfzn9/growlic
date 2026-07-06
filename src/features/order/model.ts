@@ -20,6 +20,7 @@ export interface IOrderDocument extends Document {
   subtotal: number;
   total: number;
   status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+  notes?: string;
   estimatedTime?: number; // preparation time in minutes
   createdAt: Date;
   updatedAt: Date;
@@ -51,6 +52,7 @@ const OrderSchema: Schema = new Schema<IOrderDocument>(
       default: 'received',
       index: true,
     },
+    notes: { type: String, default: '' },
     estimatedTime: { type: Number, default: 0 },
   },
   { timestamps: true }
@@ -59,6 +61,40 @@ const OrderSchema: Schema = new Schema<IOrderDocument>(
 OrderSchema.index({ restaurantId: 1, createdAt: -1 });
 OrderSchema.index({ restaurantId: 1, status: 1, createdAt: -1 });
 
+export interface IStaffCall {
+  _id: string;
+  restaurantId: string;
+  tableId: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface IStaffCallDocument extends Document {
+  restaurantId: string;
+  tableId: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const StaffCallSchema: Schema = new Schema<IStaffCallDocument>(
+  {
+    restaurantId: { type: String, required: true, index: true },
+    tableId: { type: String, required: true },
+    status: { type: String, enum: ['pending', 'accepted', 'rejected'], default: 'pending', index: true },
+  },
+  { timestamps: true }
+);
+
+if (process.env.NODE_ENV === 'development') {
+  delete mongoose.models.Order;
+  delete mongoose.models.StaffCall;
+}
+
 const Order: Model<IOrderDocument> = mongoose.models.Order || mongoose.model<IOrderDocument>('Order', OrderSchema);
+
+export const StaffCall: Model<IStaffCallDocument> =
+  mongoose.models.StaffCall || mongoose.model<IStaffCallDocument>('StaffCall', StaffCallSchema);
 
 export default Order;

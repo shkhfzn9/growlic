@@ -299,24 +299,44 @@ function OrdersHistoryContent() {
                   Earn 1 stamp per calendar day you place an order. Collect {loyaltyInfo.stampsRequired} stamps to unlock your reward discount!
                 </p>
 
-                {/* Stamp grid */}
-                <div className="grid grid-cols-4 gap-3 my-2 justify-items-center">
+                {/* Stamp Line Progress Tracker */}
+                <div className="relative py-4 px-2 my-3 flex items-center justify-between">
+                  {/* Connecting Line Track */}
+                  <div className="absolute left-4 right-4 h-0.5 bg-gray-200 top-1/2 -translate-y-1/2" />
+                  <div 
+                    className="absolute left-4 h-0.5 bg-[#C0181A] top-1/2 -translate-y-1/2 transition-all duration-500"
+                    style={{ 
+                      width: `${Math.min(100, Math.max(0, (((loyaltyInfo.customer?.stampCount ?? 0) - 1) / (loyaltyInfo.stampsRequired - 1)) * 100))}%` 
+                    }}
+                  />
+
+                  {/* Stamp Circles */}
                   {Array.from({ length: loyaltyInfo.stampsRequired }).map((_, idx) => {
+                    const stampNumber = idx + 1;
                     const stampCount = loyaltyInfo.customer?.stampCount ?? 0;
-                    const isEarned = idx < stampCount;
+                    const isCollected = stampNumber <= stampCount;
+                    const isCurrent = stampNumber === stampCount;
+
                     return (
-                      <div
-                        key={idx}
-                        className={`w-12 h-12 rounded-full border-2 flex items-center justify-center relative transition-all ${
-                          isEarned
-                            ? 'bg-gradient-to-br from-[#8B0000] to-[#C0181A] border-[#8B0000] text-[#F5C518] shadow-md scale-105'
-                            : 'bg-neutral-50 border-dashed border-neutral-300 text-neutral-300'
-                        }`}
-                      >
-                        {isEarned ? (
-                          <Star className="w-5 h-5 fill-current" />
-                        ) : (
-                          <span className="text-xs font-extrabold font-mono">{idx + 1}</span>
+                      <div key={idx} className="relative z-10 flex flex-col items-center">
+                        <div
+                          className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-[9px] transition-all duration-300 ${
+                            isCollected
+                              ? 'bg-[#C0181A] text-white shadow-md scale-110'
+                              : 'bg-white border-2 border-gray-200 text-gray-400'
+                          } ${isCurrent ? 'ring-2 ring-[#C0181A]/40' : ''}`}
+                        >
+                          {stampNumber}
+                        </div>
+
+                        {/* Pointer Indicator */}
+                        {isCurrent && (
+                          <div className="absolute -bottom-4 animate-bounce flex flex-col items-center">
+                            <span className="text-[7px] bg-[#C0181A] text-white px-1.5 py-0.2 rounded font-black uppercase tracking-tighter whitespace-nowrap shadow-sm">
+                              You
+                            </span>
+                            <div className="w-1 h-1 bg-[#C0181A] rotate-45 -mt-0.5" />
+                          </div>
                         )}
                       </div>
                     );

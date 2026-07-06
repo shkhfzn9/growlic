@@ -19,6 +19,7 @@ export interface IOrder {
   subtotal: number;
   total: number;
   status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+  notes?: string;
   estimatedTime?: number;
   createdAt?: string;
   updatedAt?: string;
