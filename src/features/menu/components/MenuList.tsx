@@ -5,7 +5,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { addItem, updateQuantity, removeItem, setTableId } from '@/redux/cartSlice';
 import Link from 'next/link';
-import { logEvent } from '@/actions/orders';
+import { logEvent, getCustomerLoyaltyInfo } from '@/actions/orders';
 import { Search, ShoppingBag, Minus, Plus, X, ChevronLeft, ChevronRight, Flame } from 'lucide-react';
 import { CustomerNavbar } from '@/components/layout';
 import { getActiveBanners } from '@/actions/banners';
@@ -168,10 +168,34 @@ export default function MenuList({
 }: MenuListProps) {
   const dispatch = useDispatch();
   const cartIsEmpty = useSelector((state: RootState) => state.cart.items.length === 0);
+  const [loyaltyInfo, setLoyaltyInfo] = useState<{
+    loyaltyEnabled: boolean;
+    stampsRequired: number;
+    stampCount: number;
+    discountPercentage: number;
+  } | null>(null);
 
   React.useEffect(() => {
     dispatch(setTableId(table || null));
   }, [table, dispatch]);
+
+  React.useEffect(() => {
+    const cachedPhone = typeof window !== 'undefined' ? localStorage.getItem('customer_phone') : null;
+    if (cachedPhone && restaurantId) {
+      getCustomerLoyaltyInfo(cachedPhone, restaurantId)
+        .then((info) => {
+          if (info && info.loyaltyEnabled) {
+            setLoyaltyInfo({
+              loyaltyEnabled: true,
+              stampsRequired: info.stampsRequired || 8,
+              stampCount: info.customer?.stampCount || 0,
+              discountPercentage: info.discountPercentage || 20,
+            });
+          }
+        })
+        .catch((err) => console.error('Error fetching menu loyalty info:', err));
+    }
+  }, [restaurantId]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -488,6 +512,69 @@ export default function MenuList({
           )}
         </div>
       </div>
+
+      {/* Loyalty Stamp Card */}
+      {loyaltyInfo && loyaltyInfo.loyaltyEnabled && (
+        <div className="w-full px-4 pb-4 bg-white">
+          <div className="max-w-2xl mx-auto bg-[#FAF9F5] border border-amber-200/40 rounded-2xl p-4 flex flex-col gap-3 shadow-sm">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] text-amber-800 font-extrabold uppercase tracking-wider flex items-center gap-1">
+                ✨ Stamp Reward Progress
+              </span>
+              <span className="text-[10px] text-gray-500 font-bold">
+                {loyaltyInfo.stampCount} / {loyaltyInfo.stampsRequired} Stamps
+              </span>
+            </div>
+
+            {/* Stamp Line */}
+            <div className="relative py-4 px-2 flex items-center justify-between">
+              {/* Connecting Line Track */}
+              <div className="absolute left-4 right-4 h-0.5 bg-gray-200 top-1/2 -translate-y-1/2" />
+              <div 
+                className="absolute left-4 h-0.5 bg-[#C0181A] top-1/2 -translate-y-1/2 transition-all duration-500"
+                style={{ 
+                  width: `${Math.min(100, Math.max(0, ((loyaltyInfo.stampCount - 1) / (loyaltyInfo.stampsRequired - 1)) * 100))}%` 
+                }}
+              />
+
+              {/* Stamp Circles */}
+              {Array.from({ length: loyaltyInfo.stampsRequired }).map((_, idx) => {
+                const stampNumber = idx + 1;
+                const isCollected = stampNumber <= loyaltyInfo.stampCount;
+                const isCurrent = stampNumber === loyaltyInfo.stampCount;
+
+                return (
+                  <div key={idx} className="relative z-10 flex flex-col items-center">
+                    <div
+                      className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-[9px] transition-all duration-300 ${
+                        isCollected
+                          ? 'bg-[#C0181A] text-white shadow-md scale-110'
+                          : 'bg-white border-2 border-gray-200 text-gray-400'
+                      } ${isCurrent ? 'ring-2 ring-[#C0181A]/40' : ''}`}
+                    >
+                      {stampNumber}
+                    </div>
+
+                    {/* Pointer Indicator */}
+                    {isCurrent && (
+                      <div className="absolute -bottom-4 animate-bounce flex flex-col items-center">
+                        <span className="text-[7px] bg-[#C0181A] text-white px-1.5 py-0.2 rounded font-black uppercase tracking-tighter whitespace-nowrap shadow-sm">
+                          You
+                        </span>
+                        <div className="w-1 h-1 bg-[#C0181A] rotate-45 -mt-0.5" />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <p className="text-[9px] text-gray-500 font-semibold text-center mt-2 leading-relaxed">
+              Earn 1 stamp per day you place an order. Collect {loyaltyInfo.stampsRequired - loyaltyInfo.stampCount} more to unlock a {loyaltyInfo.discountPercentage}% discount reward!
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Category Filters */}
       <div className="sticky top-0 z-20 bg-white border-b border-surface shadow-sm">
