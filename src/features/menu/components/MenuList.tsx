@@ -174,6 +174,7 @@ export default function MenuList({
     stampCount: number;
     discountPercentage: number;
   } | null>(null);
+  const [itemsToShow, setItemsToShow] = useState(20);
 
   React.useEffect(() => {
     dispatch(setTableId(table || null));
@@ -199,6 +200,11 @@ export default function MenuList({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    setItemsToShow(20);
+  }, [selectedCategory, searchQuery]);
+
   const [selectedDetailedItem, setSelectedDetailedItem] = useState<MenuItem | null>(null);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
@@ -341,6 +347,11 @@ export default function MenuList({
       item.description.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch && item.available;
   });
+
+  const showPagination = selectedCategory === null && filteredItems.length > itemsToShow;
+  const displayedItems = selectedCategory === null 
+    ? filteredItems.slice(0, itemsToShow) 
+    : filteredItems;
 
   const handleAddOne = useCallback((item: MenuItem, originatedFromNudge = false, nudgeType?: 'cross_sell' | 'threshold_discount' | 'combo_freebie', nudgeRuleId?: string) => {
     if (cartIsEmpty) {
@@ -615,7 +626,7 @@ export default function MenuList({
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {filteredItems.map((item) => (
+            {displayedItems.map((item) => (
               <MenuItemCard
                 key={item._id}
                 item={item}
@@ -625,6 +636,15 @@ export default function MenuList({
                 onOpenModal={openDetailedModal}
               />
             ))}
+
+            {showPagination && (
+              <button
+                onClick={() => setItemsToShow((prev) => prev + 20)}
+                className="w-full mt-4 bg-white border border-[#C0181A] hover:bg-[#C0181A]/5 text-[#C0181A] font-bold text-xs py-3.5 rounded-xl uppercase tracking-wider transition-colors active:scale-[0.98] shadow-sm flex items-center justify-center gap-1.5"
+              >
+                Load More Items ({filteredItems.length - itemsToShow} remaining)
+              </button>
+            )}
           </div>
         )}
       </main>
