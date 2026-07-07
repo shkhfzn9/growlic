@@ -124,6 +124,80 @@ This document lists the necessary REST APIs required to build your separate admi
 }
 ```
 
+### E. Trigger Staff Call (Customer Flow)
+* **Method:** `POST`
+* **URL:** `{{base_url}}/api/customer/staff-calls`
+* **Headers:** `Content-Type: application/json`
+* **Payload:**
+```json
+{
+  "restaurantId": "tokyo-momos",
+  "tableId": "T-3"
+}
+```
+* **Success Response (HTTP 200):**
+```json
+{
+  "success": true,
+  "call": {
+    "_id": "6685f0b8f1b2c4c8d5d90999",
+    "restaurantId": "tokyo-momos",
+    "tableId": "T-3",
+    "status": "pending",
+    "createdAt": "2026-07-03T10:15:00.000Z",
+    "updatedAt": "2026-07-03T10:15:00.000Z"
+  }
+}
+```
+
+### F. Fetch Pending Staff Calls (Admin Poll)
+* **Method:** `GET`
+* **URL:** `{{base_url}}/api/admin/staff-calls`
+* **Headers:** 
+  * `Authorization: Bearer {{jwt_token}}`
+* **Success Response (HTTP 200):**
+```json
+{
+  "success": true,
+  "calls": [
+    {
+      "_id": "6685f0b8f1b2c4c8d5d90999",
+      "restaurantId": "tokyo-momos",
+      "tableId": "T-3",
+      "status": "pending",
+      "createdAt": "2026-07-03T10:15:00.000Z"
+    }
+  ]
+}
+```
+
+### G. Accept/Resolve Staff Call (Admin Action)
+* **Method:** `PATCH`
+* **URL:** `{{base_url}}/api/admin/staff-calls/{{call_id}}`
+* **Headers:** 
+  * `Authorization: Bearer {{jwt_token}}`
+  * `Content-Type: application/json`
+* **Payload:**
+```json
+{
+  "status": "accepted"
+}
+```
+* **Success Response (HTTP 200):**
+```json
+{
+  "success": true,
+  "call": {
+    "_id": "6685f0b8f1b2c4c8d5d90999",
+    "restaurantId": "tokyo-momos",
+    "tableId": "T-3",
+    "status": "accepted",
+    "createdAt": "2026-07-03T10:15:00.000Z",
+    "updatedAt": "2026-07-03T10:16:10.000Z"
+  }
+}
+```
+
 ---
 
 ## 2. Postman Testing Process: Step-by-Step
@@ -324,6 +398,137 @@ export async function PATCH(
     return NextResponse.json({
       success: true,
       order: updatedOrder,
+    });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+```
+
+### Route 3: `src/app/api/admin/staff-calls/route.ts`
+Exposes the pending staff calls check to the admin application:
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyToken } from '@/lib/auth';
+import { can } from '@/features/auth';
+import * as orderService from '@/features/order';
+import { handleRouteError, AuthenticationError } from '@/shared/errors';
+
+function getAuthDetails(req: NextRequest) {
+  let token = req.cookies.get('admin_token')?.value;
+  if (!token) {
+    const authHeader = req.headers.get('authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+  }
+  if (!token) return null;
+  const decoded = verifyToken(token);
+  if (!decoded) return null;
+  return { ...decoded, token };
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const auth = getAuthDetails(req);
+    if (!auth) {
+      throw new AuthenticationError('Unauthorized access');
+    }
+
+    const isAllowed = (await can('manage_orders', auth.token, auth.restaurantId)) ||
+                      (await can('update_order_status', auth.token, auth.restaurantId));
+    if (!isAllowed) {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 });
+    }
+
+    const result = await orderService.getPendingStaffCalls(auth.restaurantId);
+    return NextResponse.json({
+      success: true,
+      calls: result,
+    });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+```
+
+### Route 4: `src/app/api/admin/staff-calls/[id]/route.ts`
+Allows the admin application to resolve (accept/reject) a staff call:
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyToken } from '@/lib/auth';
+import { can } from '@/features/auth';
+import * as orderService from '@/features/order';
+import { handleRouteError, AuthenticationError, ValidationError } from '@/shared/errors';
+
+function getAuthDetails(req: NextRequest) {
+  let token = req.cookies.get('admin_token')?.value;
+  if (!token) {
+    const authHeader = req.headers.get('authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+  }
+  if (!token) return null;
+  const decoded = verifyToken(token);
+  if (!decoded) return null;
+  return { ...decoded, token };
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const auth = getAuthDetails(req);
+    if (!auth) {
+      throw new AuthenticationError('Unauthorized access');
+    }
+
+    const { id } = await params;
+    const body = await req.json();
+    const { status } = body;
+
+    if (status !== 'accepted' && status !== 'rejected') {
+      throw new ValidationError('Status must be accepted or rejected');
+    }
+
+    const isAllowed = await can('update_order_status', auth.token, auth.restaurantId);
+    if (!isAllowed) {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 });
+    }
+
+    const updatedCall = await orderService.updateStaffCallStatus(id, status);
+    return NextResponse.json({
+      success: true,
+      call: updatedCall,
+    });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+```
+
+### Route 5: `src/app/api/customer/staff-calls/route.ts`
+Exposes table staff calls trigger endpoint to the customer:
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import * as orderService from '@/features/order';
+import { handleRouteError, ValidationError } from '@/shared/errors';
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { restaurantId, tableId } = body;
+
+    if (!restaurantId || !tableId) {
+      throw new ValidationError('restaurantId and tableId are required');
+    }
+
+    const result = await orderService.createStaffCall(restaurantId, tableId);
+    return NextResponse.json({
+      success: true,
+      call: result,
     });
   } catch (error) {
     return handleRouteError(error);
