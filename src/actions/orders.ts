@@ -261,9 +261,10 @@ export async function getCustomerLoyaltyInfo(phone: string, restaurantId: string
     if (!phone || !restaurantId) {
       throw new Error('Phone number and Restaurant ID are required');
     }
+    const cleanRestaurantId = restaurantId.toLowerCase().trim();
     const [customer, admin] = await Promise.all([
-      customerRepo.findByPhone(restaurantId, phone),
-      getAdminByRestaurantId(restaurantId),
+      customerRepo.findByPhone(cleanRestaurantId, phone),
+      getAdminByRestaurantId(cleanRestaurantId),
     ]);
 
     return {
@@ -287,12 +288,13 @@ export async function redeemLoyaltyReward(phone: string, restaurantId: string) {
     if (!phone || !restaurantId) {
       throw new Error('Phone number and Restaurant ID are required');
     }
-    const admin = await getAdminByRestaurantId(restaurantId);
+    const cleanRestaurantId = restaurantId.toLowerCase().trim();
+    const admin = await getAdminByRestaurantId(cleanRestaurantId);
     if (!admin || !admin.loyaltyEnabled) {
       throw new Error('Loyalty program is currently disabled');
     }
 
-    const customer = await customerRepo.findByPhone(restaurantId, phone);
+    const customer = await customerRepo.findByPhone(cleanRestaurantId, phone);
     if (!customer) {
       throw new Error('Customer profile not found');
     }
@@ -380,7 +382,7 @@ export async function getPendingStaffCallsAction(restaurantId: string) {
 export async function resolveStaffCallAction(callId: string, status: 'accepted' | 'rejected') {
   try {
     const admin = await checkAdminAuth();
-    const result = await orderService.updateStaffCallStatus(callId, status);
+    const result = await orderService.updateStaffCallStatus(callId, admin.restaurantId, status);
     return JSON.parse(JSON.stringify(result));
   } catch (error) {
     console.error('Error resolving staff call:', error);

@@ -44,6 +44,7 @@ export default async function MenuPage({ params, searchParams }: PageProps) {
   let hasError = false;
   let upsellDataResult: any = null;
   let banners: any[] = [];
+  let menuContextResult: any = null;
 
   let logoUrl = '';
   let primaryColor = '#C0181A';
@@ -51,6 +52,7 @@ export default async function MenuPage({ params, searchParams }: PageProps) {
 
   try {
     const context = await getRestaurantMenuContext(slug);
+    menuContextResult = context;
     const admin = context.admin;
     upsellDataResult = context.upsellConfig;
     banners = context.banners;
@@ -82,7 +84,7 @@ export default async function MenuPage({ params, searchParams }: PageProps) {
             Failed to connect to the database. Please verify your connection.
           </p>
           <Link
-            href="/api/seed"
+             href="/api/seed"
             className="block bg-cta text-text-dark font-bold text-sm py-3 rounded-xl uppercase tracking-wide text-center active:scale-[0.97] transition-transform"
           >
             Try to Re-Seed
@@ -141,6 +143,7 @@ export default async function MenuPage({ params, searchParams }: PageProps) {
         completedCount: upsellDataResult.completedCount,
         menuItems: upsellDataResult.menuItems
       } : undefined}
+      menuContext={menuContextResult}
     />
   );
 }

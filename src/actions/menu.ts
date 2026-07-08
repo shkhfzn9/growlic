@@ -2,7 +2,7 @@
 
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, unstable_cache, revalidateTag } from 'next/cache';
 import * as menuService from '@/features/menu';
 import { validateSession, can, getAdminByRestaurantId } from '@/features/auth';
 import { logAction } from '@/features/audit';
@@ -110,6 +110,7 @@ export async function createMenuItem(data: {
     }
 
     const newItem = await menuService.createMenuItem(admin.restaurantId, data);
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(newItem));
   } catch (error) {
@@ -173,6 +174,7 @@ export async function updateMenuItem(
     const action = (existing && updatedItem && existing.price !== updatedItem.price) ? 'MENU_PRICE_CHANGED' : 'MENU_UPDATED';
     await logAction(admin.restaurantId, admin.userId, action, existing, updatedItem);
 
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(updatedItem));
   } catch (error) {
@@ -204,6 +206,7 @@ export async function toggleMenuItemAvailability(id: string, available: boolean)
     // Audit log menu update
     await logAction(admin.restaurantId, admin.userId, 'MENU_UPDATED', existing, item);
 
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(item));
   } catch (error) {
@@ -229,6 +232,7 @@ export async function deleteMenuItem(id: string) {
     }
 
     await menuService.deleteMenuItem(id, admin.restaurantId);
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
     revalidatePath(`/menu/${admin.restaurantId}`);
     return { success: true };
   } catch (error) {
@@ -251,17 +255,25 @@ export async function getRestaurantMenuContext(restaurantId: string) {
       throw new Error('Restaurant ID is required');
     }
 
-    const [admin, banners, upsellConfig] = await Promise.all([
-      getAdminByRestaurantId(restaurantId),
-      menuService.getActiveBanners(restaurantId),
-      menuService.getUpsellConfig(restaurantId),
-    ]);
+    const cachedFetch = unstable_cache(
+      async (restId: string) => {
+        const [admin, banners, upsellConfig] = await Promise.all([
+          getAdminByRestaurantId(restId),
+          menuService.getActiveBanners(restId),
+          menuService.getUpsellConfig(restId),
+        ]);
+        return { admin, banners, upsellConfig };
+      },
+      ['restaurant-menu-context'],
+      {
+        tags: [`menu-${restaurantId}`],
+        revalidate: 30,
+      }
+    );
 
-    return JSON.parse(JSON.stringify({
-      admin,
-      banners,
-      upsellConfig,
-    }));
+    const data = await cachedFetch(restaurantId);
+
+    return JSON.parse(JSON.stringify(data));
   } catch (error) {
     console.error('Error fetching restaurant menu context action:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch restaurant menu context';

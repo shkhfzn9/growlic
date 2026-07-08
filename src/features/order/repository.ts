@@ -333,9 +333,13 @@ export async function getPendingStaffCalls(restaurantId: string) {
   return docs.map(normalizeStaffCall);
 }
 
-export async function updateStaffCallStatus(callId: string, status: 'accepted' | 'rejected') {
+export async function updateStaffCallStatus(callId: string, restaurantId: string, status: 'accepted' | 'rejected') {
   await dbConnect();
-  const doc = await StaffCall.findByIdAndUpdate(callId, { status }, { new: true });
+  const doc = await StaffCall.findOneAndUpdate(
+    { _id: callId, restaurantId: restaurantId.toLowerCase() },
+    { status },
+    { new: true }
+  );
   return doc ? normalizeStaffCall(doc) : null;
 }
 

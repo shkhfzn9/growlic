@@ -11,16 +11,22 @@ import { getRestaurantMenuContext } from '@/actions/menu';
 
 interface CustomerNavbarProps {
   restaurantId?: string;
+  menuContext?: any;
 }
 
-export default function CustomerNavbar({ restaurantId }: CustomerNavbarProps) {
+export default function CustomerNavbar({ restaurantId, menuContext }: CustomerNavbarProps) {
   const pathname = usePathname();
   const cart = useSelector((state: RootState) => state.cart);
   
   const [lastOrder, setLastOrder] = useState<{ id: string; restaurantId: string } | null>(null);
   const [hasPhone, setHasPhone] = useState(false);
 
-  const [callStaffAllowed, setCallStaffAllowed] = useState(true);
+  const [callStaffAllowed, setCallStaffAllowed] = useState(() => {
+    if (menuContext && menuContext.admin) {
+      return menuContext.admin.callStaffEnabled !== false;
+    }
+    return true;
+  });
   const [calling, setCalling] = useState(false);
   const [showCallConfirm, setShowCallConfirm] = useState(false);
   const [callSuccess, setCallSuccess] = useState(false);
@@ -58,6 +64,13 @@ export default function CustomerNavbar({ restaurantId }: CustomerNavbarProps) {
 
   // Hydrate Call Staff allowance config
   useEffect(() => {
+    if (menuContext) {
+      if (menuContext.admin) {
+        setCallStaffAllowed(menuContext.admin.callStaffEnabled !== false);
+      }
+      return;
+    }
+
     if (currentRestaurantId) {
       getRestaurantMenuContext(currentRestaurantId)
         .then((context) => {
@@ -67,7 +80,7 @@ export default function CustomerNavbar({ restaurantId }: CustomerNavbarProps) {
         })
         .catch((err) => console.error('Error fetching navbar call settings:', err));
     }
-  }, [currentRestaurantId]);
+  }, [currentRestaurantId, menuContext]);
 
   // Active state flags
   const isMenuActive = pathname.startsWith('/menu/');

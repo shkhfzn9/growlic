@@ -2,7 +2,7 @@
 
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import * as menuService from '@/features/menu';
 
 /**
@@ -65,6 +65,7 @@ export async function saveBanner(data: {
   try {
     const admin = await checkAdminAuth();
     const banner = await menuService.saveBanner(admin.restaurantId, data);
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
     revalidatePath(`/menu/${admin.restaurantId}`);
     return JSON.parse(JSON.stringify(banner));
   } catch (error) {
@@ -80,6 +81,7 @@ export async function deleteBanner(id: string) {
   try {
     const admin = await checkAdminAuth();
     await menuService.deleteBanner(id, admin.restaurantId);
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
     revalidatePath(`/menu/${admin.restaurantId}`);
     return { success: true };
   } catch (error) {

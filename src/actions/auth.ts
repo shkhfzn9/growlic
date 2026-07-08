@@ -2,7 +2,7 @@
 
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import { validateSession, getAdminByRestaurantId, updateRestaurantBranding, can } from '@/features/auth';
 
 /**
@@ -57,6 +57,7 @@ export async function saveRestaurantBranding(data: {
     
     revalidatePath(`/admin/settings`);
     revalidatePath(`/menu/${admin.restaurantId}`);
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
     return JSON.parse(JSON.stringify(updated));
   } catch (error) {
     console.error('Error saving restaurant branding:', error);

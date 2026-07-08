@@ -2,7 +2,7 @@
 
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import * as menuService from '@/features/menu';
 
 /**
@@ -56,6 +56,7 @@ export async function updateMenuItemCategory(itemId: string, category: string) {
     const updated = await menuService.updateMenuItem(itemId, admin.restaurantId, { category: category.trim() });
     revalidatePath(`/admin/upsell`);
     revalidatePath(`/menu/${admin.restaurantId}`);
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
     return JSON.parse(JSON.stringify(updated));
   } catch (error) {
     console.error('Error updating category action:', error);
@@ -77,6 +78,7 @@ export async function updateMenuItemPairsWith(itemId: string, pairsWithCategorie
     const updated = await menuService.updateMenuItem(itemId, admin.restaurantId, { pairsWithCategories });
     revalidatePath(`/admin/upsell`);
     revalidatePath(`/menu/${admin.restaurantId}`);
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
     return JSON.parse(JSON.stringify(updated));
   } catch (error) {
     console.error('Error updating pairings action:', error);
@@ -98,6 +100,7 @@ export async function updateMenuItemActive(itemId: string, active: boolean) {
     const updated = await menuService.updateMenuItem(itemId, admin.restaurantId, { active, available: active });
     revalidatePath(`/admin/upsell`);
     revalidatePath(`/menu/${admin.restaurantId}`);
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
     return JSON.parse(JSON.stringify(updated));
   } catch (error) {
     console.error('Error updating item state action:', error);
@@ -122,6 +125,7 @@ export async function savePairingRule(data: {
     const admin = await checkAdminAuth();
     const rule = await menuService.savePairingRule(admin.restaurantId, data);
     revalidatePath(`/admin/upsell`);
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
     return JSON.parse(JSON.stringify(rule));
   } catch (error) {
     console.error('Error saving pairing rule action:', error);
@@ -141,6 +145,7 @@ export async function deletePairingRule(id: string) {
     const admin = await checkAdminAuth();
     await menuService.deletePairingRule(id, admin.restaurantId);
     revalidatePath(`/admin/upsell`);
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
     return { success: true };
   } catch (error) {
     console.error('Error deleting pairing rule action:', error);
@@ -166,6 +171,7 @@ export async function saveDiscountTier(data: {
     const admin = await checkAdminAuth();
     const tier = await menuService.saveDiscountTier(admin.restaurantId, data);
     revalidatePath(`/admin/upsell`);
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
     return JSON.parse(JSON.stringify(tier));
   } catch (error) {
     console.error('Error saving discount tier action:', error);
@@ -185,6 +191,7 @@ export async function deleteDiscountTier(id: string) {
     const admin = await checkAdminAuth();
     await menuService.deleteDiscountTier(id, admin.restaurantId);
     revalidatePath(`/admin/upsell`);
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
     return { success: true };
   } catch (error) {
     console.error('Error deleting discount tier action:', error);
@@ -212,6 +219,7 @@ export async function saveComboRule(data: {
     const admin = await checkAdminAuth();
     const rule = await menuService.saveComboRule(admin.restaurantId, data);
     revalidatePath(`/admin/upsell`);
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
     return JSON.parse(JSON.stringify(rule));
   } catch (error) {
     console.error('Error saving combo rule action:', error);
@@ -231,6 +239,7 @@ export async function deleteComboRule(id: string) {
     const admin = await checkAdminAuth();
     await menuService.deleteComboRule(id, admin.restaurantId);
     revalidatePath(`/admin/upsell`);
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
     return { success: true };
   } catch (error) {
     console.error('Error deleting combo rule action:', error);

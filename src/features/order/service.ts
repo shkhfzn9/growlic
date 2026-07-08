@@ -228,7 +228,7 @@ export async function getPendingStaffCalls(restaurantId: string) {
   return orderRepo.getPendingStaffCalls(restaurantId);
 }
 
-export async function updateStaffCallStatus(callId: string, status: 'accepted' | 'rejected') {
-  return orderRepo.updateStaffCallStatus(callId, status);
+export async function updateStaffCallStatus(callId: string, restaurantId: string, status: 'accepted' | 'rejected') {
+  return orderRepo.updateStaffCallStatus(callId, restaurantId, status);
 }
 

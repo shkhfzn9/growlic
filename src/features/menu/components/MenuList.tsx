@@ -154,6 +154,7 @@ interface MenuListProps {
     completedCount: number;
     menuItems: MenuItem[];
   };
+  menuContext?: any;
 }
 
 export default function MenuList({
@@ -165,6 +166,7 @@ export default function MenuList({
   logoUrl,
   welcomeMessage,
   upsellData,
+  menuContext,
 }: MenuListProps) {
   const dispatch = useDispatch();
   const cartIsEmpty = useSelector((state: RootState) => state.cart.items.length === 0);
@@ -650,7 +652,7 @@ export default function MenuList({
       </main>
 
       {/* Persistent Customer Navigation Bar */}
-      <CustomerNavbar restaurantId={restaurantId} />
+      <CustomerNavbar restaurantId={restaurantId} menuContext={menuContext} />
       {/* Product Details Modal */}
       {selectedDetailedItem && (
         <ProductDetailsModal
