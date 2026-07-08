@@ -56,9 +56,22 @@ async function verifyTokenEdge(token: string, secret: string): Promise<any | nul
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // 1. CORS Preflight & Header Handling for API routes
+  if (pathname.startsWith('/api/')) {
+    if (request.method === 'OPTIONS') {
+      const response = new NextResponse(null, { status: 204 });
+      response.headers.set('Access-Control-Allow-Origin', '*');
+      response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+      response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+      response.headers.set('Access-Control-Max-Age', '86400');
+      return response;
+    }
+  }
+
   const token = request.cookies.get('admin_token')?.value;
 
-  // 1. Super Admin Route Protection: /super-admin/**
+  // 2. Super Admin Route Protection: /super-admin/**
   if (pathname.startsWith('/super-admin')) {
     if (!token) {
       const url = new URL('/admin/login', request.url);
@@ -74,7 +87,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 2. Restaurant Admin Route Protection: /admin/** (excluding login, register)
+  // 3. Restaurant Admin Route Protection: /admin/** (excluding login, register)
   const isAuthPage = pathname === '/admin/login' || pathname === '/admin/register';
   if (pathname.startsWith('/admin') && !isAuthPage) {
     if (!token) {
@@ -100,5 +113,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/super-admin/:path*'],
+  matcher: ['/admin/:path*', '/super-admin/:path*', '/api/:path*'],
 };
