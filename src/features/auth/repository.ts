@@ -31,6 +31,8 @@ export function normalizeAdmin(doc: any): IAdmin {
     callStaffEnabled: plain.callStaffEnabled !== false,
     stampsRequired: plain.stampsRequired ?? 8,
     discountPercentage: plain.discountPercentage ?? 20,
+    expoPushToken: plain.expoPushToken || null,
+    fcmToken: plain.fcmToken || null,
   };
 }
 
@@ -262,6 +264,28 @@ export async function updateBranding(
         callStaffEnabled: data.callStaffEnabled,
         stampsRequired: data.stampsRequired,
         discountPercentage: data.discountPercentage,
+      }
+    },
+    { new: true }
+  );
+  return doc ? normalizeAdmin(doc) : null;
+}
+
+/**
+ * Updates the push notification tokens for a specific restaurant/tenant.
+ */
+export async function updatePushTokens(
+  restaurantId: string,
+  expoPushToken: string | null,
+  fcmToken: string | null
+): Promise<IAdmin | null> {
+  await dbConnect();
+  const doc = await Admin.findOneAndUpdate(
+    { restaurantId: restaurantId.toLowerCase() },
+    {
+      $set: {
+        expoPushToken: expoPushToken,
+        fcmToken: fcmToken,
       }
     },
     { new: true }

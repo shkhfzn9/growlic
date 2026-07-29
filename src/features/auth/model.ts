@@ -17,6 +17,8 @@ export interface IAdminDocument extends Document {
   callStaffEnabled?: boolean;
   stampsRequired?: number;
   discountPercentage?: number;
+  expoPushToken?: string | null;
+  fcmToken?: string | null;
 }
 
 const AdminSchema: Schema = new Schema<IAdminDocument>(
@@ -37,6 +39,8 @@ const AdminSchema: Schema = new Schema<IAdminDocument>(
     callStaffEnabled: { type: Boolean, default: true },
     stampsRequired: { type: Number, default: 8 },
     discountPercentage: { type: Number, default: 20 },
+    expoPushToken: { type: String, default: null },
+    fcmToken: { type: String, default: null },
   },
   { timestamps: true }
 );

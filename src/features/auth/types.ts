@@ -17,6 +17,8 @@ export interface IAdmin {
   updatedAt?: string;
   active?: boolean;
   location?: string;
+  expoPushToken?: string | null;
+  fcmToken?: string | null;
 }
 
 export interface ISession {

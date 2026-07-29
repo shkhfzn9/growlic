@@ -7,6 +7,7 @@ export {
   hasPermission,
   can,
   updateRestaurantBranding,
+  updatePushTokens,
 } from './service';
 
 export type { IAdmin, ISession } from './types';

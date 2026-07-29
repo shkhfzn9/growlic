@@ -382,4 +382,18 @@ export async function updateRestaurantBranding(
   return adminRepo.updateBranding(restaurantId, data);
 }
 
+/**
+ * Updates the push notification tokens for a specific restaurant/tenant.
+ */
+export async function updatePushTokens(
+  restaurantId: string,
+  expoPushToken: string | null,
+  fcmToken: string | null
+) {
+  if (!restaurantId) {
+    throw new ValidationError('Restaurant ID is required');
+  }
+  return adminRepo.updatePushTokens(restaurantId, expoPushToken, fcmToken);
+}
+
 

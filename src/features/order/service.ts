@@ -4,6 +4,7 @@ import { NotFoundError } from '@/shared/errors';
 import { IOrder } from './types';
 import { validateCreateOrderPayload, validateOrderId, validateRestaurantId } from './validation';
 import { getAdminByRestaurantId } from '@/features/auth';
+import { sendNewOrderPush, sendStaffCallPush } from '@/lib/send-push';
 
 /**
  * Places a new order inside the system.
@@ -87,12 +88,24 @@ export async function createOrder(data: {
     }
   } else {
     await customerRepo.create({
-      restaurantId,
+      restaurantId: restaurantId,
       name: trimmedName,
       phone: trimmedPhone,
       totalOrders: 1,
       totalSpent: total,
     });
+  }
+
+  // Trigger FCM Push Notification asynchronously (non-blocking)
+  try {
+    const admin = await getAdminByRestaurantId(restaurantId);
+    if (admin && admin.fcmToken) {
+      sendNewOrderPush(admin.fcmToken, order).catch((err) => {
+        console.error('[ORDER_SERVICE_PUSH_ERROR] Background FCM dispatch failed:', err);
+      });
+    }
+  } catch (pushError) {
+    console.error('[ORDER_SERVICE_PUSH_ERROR] Failed to query restaurant admin settings for push:', pushError);
   }
 
   return order;
@@ -221,7 +234,21 @@ export async function getOrdersByCustomerPhone(phone: string, restaurantId?: str
 }
 
 export async function createStaffCall(restaurantId: string, tableId: string) {
-  return orderRepo.createStaffCall(restaurantId, tableId);
+  const result = await orderRepo.createStaffCall(restaurantId, tableId);
+
+  // Trigger FCM Push Notification asynchronously (non-blocking)
+  try {
+    const admin = await getAdminByRestaurantId(restaurantId);
+    if (admin && admin.fcmToken) {
+      sendStaffCallPush(admin.fcmToken, { tableId }).catch((err) => {
+        console.error('[STAFF_CALL_SERVICE_PUSH_ERROR] Background FCM dispatch failed:', err);
+      });
+    }
+  } catch (pushError) {
+    console.error('[STAFF_CALL_SERVICE_PUSH_ERROR] Failed to query restaurant admin settings for push:', pushError);
+  }
+
+  return result;
 }
 
 export async function getPendingStaffCalls(restaurantId: string) {
