@@ -8,6 +8,19 @@ import { getRestaurantDetails, saveRestaurantBranding } from '@/actions/auth';
 import { PageHeader, AdminButton } from '@/components/ui';
 import { Plus, Trash2, Download, Printer, CheckCircle } from 'lucide-react';
 
+export function getBaseAppUrl(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '');
+  }
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return window.location.origin;
+    }
+  }
+  return 'https://growlic.vercel.app';
+}
+
 export default function SettingsPage() {
   const auth = useSelector((state: RootState) => state.auth);
 
@@ -56,7 +69,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (auth.restaurantId && tables.length > 0) {
-      const origin = window.location.origin;
+      const origin = getBaseAppUrl();
       const newUrls: Record<string, string> = {};
 
       const generateAllQrs = async () => {
@@ -161,7 +174,7 @@ export default function SettingsPage() {
     const printWindow = window.open('', '_blank');
     if (!printWindow) { alert('Pop-up blocked. Please allow pop-ups to print the QR code.'); return; }
 
-    const menuUrl = `${window.location.origin}/menu/${auth.restaurantId}?table=${encodeURIComponent(table)}`;
+    const menuUrl = `${getBaseAppUrl()}/menu/${auth.restaurantId}?table=${encodeURIComponent(table)}`;
     printWindow.document.write(`
       <html>
         <head>
