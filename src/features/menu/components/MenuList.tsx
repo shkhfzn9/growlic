@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { resolveMenuImage } from '@/lib/menu-images';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { addItem, updateQuantity, removeItem, setTableId } from '@/redux/cartSlice';
@@ -12,7 +13,13 @@ import { getActiveBanners } from '@/actions/banners';
 
 const DISH_PLACEHOLDER = '/dish_placeholder.jpg';
 
-const getItemImage = (image?: string) => {
+/**
+ * Returns the best image path for a menu item.
+ * Delegates to resolveMenuImage which checks the DB value first,
+ * then falls back to the keyword-based lookup map, then allOtherFoods.
+ */
+const getItemImage = (image?: string, name?: string) => {
+  if (name) return resolveMenuImage(name, image);
   if (!image || image.startsWith('data:image/svg+xml')) return DISH_PLACEHOLDER;
   return image;
 };
@@ -390,7 +397,7 @@ export default function MenuList({
   }, [dispatch]);
 
   const slides = selectedDetailedItem
-    ? [getItemImage(selectedDetailedItem.image), ...(selectedDetailedItem.images || []).map(img => getItemImage(img))].filter(Boolean)
+    ? [getItemImage(selectedDetailedItem.image, selectedDetailedItem.name), ...(selectedDetailedItem.images || []).map(img => getItemImage(img, selectedDetailedItem!.name))].filter(Boolean)
     : [];
 
   return (
@@ -715,7 +722,7 @@ const MenuItemCard = React.memo(function MenuItemCard({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={getItemImage(item.image)}
+          src={getItemImage(item.image, item.name)}
           alt={item.name}
           className="w-full h-full object-cover"
         />
@@ -976,7 +983,7 @@ const ProductDetailsModal = React.memo(function ProductDetailsModal({
                 <div className="bg-surface rounded-xl p-3 flex items-center gap-3">
                   <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={getItemImage(pairedItem.image)} alt={pairedItem.name} className="w-full h-full object-cover" />
+                    <img src={getItemImage(pairedItem.image, pairedItem.name)} alt={pairedItem.name} className="w-full h-full object-cover" />
                   </div>
 
                   <div className="flex-1 min-w-0">

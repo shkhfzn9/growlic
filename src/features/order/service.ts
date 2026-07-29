@@ -100,7 +100,7 @@ export async function createOrder(data: {
   try {
     const admin = await getAdminByRestaurantId(restaurantId);
     if (admin && admin.fcmToken) {
-      sendNewOrderPush(admin.fcmToken, order).catch((err) => {
+      sendNewOrderPush(admin.fcmToken, order, restaurantId).catch((err) => {
         console.error('[ORDER_SERVICE_PUSH_ERROR] Background FCM dispatch failed:', err);
       });
     }
@@ -240,7 +240,7 @@ export async function createStaffCall(restaurantId: string, tableId: string) {
   try {
     const admin = await getAdminByRestaurantId(restaurantId);
     if (admin && admin.fcmToken) {
-      sendStaffCallPush(admin.fcmToken, { tableId }).catch((err) => {
+      sendStaffCallPush(admin.fcmToken, { tableId }, restaurantId).catch((err) => {
         console.error('[STAFF_CALL_SERVICE_PUSH_ERROR] Background FCM dispatch failed:', err);
       });
     }
