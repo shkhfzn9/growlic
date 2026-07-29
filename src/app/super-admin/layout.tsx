@@ -60,10 +60,12 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-[#F4F6F9]">
-      {/* Mobile Header */}
       <header className="flex md:hidden items-center justify-between px-4 h-16 bg-[#1C2333] border-b border-white/10 text-white z-40">
         <div className="flex items-center gap-2">
-          <h1 className="text-lg font-bold tracking-tight">Growlic</h1>
+          <h1 className="text-lg font-bold tracking-tight flex items-center gap-1.5">
+            Growlic
+            <span className="bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded leading-none tracking-normal">Beta</span>
+          </h1>
           <span className="bg-[#C0181A] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider">
             Super Admin
           </span>
@@ -141,6 +143,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
               <div className="min-w-0 flex flex-col">
                 <h2 className="text-base font-bold tracking-tight text-white truncate flex items-center gap-2">
                   Growlic
+                  <span className="bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded leading-none shrink-0 tracking-normal">Beta</span>
                   <span className="bg-[#C0181A] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider">
                     SA
                   </span>

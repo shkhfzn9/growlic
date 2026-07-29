@@ -651,6 +651,12 @@ export default function MenuList({
         )}
       </main>
 
+      {/* Subtle Beta Branding Footer */}
+      <div className="text-center py-6 text-text-dark/30 text-[10px] select-none font-medium flex items-center justify-center gap-1.5 mt-8 mb-2">
+        <span>Powered by Growlic</span>
+        <span className="bg-yellow-500/10 text-yellow-500/60 border border-yellow-500/20 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded tracking-normal">Beta</span>
+      </div>
+
       {/* Persistent Customer Navigation Bar */}
       <CustomerNavbar restaurantId={restaurantId} menuContext={menuContext} />
       {/* Product Details Modal */}
@@ -688,6 +694,12 @@ const MenuItemCard = React.memo(function MenuItemCard({
   onAddMore,
   onOpenModal,
 }: MenuItemCardProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const qty = useSelector((state: RootState) =>
     state.cart.items.find((i) => i.id === item._id)?.quantity || 0
   );
@@ -733,7 +745,7 @@ const MenuItemCard = React.memo(function MenuItemCard({
             ₹{item.price}
           </span>
 
-          {qty === 0 ? (
+          {!mounted || qty === 0 ? (
             <button
               onClick={() => onAddOne(item)}
               className="bg-primary text-white text-xs font-bold px-4 py-2 rounded-lg uppercase tracking-wide active:scale-95 transition-transform"

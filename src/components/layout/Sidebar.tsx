@@ -47,7 +47,10 @@ export default function Sidebar({ restaurantName, email, onLogout }: SidebarProp
         <div className={`flex items-center px-4 h-16 border-b border-white/10 ${collapsed ? 'justify-center' : 'justify-between'}`}>
           {!collapsed && (
             <div className="min-w-0">
-              <h2 className="text-base font-bold tracking-tight text-white truncate">Growlic</h2>
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-base font-bold tracking-tight text-white truncate">Growlic</h2>
+                <span className="bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded leading-none shrink-0">Beta</span>
+              </div>
               {restaurantName && (
                 <span className="text-[11px] text-white/50 font-medium block truncate">{restaurantName}</span>
               )}

@@ -70,7 +70,48 @@ This document lists the necessary REST APIs required to build your separate admi
 }
 ```
 
-### C. Accept Order (Set ETA)
+### C. Fetch Order History / Previous Orders
+* **Method:** `GET`
+* **URL:** `{{base_url}}/api/admin/orders?limit=20` (or `{{base_url}}/api/admin/orders?status=completed&limit=20`)
+* **Headers:** 
+  * `Authorization: Bearer {{jwt_token}}`
+* **Query Parameters:**
+  * `status` (optional): Filter by specific status (`received`, `accepted`, `preparing`, `ready`, `completed`, `cancelled`). Omit to fetch all orders (history).
+  * `limit` (optional): Maximum number of orders to fetch (defaults to `50`).
+  * `skip` (optional): Pagination offset (defaults to `0`).
+* **Success Response (HTTP 200):**
+```json
+{
+  "success": true,
+  "orders": [
+    {
+      "_id": "6682fa08f1b2c4c8d5d90123",
+      "restaurantId": "tokyo-momos",
+      "customerName": "Jane Doe",
+      "customerPhone": "+919876543210",
+      "tableId": "T-3",
+      "items": [
+        {
+          "menuItemId": "momo-001",
+          "name": "Steamed Veg Momo",
+          "price": 120,
+          "quantity": 2,
+          "image": "/images/veg-momo.jpg"
+        }
+      ],
+      "subtotal": 240,
+      "total": 240,
+      "status": "completed",
+      "estimatedTime": 20,
+      "createdAt": "2026-07-01T13:42:00.000Z",
+      "updatedAt": "2026-07-01T14:15:00.000Z"
+    }
+  ],
+  "totalCount": 1
+}
+```
+
+### D. Accept Order (Set ETA)
 * **Method:** `PATCH`
 * **URL:** `{{base_url}}/api/admin/orders/{{order_id}}`
 * **Headers:** 
@@ -97,7 +138,7 @@ This document lists the necessary REST APIs required to build your separate admi
 }
 ```
 
-### D. Reject/Cancel Order
+### E. Reject/Cancel Order
 * **Method:** `PATCH`
 * **URL:** `{{base_url}}/api/admin/orders/{{order_id}}`
 * **Headers:** 
@@ -124,7 +165,7 @@ This document lists the necessary REST APIs required to build your separate admi
 }
 ```
 
-### E. Trigger Staff Call (Customer Flow)
+### F. Trigger Staff Call (Customer Flow)
 * **Method:** `POST`
 * **URL:** `{{base_url}}/api/customer/staff-calls`
 * **Headers:** `Content-Type: application/json`
@@ -150,7 +191,7 @@ This document lists the necessary REST APIs required to build your separate admi
 }
 ```
 
-### F. Fetch Pending Staff Calls (Admin Poll)
+### G. Fetch Pending Staff Calls (Admin Poll)
 * **Method:** `GET`
 * **URL:** `{{base_url}}/api/admin/staff-calls`
 * **Headers:** 
@@ -171,7 +212,7 @@ This document lists the necessary REST APIs required to build your separate admi
 }
 ```
 
-### G. Accept/Resolve Staff Call (Admin Action)
+### H. Accept/Resolve Staff Call (Admin Action)
 * **Method:** `PATCH`
 * **URL:** `{{base_url}}/api/admin/staff-calls/{{call_id}}`
 * **Headers:** 

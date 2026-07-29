@@ -40,7 +40,10 @@ export default function MobileHeader({ restaurantName, email, onLogout }: Mobile
     <>
       <header className="md:hidden flex justify-between items-center px-4 py-3 bg-[#1C2333] border-b border-white/10 sticky top-0 z-30">
         <div>
-          <h2 className="text-sm font-bold text-white">Growlic</h2>
+          <div className="flex items-center gap-1.5">
+            <h2 className="text-sm font-bold text-white">Growlic</h2>
+            <span className="bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded leading-none">Beta</span>
+          </div>
           {restaurantName && (
             <span className="text-[10px] text-white/50 font-medium block">{restaurantName}</span>
           )}

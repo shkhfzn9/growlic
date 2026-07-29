@@ -73,7 +73,10 @@ function LoginForm() {
       <div className="relative z-10 w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white tracking-tight">Growlic</h1>
+          <h1 className="text-3xl font-bold text-white tracking-tight flex items-center justify-center gap-2">
+            Growlic
+            <span className="bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded tracking-normal leading-none">Beta</span>
+          </h1>
           <p className="text-white/50 text-sm mt-1">Admin Panel</p>
         </div>
 

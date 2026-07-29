@@ -1326,6 +1326,12 @@ function CartContent() {
           </div>
         </div>
       )}
+      {/* Subtle Beta Branding Footer */}
+      <div className="text-center py-6 text-text-dark/30 text-[10px] select-none font-medium flex items-center justify-center gap-1.5 mt-8 mb-2">
+        <span>Powered by Growlic</span>
+        <span className="bg-yellow-500/10 text-yellow-500/60 border border-yellow-500/20 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded tracking-normal">Beta</span>
+      </div>
+
       <CustomerNavbar restaurantId={resolvedRestId} />
     </div>
   );
