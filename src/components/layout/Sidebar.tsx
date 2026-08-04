@@ -15,6 +15,7 @@ import {
   PanelLeftOpen,
   Megaphone,
   Code2,
+  ClipboardList,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -28,6 +29,7 @@ const navLinks = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/menu', label: 'Menu', icon: UtensilsCrossed },
   { href: '/admin/customers', label: 'Customers', icon: Users },
+  { href: '/admin/sop-tracker', label: 'SOP & Staff', icon: ClipboardList },
   { href: '/admin/settings', label: 'Settings & QR', icon: Settings },
   { href: '/admin/upsell', label: 'Upsell & Rules', icon: TrendingUp },
   { href: '/admin/promos', label: 'Promos & Ads', icon: Megaphone },
