@@ -16,6 +16,8 @@ export interface IOrderDocument extends Document {
   customerName: string;
   customerPhone: string;
   tableId?: string;
+  orderType?: 'dine_in' | 'takeaway' | 'delivery';
+  paymentMode?: 'cash' | 'online';
   items: IOrderItem[];
   subtotal: number;
   total: number;
@@ -43,6 +45,8 @@ const OrderSchema: Schema = new Schema<IOrderDocument>(
     customerName: { type: String, required: true },
     customerPhone: { type: String, required: true, index: true },
     tableId: { type: String, default: null },
+    orderType: { type: String, enum: ['dine_in', 'takeaway', 'delivery'], default: 'takeaway' },
+    paymentMode: { type: String, enum: ['cash', 'online'], default: 'cash' },
     items: { type: [OrderItemSchema], required: true },
     subtotal: { type: Number, required: true },
     total: { type: Number, required: true },

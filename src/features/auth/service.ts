@@ -374,6 +374,8 @@ export async function updateRestaurantBranding(
     callStaffEnabled?: boolean;
     stampsRequired?: number;
     discountPercentage?: number;
+    whatsappNumber?: string;
+    phone?: string;
   }
 ) {
   if (!restaurantId) {

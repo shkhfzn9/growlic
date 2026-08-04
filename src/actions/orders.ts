@@ -54,6 +54,8 @@ export async function createOrder(data: {
   customerPhone: string;
   customerOldPhone?: string;
   tableId?: string;
+  orderType?: 'dine_in' | 'takeaway' | 'delivery';
+  paymentMode?: 'cash' | 'online';
   items: Array<{
     menuItemId: string;
     name: string;
@@ -90,7 +92,10 @@ export async function getOrderById(id: string, restaurantId?: string) {
   try {
     const order = await orderService.getOrderById(id, restaurantId);
     if (!order) return null;
-    return JSON.parse(JSON.stringify(order));
+    const admin = await getAdminByRestaurantId(order.restaurantId || restaurantId || '');
+    const plainOrder = JSON.parse(JSON.stringify(order));
+    plainOrder.restaurantWhatsApp = admin?.whatsappNumber || admin?.phone || '9541234068';
+    return plainOrder;
   } catch (error) {
     console.error('Error fetching order action:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch order';

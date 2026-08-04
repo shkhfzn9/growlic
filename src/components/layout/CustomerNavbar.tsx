@@ -18,8 +18,13 @@ export default function CustomerNavbar({ restaurantId, menuContext }: CustomerNa
   const pathname = usePathname();
   const cart = useSelector((state: RootState) => state.cart);
   
+  const [mounted, setMounted] = useState(false);
   const [lastOrder, setLastOrder] = useState<{ id: string; restaurantId: string } | null>(null);
   const [hasPhone, setHasPhone] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const [callStaffAllowed, setCallStaffAllowed] = useState(() => {
     if (menuContext && menuContext.admin) {
@@ -45,7 +50,8 @@ export default function CustomerNavbar({ restaurantId, menuContext }: CustomerNa
   }, [pathname]); // Refresh on navigation/pathname changes
 
   // Compute total items count in cart
-  const totalItemsCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
+  const totalItemsCount = mounted ? cart.items.reduce((sum, item) => sum + item.quantity, 0) : 0;
+
 
   // Determine current active restaurant ID
   let currentRestaurantId = restaurantId;
@@ -127,7 +133,7 @@ export default function CustomerNavbar({ restaurantId, menuContext }: CustomerNa
         </Link>
 
         {/* Stamps Link */}
-        {(lastOrder || hasPhone) && (
+        {mounted && (lastOrder || hasPhone) && (
           <Link
             href="/stamps"
             className={`flex flex-col items-center gap-0.5 transition-all duration-200 active:scale-95 ${
@@ -143,7 +149,7 @@ export default function CustomerNavbar({ restaurantId, menuContext }: CustomerNa
         )}
 
         {/* Orders Link (visible if there's a recent order or they are logged in with phone) */}
-        {(lastOrder || hasPhone) && (
+        {mounted && (lastOrder || hasPhone) && (
           <Link
             href={`/orders?restaurantId=${currentRestaurantId}`}
             className={`flex flex-col items-center gap-0.5 transition-all duration-200 active:scale-95 ${

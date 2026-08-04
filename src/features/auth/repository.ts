@@ -18,6 +18,7 @@ export function normalizeAdmin(doc: any): IAdmin {
     restaurantId: plain.restaurantId,
     restaurantName: plain.restaurantName,
     phone: plain.phone,
+    whatsappNumber: plain.whatsappNumber || '9541234068',
     designation: plain.designation,
     role: plain.role || 'staff',
     logoUrl: plain.logoUrl || '',
@@ -250,6 +251,8 @@ export async function updateBranding(
     callStaffEnabled?: boolean;
     stampsRequired?: number;
     discountPercentage?: number;
+    whatsappNumber?: string;
+    phone?: string;
   }
 ): Promise<IAdmin | null> {
   await dbConnect();
@@ -264,6 +267,8 @@ export async function updateBranding(
         callStaffEnabled: data.callStaffEnabled,
         stampsRequired: data.stampsRequired,
         discountPercentage: data.discountPercentage,
+        whatsappNumber: data.whatsappNumber,
+        phone: data.phone,
       }
     },
     { new: true }

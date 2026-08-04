@@ -17,7 +17,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Menu as MenuIcon,
-  X
+  X,
+  Sparkles,
 } from 'lucide-react';
 
 interface SuperAdminLayoutProps {
@@ -52,11 +53,13 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
   const menuItems = [
     { href: '/super-admin', label: 'Overview', icon: LayoutDashboard, active: true },
     { href: '/super-admin/restaurants', label: 'Restaurants', icon: Store, active: true },
+    { href: '/super-admin/consultations', label: 'Consultation Leads', icon: Sparkles, active: true },
     { href: '#', label: 'Customers', icon: Users, active: false, tooltip: 'Customers: Coming in Phase 3' },
     { href: '#', label: 'Platform Health', icon: HeartPulse, active: false, tooltip: 'Platform Health: Coming in Phase 3' },
     { href: '#', label: 'Audit Log', icon: FileSpreadsheet, active: false, tooltip: 'Audit Log: Coming in Phase 3' },
     { href: '#', label: 'Settings', icon: Settings, active: false, tooltip: 'Settings: Coming in Phase 3' },
   ];
+
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-[#F4F6F9]">

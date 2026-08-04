@@ -19,6 +19,8 @@ export async function createOrder(data: {
   customerPhone: string;
   customerOldPhone?: string;
   tableId?: string;
+  orderType?: 'dine_in' | 'takeaway' | 'delivery';
+  paymentMode?: 'cash' | 'online';
   items: Array<{
     menuItemId: string;
     name: string;
@@ -34,7 +36,7 @@ export async function createOrder(data: {
   notes?: string;
 }): Promise<IOrder> {
   validateCreateOrderPayload(data);
-  const { restaurantId, customerName, customerPhone, customerOldPhone, tableId, items, subtotal, total, notes } = data;
+  const { restaurantId, customerName, customerPhone, customerOldPhone, tableId, orderType, paymentMode, items, subtotal, total, notes } = data;
 
   const trimmedPhone = customerPhone.trim();
   const trimmedName = customerName.trim();
@@ -67,6 +69,8 @@ export async function createOrder(data: {
     customerName,
     customerPhone,
     tableId,
+    orderType,
+    paymentMode,
     items,
     subtotal,
     total,

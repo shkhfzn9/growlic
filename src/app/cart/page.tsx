@@ -4,19 +4,20 @@ import React, { useEffect, useState, Suspense } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { updateQuantity, removeItem, clearCart, addItem } from '@/redux/cartSlice';
-import { createOrder, logEvent, getCustomerLoyaltyInfo } from '@/actions/orders';
+import { createOrder, logEvent, getCustomerLoyaltyInfo, getOrdersByCustomerPhone } from '@/actions/orders';
 import { getUpsellConfig } from '@/actions/upsell';
 import { getRestaurantMenuContext } from '@/actions/menu';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Minus, Plus, ArrowLeft, ShoppingBag, Loader2, X, Gift, TrendingUp, Sparkles } from 'lucide-react';
+import { Minus, Plus, ArrowLeft, ShoppingBag, Loader2, X, Gift, TrendingUp, Sparkles, AlertTriangle } from 'lucide-react';
 import { CustomerNavbar } from '@/components/layout';
+import { resolveMenuImage } from '@/lib/menu-images';
+import { getPersonalizedRecommendations, getGapUnlockingRecommendations, getBestAddOnsRecommendations, ScoredRecommendation } from '@/features/recommendations';
 
 const DISH_PLACEHOLDER = '/dish_placeholder.jpg';
 
-const getItemImage = (image?: string) => {
-  if (!image || image.startsWith('data:image/svg+xml')) return DISH_PLACEHOLDER;
-  return image;
+const getItemImage = (image?: string, name?: string) => {
+  return resolveMenuImage(name || '', image);
 };
 
 interface MenuItem {
@@ -97,6 +98,19 @@ function CartContent() {
   const [originalCachedPhone, setOriginalCachedPhone] = useState('');
   const [mounted, setMounted] = useState(false);
   const [notes, setNotes] = useState('');
+  const [orderType, setOrderType] = useState<'dine_in' | 'takeaway' | 'delivery'>('dine_in');
+  const [paymentMode, setPaymentMode] = useState<'cash' | 'online'>('cash');
+  const [deliveryWarningToast, setDeliveryWarningToast] = useState(false);
+
+  const handleOrderTypeSelect = (type: 'dine_in' | 'takeaway' | 'delivery') => {
+    if (type === 'delivery') {
+      setDeliveryWarningToast(true);
+      setTimeout(() => setDeliveryWarningToast(false), 6000);
+      return;
+    }
+    setDeliveryWarningToast(false);
+    setOrderType(type);
+  };
 
   const searchRestId = searchParams.get('restaurantId');
   const resolvedRestId = React.useMemo(() => {
@@ -122,6 +136,8 @@ function CartContent() {
     discountPercentage: number;
   } | null>(null);
 
+  const [customerPastOrders, setCustomerPastOrders] = useState<any[]>([]);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const cachedName = localStorage.getItem('customer_name');
@@ -135,6 +151,12 @@ function CartContent() {
           getCustomerLoyaltyInfo(cachedPhone, resolvedRestId)
             .then(setLoyaltyInfo)
             .catch((err) => console.error('Error fetching loyalty details inside cart:', err));
+
+          getOrdersByCustomerPhone(cachedPhone, resolvedRestId)
+            .then((orders) => {
+              if (orders && Array.isArray(orders)) setCustomerPastOrders(orders);
+            })
+            .catch((err) => console.error('Error loading past orders for cart recommendations:', err));
         }
       }
     }
@@ -150,6 +172,12 @@ function CartContent() {
           }
         })
         .catch((err) => console.error('Error loading loyalty details on input:', err));
+
+      getOrdersByCustomerPhone(phone, resolvedRestId)
+        .then((orders) => {
+          if (orders && Array.isArray(orders)) setCustomerPastOrders(orders);
+        })
+        .catch((err) => console.error('Error loading past orders for cart recommendations on input:', err));
     }
   }, [phone, resolvedRestId]);
 
@@ -430,112 +458,62 @@ function CartContent() {
     };
   }, [items, subtotal, comboRules, discountTiers, menuItems]);
 
-  // Cross-sell Suggestions
-  const crossSellSuggestions = React.useMemo<Array<MenuItem & { socialProof?: string }>>(() => {
-    if (menuItems.length === 0) return [];
+  // 1. Smart Gap Unlocking Offer Suggestions Engine ("Recommended to Unlock Offer")
+  const gapUnlockingSuggestions = React.useMemo(() => {
+    const targetGap = evaluationResult.discountNudge?.distance || 0;
+    if (!evaluationResult.discountNudge || targetGap <= 0) return [];
 
-    const notInCart = menuItems.filter(
-      (m) => m.available && m.active !== false && !items.some((i) => i.id === m._id)
-    );
+    return getGapUnlockingRecommendations({
+      menuItems,
+      cartItems: items,
+      subtotal,
+      pairingRules,
+      computedAffinity,
+      pastOrders: customerPastOrders,
+      targetGap,
+      limit: 4,
+    });
+  }, [menuItems, items, subtotal, pairingRules, computedAffinity, customerPastOrders, evaluationResult.discountNudge]);
 
-    if (notInCart.length === 0) return [];
-
-    const hasFitMeals = items.some((i) => ['Fit Meals', 'Chicken Salad'].includes(i.category));
-
-    const isExcludedByDiet = (item: MenuItem) => {
-      if (!hasFitMeals) return false;
-      const nameLower = item.name.toLowerCase();
-      const catLower = item.category.toLowerCase();
-      const richKeywords = ['butter', 'malai', 'cheese', 'cheesy', 'fried', 'crispy'];
-      return richKeywords.some(kw => nameLower.includes(kw) || catLower.includes(kw));
-    };
-
-    const finalCandidates = notInCart.filter(item => !isExcludedByDiet(item));
-    if (finalCandidates.length === 0) return [];
-
-    const suggestions: Array<MenuItem & { socialProof?: string; priority: number; score?: number }> = [];
-
-    if (completedCount >= 50) {
-      items.forEach((cartItem) => {
-        const affinityList = computedAffinity[cartItem.name];
-        if (affinityList && Array.isArray(affinityList)) {
-          affinityList.forEach((aff) => {
-            const matched = finalCandidates.find((m) => m.name === aff.name);
-            if (matched) {
-              const confidencePct = Math.round(aff.confidence * 100);
-              const existingIdx = suggestions.findIndex(s => s._id === matched._id);
-              const socialProofText = `${confidencePct}% of customers who ordered ${cartItem.name} also added this`;
-
-              if (existingIdx > -1) {
-                if ((suggestions[existingIdx].score || 0) < aff.confidence) {
-                  suggestions[existingIdx] = {
-                    ...matched,
-                    socialProof: socialProofText,
-                    priority: 1,
-                    score: aff.confidence
-                  };
-                }
-              } else {
-                suggestions.push({
-                  ...matched,
-                  socialProof: socialProofText,
-                  priority: 1,
-                  score: aff.confidence
-                });
-              }
-            }
-          });
-        }
-      });
-    }
-
-    suggestions.sort((a, b) => (b.score || 0) - (a.score || 0));
-
-    const manualSuggestions: Array<MenuItem & { priority: number }> = [];
-    items.forEach((cartItem) => {
-      const menuVer = menuItems.find(m => m._id === cartItem.id);
-      if (menuVer && menuVer.pairsWithCategories) {
-        menuVer.pairsWithCategories.forEach((cat) => {
-          finalCandidates.forEach((candidate) => {
-            if (candidate.category === cat && !suggestions.some(s => s._id === candidate._id) && !manualSuggestions.some(m => m._id === candidate._id)) {
-              manualSuggestions.push({ ...candidate, priority: 2 });
-            }
-          });
-        });
-      }
-
-      pairingRules.forEach((rule) => {
-        if (rule.active && rule.triggerCategory === cartItem.category) {
-          rule.suggestCategories.forEach((cat) => {
-            finalCandidates.forEach((candidate) => {
-              if (candidate.category === cat && !suggestions.some(s => s._id === candidate._id) && !manualSuggestions.some(m => m._id === candidate._id)) {
-                manualSuggestions.push({ ...candidate, priority: 3 });
-              }
-            });
-          });
-        }
-      });
+  // 2. Smart Best Add-ons For You Engine ("Best Add-ons For You")
+  const bestAddOns = React.useMemo(() => {
+    const allAddOns = getBestAddOnsRecommendations({
+      menuItems,
+      cartItems: items,
+      subtotal,
+      pairingRules,
+      computedAffinity,
+      pastOrders: customerPastOrders,
+      targetGap: 0,
+      limit: 8,
     });
 
-    const combined = [...suggestions, ...manualSuggestions];
+    const gapIds = new Set(gapUnlockingSuggestions.map((g) => g._id));
+    const filtered = allAddOns.filter((item) => !gapIds.has(item._id));
+    return (filtered.length >= 2 ? filtered : allAddOns).slice(0, 4);
+  }, [menuItems, items, subtotal, pairingRules, computedAffinity, customerPastOrders, gapUnlockingSuggestions]);
 
-    let index = 0;
-    while (combined.length < 3 && index < finalCandidates.length) {
-      const candidate = finalCandidates[index];
-      if (!combined.some((s) => s._id === candidate._id)) {
-        combined.push({ ...candidate, priority: 4 });
-      }
-      index++;
-    }
+  // 3. Smart Personalized Cross-sell Suggestions Engine ("Recommended For You")
+  const crossSellSuggestions = React.useMemo(() => {
+    const allRecs = getPersonalizedRecommendations({
+      menuItems,
+      cartItems: items,
+      subtotal,
+      pairingRules,
+      computedAffinity,
+      pastOrders: customerPastOrders,
+      targetGap: 0,
+      limit: 12,
+    });
 
-    return combined.slice(0, 8);
-  }, [menuItems, items, completedCount, computedAffinity, pairingRules]);
+    const shownIds = new Set([
+      ...gapUnlockingSuggestions.map((g) => g._id),
+      ...bestAddOns.map((b) => b._id),
+    ]);
 
-  const bestAddOns = React.useMemo(() => {
-    return menuItems.filter(
-      (m) => m.available && m.active !== false && ['Additional Snacks', 'Chicken Salad'].includes(m.category) && !items.some((i) => i.id === m._id)
-    ).slice(0, 3);
-  }, [menuItems, items]);
+    const filtered = allRecs.filter((item) => !shownIds.has(item._id));
+    return (filtered.length >= 2 ? filtered : allRecs).slice(0, 8);
+  }, [menuItems, items, subtotal, pairingRules, computedAffinity, customerPastOrders, gapUnlockingSuggestions, bestAddOns]);
 
   // Nudges to show
   const nudgesToShow = React.useMemo(() => {
@@ -728,6 +706,8 @@ function CartContent() {
         customerPhone: phone.trim(),
         customerOldPhone: originalCachedPhone ? originalCachedPhone.trim() : undefined,
         tableId: cart.tableId || undefined,
+        orderType,
+        paymentMode,
         items: cart.items.map((item) => ({
           menuItemId: item.id,
           name: item.name,
@@ -838,7 +818,7 @@ function CartContent() {
                 {/* 1. Render Discount Tiers */}
                 {discountTiers.filter(t => t.active !== false).map((tier) => {
                   const sampleItem = menuItems.find(m => tier.categoryScope ? m.category === tier.categoryScope : m.category === 'Classic Momos');
-                  const imageSrc = sampleItem ? getItemImage(sampleItem.image) : DISH_PLACEHOLDER;
+                  const imageSrc = sampleItem ? getItemImage(sampleItem.image, sampleItem.name) : DISH_PLACEHOLDER;
                   return (
                     <div key={tier._id} className="bg-white rounded-3xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-gray-100 flex items-center justify-between gap-4">
                       <div className="flex-1">
@@ -881,7 +861,7 @@ function CartContent() {
                 {/* 2. Render Combo Rules */}
                 {comboRules.filter(r => r.active).map((rule) => {
                   const sampleItem = menuItems.find(m => rule.conditionCategory.includes(m.category));
-                  const imageSrc = sampleItem ? getItemImage(sampleItem.image) : DISH_PLACEHOLDER;
+                  const imageSrc = sampleItem ? getItemImage(sampleItem.image, sampleItem.name) : DISH_PLACEHOLDER;
                   return (
                     <div key={rule._id} className="bg-gradient-to-br from-[#8B0000] to-[#5A0000] rounded-3xl p-5 shadow-lg text-white flex items-center justify-between gap-4">
                       <div className="flex-1">
@@ -933,7 +913,7 @@ function CartContent() {
                       <div className="flex flex-col items-center gap-3 flex-shrink-0">
                         <div className="w-20 h-20 rounded-2xl overflow-hidden shadow-md bg-gray-50 border border-gray-100">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={getItemImage(item.image)} alt={item.name} className="w-full h-full object-cover" />
+                          <img src={getItemImage(item.image, item.name)} alt={item.name} className="w-full h-full object-cover" />
                         </div>
                         <button
                           onClick={() => handleAddSpecialAddon(item, offerPrice)}
@@ -984,7 +964,7 @@ function CartContent() {
             <div key={item.id} className={`p-4 flex gap-3 ${idx > 0 ? 'border-t border-surface' : ''}`}>
               <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={getItemImage(item.image)} alt={item.name} className="w-full h-full object-cover" />
+                <img src={getItemImage(item.image, item.name)} alt={item.name} className="w-full h-full object-cover" />
               </div>
               <div className="flex-1 min-w-0">
                 <span className="text-[0.6rem] text-text-dark/50 uppercase font-bold">{item.category}</span>
@@ -1110,7 +1090,7 @@ function CartContent() {
                   <div className="flex flex-col items-center gap-3 flex-shrink-0">
                     <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-md bg-white/10 border border-white/15">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={getItemImage(ruleNudge.suggestedItems[0].image)} alt="Combo Item" className="w-full h-full object-cover" />
+                      <img src={getItemImage(ruleNudge.suggestedItems[0].image, ruleNudge.suggestedItems[0].name)} alt="Combo Item" className="w-full h-full object-cover" />
                     </div>
                     <button
                       onClick={() => handleAddUpsell(ruleNudge.suggestedItems![0], 'combo_freebie', ruleNudge.id)}
@@ -1123,28 +1103,78 @@ function CartContent() {
               </div>
             ))}
 
-            {/* 3. Recommended to Unlock Offer */}
+            {/* 3. Recommended to Unlock Offer Block (when locked discount tier present) */}
+            {evaluationResult.discountNudge && gapUnlockingSuggestions.length > 0 && (
+              <div className="bg-gradient-to-br from-[#FFFBEB] to-[#FFF8E7] rounded-3xl shadow-[0_4px_25px_rgba(217,119,6,0.08)] border border-[#F5C518]/40 p-5">
+                <div className="flex items-center justify-between gap-2 mb-3.5">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4.5 h-4.5 text-[#D97706] fill-current animate-pulse" />
+                    <span className="font-black text-xs text-gray-900 uppercase tracking-wider">
+                      Recommended to Unlock Offer
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-black bg-[#D97706] text-white px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                    Add ₹{evaluationResult.discountNudge.distance} More
+                  </span>
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-1.5 scrollbar-thin">
+                  {gapUnlockingSuggestions.map((item) => (
+                    <div key={item._id} className="bg-white rounded-2xl p-3 flex-shrink-0 w-[145px] flex flex-col gap-2 border border-amber-200/60 shadow-sm relative">
+                      {item.gapFit && (
+                        <span className="text-[8px] font-black bg-[#D97706] text-white px-1.5 py-0.5 rounded uppercase tracking-tighter self-start">
+                          🎯 Unlock Goal
+                        </span>
+                      )}
+                      <div className="w-full h-20 rounded-xl overflow-hidden bg-gray-100 shadow-inner">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={getItemImage(item.image, item.name)} alt={item.name} className="w-full h-full object-cover" />
+                      </div>
+                      <span className="text-[11px] font-extrabold text-gray-800 truncate leading-tight">{item.name}</span>
+                      {item.recommendationReason && (
+                        <p className="text-[9px] text-[#D97706] font-extrabold line-clamp-1 leading-none">{item.recommendationReason}</p>
+                      )}
+                      <div className="flex items-center justify-between mt-auto pt-1">
+                        <span className="text-xs font-black text-gray-900">₹{item.price}</span>
+                        <button
+                          onClick={() => handleAddUpsell(item, 'threshold_discount', evaluationResult.discountNudge?.id)}
+                          className="bg-[#C0181A] hover:bg-[#A01012] text-white text-[10px] font-black px-3 py-1.5 rounded-lg uppercase active:scale-95 transition-transform"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 4. Personalized Smart Recommendations For You */}
             {crossSellSuggestions.length > 0 && (
               <div className="bg-white rounded-3xl shadow-[0_4px_25px_rgba(0,0,0,0.03)] border border-gray-100 p-5">
                 <div className="flex items-center gap-2 mb-3.5">
                   <Sparkles className="w-4.5 h-4.5 text-[#C0181A]" />
                   <span className="font-black text-xs text-gray-900 uppercase tracking-wider">
-                    {evaluationResult.discountNudge ? 'Recommended to Unlock Offer' : 'Recommended For You'}
+                    Recommended For You
                   </span>
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-1.5 scrollbar-thin">
                   {crossSellSuggestions.map((item) => (
-                    <div key={item._id} className="bg-gray-50 rounded-2xl p-3 flex-shrink-0 w-[140px] flex flex-col gap-2.5 border border-gray-100/50">
+                    <div key={item._id} className="bg-gray-50 rounded-2xl p-3 flex-shrink-0 w-[145px] flex flex-col gap-2 border border-gray-100/50 relative">
                       <div className="w-full h-20 rounded-xl overflow-hidden bg-gray-100 shadow-inner">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={getItemImage(item.image)} alt={item.name} className="w-full h-full object-cover" />
+                        <img src={getItemImage(item.image, item.name)} alt={item.name} className="w-full h-full object-cover" />
                       </div>
                       <span className="text-[11px] font-extrabold text-gray-800 truncate leading-tight">{item.name}</span>
-                      <div className="flex items-center justify-between mt-auto">
+                      {(item.socialProof || item.recommendationReason) && (
+                        <p className="text-[8.5px] text-[#C0181A] font-bold line-clamp-1 leading-none">
+                          {item.socialProof || item.recommendationReason}
+                        </p>
+                      )}
+                      <div className="flex items-center justify-between mt-auto pt-1">
                         <span className="text-xs font-black text-gray-900">₹{item.price}</span>
                         <button
                           onClick={() => handleAddUpsell(item, 'cross_sell')}
-                          className="bg-[#C0181A] text-white text-[10px] font-black px-3 py-1.5 rounded-lg uppercase active:scale-95 transition-transform"
+                          className="bg-[#C0181A] hover:bg-[#A01012] text-white text-[10px] font-black px-3 py-1.5 rounded-lg uppercase active:scale-95 transition-transform"
                         >
                           + Add
                         </button>
@@ -1168,12 +1198,17 @@ function CartContent() {
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-14 h-14 rounded-xl overflow-hidden bg-gray-100 shadow-sm flex-shrink-0">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={getItemImage(item.image)} alt={item.name} className="w-full h-full object-cover" />
+                          <img src={getItemImage(item.image, item.name)} alt={item.name} className="w-full h-full object-cover" />
                         </div>
                         <div className="min-w-0">
                           <span className="text-[10px] font-black text-[#D97706] uppercase tracking-wider block">{item.category}</span>
                           <h4 className="font-extrabold text-sm text-gray-800 truncate leading-tight mt-0.5">{item.name}</h4>
-                          <span className="text-xs font-bold text-gray-900 block mt-1">₹{item.price}</span>
+                          {(item.recommendationReason || item.socialProof) && (
+                            <p className="text-[9px] text-[#C0181A] font-bold line-clamp-1 mt-0.5">
+                              {item.recommendationReason || item.socialProof}
+                            </p>
+                          )}
+                          <span className="text-xs font-bold text-gray-900 block mt-0.5">₹{item.price}</span>
                         </div>
                       </div>
                       <button
@@ -1224,6 +1259,101 @@ function CartContent() {
                   <p className="text-xs text-text-dark/60 mt-0.5">{phone}</p>
                 </div>
 
+                {/* Delivery Warning Toast / Alert */}
+                {deliveryWarningToast && (
+                  <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 flex items-start gap-2.5 animate-in fade-in duration-200">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-[11px] text-amber-900 font-semibold leading-snug">
+                      <strong className="block font-black text-amber-950 uppercase text-[10px] mb-0.5">
+                        Delivery Not Available Right Now
+                      </strong>
+                      Delivery is currently unavailable. Please select <strong>Takeaway</strong> (pickup yourself) or <strong>Dine In</strong>.
+                    </div>
+                  </div>
+                )}
+
+                {/* Row 1: Order Type Selection (3 Options) */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[0.68rem] uppercase font-extrabold text-bg-dark tracking-[0.03em] flex items-center justify-between">
+                    <span>Order Type *</span>
+                    <span className="text-[10px] text-text-dark/40 font-semibold lowercase">Select 1 option</span>
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOrderTypeSelect('dine_in')}
+                      className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${
+                        orderType === 'dine_in'
+                          ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-sm font-bold ring-2 ring-[#C0181A]/20'
+                          : 'bg-surface text-text-dark border-text-dark/10 hover:border-[#C0181A]/50 font-medium'
+                      }`}
+                    >
+                      <span className="text-sm mb-0.5">🍽️</span>
+                      <span className="text-xs font-black">Dine In</span>
+                      <span className={`text-[9px] ${orderType === 'dine_in' ? 'text-white/80' : 'text-text-dark/50'}`}>At table</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOrderTypeSelect('takeaway')}
+                      className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${
+                        orderType === 'takeaway'
+                          ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-sm font-bold ring-2 ring-[#C0181A]/20'
+                          : 'bg-surface text-text-dark border-text-dark/10 hover:border-[#C0181A]/50 font-medium'
+                      }`}
+                    >
+                      <span className="text-sm mb-0.5">🥡</span>
+                      <span className="text-xs font-black">Takeaway</span>
+                      <span className={`text-[9px] ${orderType === 'takeaway' ? 'text-white/80' : 'text-text-dark/50'}`}>Self pickup</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOrderTypeSelect('delivery')}
+                      className="flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer bg-gray-50 text-gray-400 border-gray-200 hover:border-amber-400 relative overflow-hidden"
+                    >
+                      <span className="text-sm mb-0.5 opacity-60">🛵</span>
+                      <span className="text-xs font-black line-through opacity-70">Delivery</span>
+                      <span className="text-[8px] font-extrabold text-amber-700 uppercase tracking-tighter bg-amber-100 px-1 py-0.2 rounded mt-0.5">Unavailable</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Row 2: Payment Mode Selection (2 Options) */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[0.68rem] uppercase font-extrabold text-bg-dark tracking-[0.03em] flex items-center justify-between">
+                    <span>Payment Method *</span>
+                    <span className="text-[10px] text-text-dark/40 font-semibold lowercase">Select 1 option</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMode('cash')}
+                      className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border transition-all cursor-pointer ${
+                        paymentMode === 'cash'
+                          ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-sm font-bold ring-2 ring-[#C0181A]/20'
+                          : 'bg-surface text-text-dark border-text-dark/10 hover:border-[#C0181A]/50 font-medium'
+                      }`}
+                    >
+                      <span className="text-sm">💵</span>
+                      <span className="text-xs font-black">Cash</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMode('online')}
+                      className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border transition-all cursor-pointer ${
+                        paymentMode === 'online'
+                          ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-sm font-bold ring-2 ring-[#C0181A]/20'
+                          : 'bg-surface text-text-dark border-text-dark/10 hover:border-[#C0181A]/50 font-medium'
+                      }`}
+                    >
+                      <span className="text-sm">💳</span>
+                      <span className="text-xs font-black">Online Payment</span>
+                    </button>
+                  </div>
+                </div>
+
                 <div className="flex flex-col gap-1.5 border border-text-dark/5 bg-surface rounded-xl p-3">
                   <label className="text-[0.65rem] font-bold text-text-dark/50 uppercase tracking-wider">Note to Chef (optional)</label>
                   <textarea
@@ -1246,7 +1376,7 @@ function CartContent() {
                       handleSubmit(e);
                     }}
                     disabled={loading}
-                    className="w-full bg-cta text-text-dark font-bold text-sm py-4 rounded-xl uppercase tracking-wide active:scale-[0.97] transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="w-full bg-cta text-text-dark font-bold text-sm py-4 rounded-xl uppercase tracking-wide active:scale-[0.97] transition-transform disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
                   >
                     {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                     {loading ? 'Placing Order...' : 'Confirm & Place Order'}
@@ -1291,6 +1421,101 @@ function CartContent() {
                   />
                 </div>
 
+                {/* Delivery Warning Toast / Alert */}
+                {deliveryWarningToast && (
+                  <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 flex items-start gap-2.5 animate-in fade-in duration-200">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-[11px] text-amber-900 font-semibold leading-snug">
+                      <strong className="block font-black text-amber-950 uppercase text-[10px] mb-0.5">
+                        Delivery Not Available Right Now
+                      </strong>
+                      Delivery is currently unavailable. Please select <strong>Takeaway</strong> (pickup yourself) or <strong>Dine In</strong>.
+                    </div>
+                  </div>
+                )}
+
+                {/* Row 1: Order Type Selection (3 Options) */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[0.68rem] uppercase font-extrabold text-bg-dark tracking-[0.03em] flex items-center justify-between">
+                    <span>Order Type *</span>
+                    <span className="text-[10px] text-text-dark/40 font-semibold lowercase">Select 1 option</span>
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOrderTypeSelect('dine_in')}
+                      className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${
+                        orderType === 'dine_in'
+                          ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-sm font-bold ring-2 ring-[#C0181A]/20'
+                          : 'bg-surface text-text-dark border-text-dark/10 hover:border-[#C0181A]/50 font-medium'
+                      }`}
+                    >
+                      <span className="text-sm mb-0.5">🍽️</span>
+                      <span className="text-xs font-black">Dine In</span>
+                      <span className={`text-[9px] ${orderType === 'dine_in' ? 'text-white/80' : 'text-text-dark/50'}`}>At table</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOrderTypeSelect('takeaway')}
+                      className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${
+                        orderType === 'takeaway'
+                          ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-sm font-bold ring-2 ring-[#C0181A]/20'
+                          : 'bg-surface text-text-dark border-text-dark/10 hover:border-[#C0181A]/50 font-medium'
+                      }`}
+                    >
+                      <span className="text-sm mb-0.5">🥡</span>
+                      <span className="text-xs font-black">Takeaway</span>
+                      <span className={`text-[9px] ${orderType === 'takeaway' ? 'text-white/80' : 'text-text-dark/50'}`}>Self pickup</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOrderTypeSelect('delivery')}
+                      className="flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer bg-gray-50 text-gray-400 border-gray-200 hover:border-amber-400 relative overflow-hidden"
+                    >
+                      <span className="text-sm mb-0.5 opacity-60">🛵</span>
+                      <span className="text-xs font-black line-through opacity-70">Delivery</span>
+                      <span className="text-[8px] font-extrabold text-amber-700 uppercase tracking-tighter bg-amber-100 px-1 py-0.2 rounded mt-0.5">Unavailable</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Row 2: Payment Mode Selection (2 Options) */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[0.68rem] uppercase font-extrabold text-bg-dark tracking-[0.03em] flex items-center justify-between">
+                    <span>Payment Method *</span>
+                    <span className="text-[10px] text-text-dark/40 font-semibold lowercase">Select 1 option</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMode('cash')}
+                      className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border transition-all cursor-pointer ${
+                        paymentMode === 'cash'
+                          ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-sm font-bold ring-2 ring-[#C0181A]/20'
+                          : 'bg-surface text-text-dark border-text-dark/10 hover:border-[#C0181A]/50 font-medium'
+                      }`}
+                    >
+                      <span className="text-sm">💵</span>
+                      <span className="text-xs font-black">Cash</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMode('online')}
+                      className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border transition-all cursor-pointer ${
+                        paymentMode === 'online'
+                          ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-sm font-bold ring-2 ring-[#C0181A]/20'
+                          : 'bg-surface text-text-dark border-text-dark/10 hover:border-[#C0181A]/50 font-medium'
+                      }`}
+                    >
+                      <span className="text-sm">💳</span>
+                      <span className="text-xs font-black">Online Payment</span>
+                    </button>
+                  </div>
+                </div>
+
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[0.7rem] uppercase font-bold text-bg-dark tracking-[0.02em]">Note to Chef (optional)</label>
                   <textarea
@@ -1306,7 +1531,7 @@ function CartContent() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-cta text-text-dark font-bold text-sm py-4 rounded-xl uppercase tracking-wide mt-2 active:scale-[0.97] transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full bg-cta text-text-dark font-bold text-sm py-4 rounded-xl uppercase tracking-wide mt-2 active:scale-[0.97] transition-transform disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
                 >
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                   {loading ? 'Placing Order...' : 'Confirm & Place Order'}

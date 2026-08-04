@@ -1,4 +1,4 @@
-const CACHE_NAME = 'growlic-v1';
+const CACHE_NAME = 'growlic-v2';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -40,6 +40,11 @@ self.addEventListener('activate', (event) => {
 // Cache intercept strategy
 self.addEventListener('fetch', (event) => {
   const requestUrl = new URL(event.request.url);
+
+  // Bypass non-HTTP/HTTPS requests (such as chrome-extension://, moz-extension://)
+  if (!requestUrl.protocol.startsWith('http')) {
+    return;
+  }
 
   // Bypass caching for Next.js internal assets (development chunks, HMR, hot updates)
   if (
@@ -93,11 +98,17 @@ self.addEventListener('fetch', (event) => {
             return networkResponse;
           }
 
-          // Cache clones of successful static files
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
+          // Cache clones of successful static files if HTTP/HTTPS
+          try {
+            if (event.request.url.startsWith('http://') || event.request.url.startsWith('https://')) {
+              const responseToCache = networkResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(event.request, responseToCache).catch(() => {});
+              }).catch(() => {});
+            }
+          } catch (e) {
+            // Ignore caching errors for non-standard schemes
+          }
 
           return networkResponse;
         }).catch(() => {
@@ -107,3 +118,4 @@ self.addEventListener('fetch', (event) => {
     );
   }
 });
+

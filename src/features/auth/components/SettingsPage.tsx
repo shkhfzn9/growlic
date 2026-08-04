@@ -27,6 +27,7 @@ export default function SettingsPage() {
   const [logoUrl, setLogoUrl] = useState('');
   const [primaryColor, setPrimaryColor] = useState('#000000');
   const [welcomeMessage, setWelcomeMessage] = useState('Welcome to our restaurant!');
+  const [whatsappNumber, setWhatsappNumber] = useState('9541234068');
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -50,6 +51,7 @@ export default function SettingsPage() {
           setLogoUrl(details.logoUrl || '');
           setPrimaryColor(details.primaryColor || '#000000');
           setWelcomeMessage(details.welcomeMessage || 'Welcome to our restaurant!');
+          setWhatsappNumber(details.whatsappNumber || details.phone || '9541234068');
           setLoyaltyEnabled(!!details.loyaltyEnabled);
           setCallStaffEnabled(details.callStaffEnabled !== false);
           setStampsRequired(details.stampsRequired ?? 8);
@@ -119,6 +121,7 @@ export default function SettingsPage() {
         logoUrl, 
         primaryColor, 
         welcomeMessage,
+        whatsappNumber,
         loyaltyEnabled,
         callStaffEnabled,
         stampsRequired,
@@ -257,6 +260,23 @@ export default function SettingsPage() {
               className="px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors"
             />
           </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">
+            WhatsApp & Direct Call Number (Emergency / Order Alerts)
+          </label>
+          <input
+            type="tel"
+            placeholder="e.g. 9541234068"
+            value={whatsappNumber}
+            onChange={(e) => setWhatsappNumber(e.target.value)}
+            className="px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors font-mono"
+            required
+          />
+          <span className="text-xs text-[#6B7280]">
+            Customers can send order details directly to this WhatsApp number or call for emergency order confirmation if pending.
+          </span>
         </div>
 
         <div className="flex items-center gap-3 bg-[#F4F6F9] border border-[#E2E6EA] rounded-lg p-4">

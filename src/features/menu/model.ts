@@ -166,4 +166,46 @@ const BannerSchema: Schema = new Schema<IBanner>(
 export const Banner: Model<IBanner> =
   mongoose.models.Banner || mongoose.model<IBanner>('Banner', BannerSchema);
 
+// 6. Developer Promo Schema
+export interface IDeveloperPromo extends Document {
+  restaurantId: string;
+  active: boolean;
+  position: number;
+  headline: string;
+  subheadline: string;
+  ctaText: string;
+  ctaLink: string;
+  bgColorFrom: string;
+  bgColorTo: string;
+  textColor: string;
+  ctaBgColor: string;
+  ctaTextColor: string;
+  badgeText: string;
+  image?: string;
+}
+
+const DeveloperPromoSchema: Schema = new Schema<IDeveloperPromo>(
+  {
+    restaurantId: { type: String, required: true, unique: true, index: true },
+    active: { type: Boolean, default: true },
+    position: { type: Number, default: 1 },
+    headline: { type: String, default: 'Your Business Deserves Better Software.' },
+    subheadline: { type: String, default: 'Custom websites, web apps, mobile apps & AI automation built to grow your business.' },
+    ctaText: { type: String, default: 'Book a Free Consultation' },
+    ctaLink: { type: String, default: 'https://growlic.com' },
+    bgColorFrom: { type: String, default: '#0F172A' },
+    bgColorTo: { type: String, default: '#1E1B4B' },
+    textColor: { type: String, default: '#FFFFFF' },
+    ctaBgColor: { type: String, default: '#F5C518' },
+    ctaTextColor: { type: String, default: '#1A1A1A' },
+    badgeText: { type: String, default: 'SOFTWARE & DIGITAL SOLUTIONS' },
+    image: { type: String, default: '' },
+  },
+  { timestamps: true }
+);
+
+export const DeveloperPromo: Model<IDeveloperPromo> =
+  mongoose.models.DeveloperPromo || mongoose.model<IDeveloperPromo>('DeveloperPromo', DeveloperPromoSchema);
+
 export default Menu;
+

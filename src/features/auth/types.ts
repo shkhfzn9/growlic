@@ -4,6 +4,7 @@ export interface IAdmin {
   restaurantId: string;
   restaurantName: string;
   phone: string;
+  whatsappNumber?: string;
   designation: string;
   role: 'owner' | 'manager' | 'staff' | 'restaurant_admin' | 'super_admin';
   logoUrl?: string;

@@ -18,6 +18,8 @@ export function normalizeOrder(doc: any): IOrder {
     customerName: plain.customerName,
     customerPhone: plain.customerPhone,
     tableId: plain.tableId || '',
+    orderType: plain.orderType || 'takeaway',
+    paymentMode: plain.paymentMode || 'cash',
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     items: (plain.items || []).map((item: any) => ({
       menuItemId: item.menuItemId,
@@ -50,6 +52,8 @@ export async function create(data: {
   customerName: string;
   customerPhone: string;
   tableId?: string;
+  orderType?: 'dine_in' | 'takeaway' | 'delivery';
+  paymentMode?: 'cash' | 'online';
   items: Array<{
     menuItemId: string;
     name: string;
@@ -71,6 +75,8 @@ export async function create(data: {
     customerName: data.customerName,
     customerPhone: data.customerPhone,
     tableId: data.tableId || undefined,
+    orderType: data.orderType || 'takeaway',
+    paymentMode: data.paymentMode || 'cash',
     items: data.items,
     subtotal: data.subtotal,
     total: data.total,

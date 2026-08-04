@@ -75,3 +75,25 @@ export interface IBanner {
   createdAt?: string;
   updatedAt?: string;
 }
+
+export interface IDeveloperPromo {
+  _id?: string;
+  restaurantId: string;
+  active: boolean;
+  position?: number;
+  headline: string;
+
+  subheadline: string;
+  ctaText: string;
+  ctaLink: string;
+  bgColorFrom: string;
+  bgColorTo: string;
+  textColor: string;
+  ctaBgColor: string;
+  ctaTextColor: string;
+  badgeText: string;
+  image?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+

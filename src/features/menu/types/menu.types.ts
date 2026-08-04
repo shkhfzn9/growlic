@@ -60,3 +60,22 @@ export interface ComboRuleData {
   active: boolean;
   triggerCount: number;
 }
+
+export interface DeveloperPromoData {
+  _id?: string;
+  active: boolean;
+  position?: number;
+  headline: string;
+
+  subheadline: string;
+  ctaText: string;
+  ctaLink: string;
+  bgColorFrom: string;
+  bgColorTo: string;
+  textColor: string;
+  ctaBgColor: string;
+  ctaTextColor: string;
+  badgeText: string;
+  image?: string;
+}
+

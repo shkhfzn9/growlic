@@ -7,9 +7,13 @@ import { RootState } from '@/redux/store';
 import { addItem, updateQuantity, removeItem, setTableId } from '@/redux/cartSlice';
 import Link from 'next/link';
 import { logEvent, getCustomerLoyaltyInfo } from '@/actions/orders';
-import { Search, ShoppingBag, Minus, Plus, X, ChevronLeft, ChevronRight, Flame } from 'lucide-react';
+import { Search, ShoppingBag, Minus, Plus, X, ChevronLeft, ChevronRight, Flame, Code2, ExternalLink } from 'lucide-react';
 import { CustomerNavbar } from '@/components/layout';
 import { getActiveBanners } from '@/actions/banners';
+import { getDeveloperPromo } from '@/actions/developerPromo';
+import ConsultationModal from '@/components/ui/ConsultationModal';
+
+
 
 const DISH_PLACEHOLDER = '/dish_placeholder.jpg';
 
@@ -19,9 +23,7 @@ const DISH_PLACEHOLDER = '/dish_placeholder.jpg';
  * then falls back to the keyword-based lookup map, then allOtherFoods.
  */
 const getItemImage = (image?: string, name?: string) => {
-  if (name) return resolveMenuImage(name, image);
-  if (!image || image.startsWith('data:image/svg+xml')) return DISH_PLACEHOLDER;
-  return image;
+  return resolveMenuImage(name || '', image);
 };
 
 interface MenuItem {
@@ -149,6 +151,7 @@ const getItemTag = (name: string, category: string, price: number) => {
 interface MenuListProps {
   initialItems: MenuItem[];
   initialBanners?: any[];
+  initialDeveloperPromo?: any;
   restaurantName: string;
   restaurantId: string;
   table?: string;
@@ -167,6 +170,7 @@ interface MenuListProps {
 export default function MenuList({
   initialItems,
   initialBanners,
+  initialDeveloperPromo,
   restaurantName,
   restaurantId,
   table,
@@ -218,7 +222,12 @@ export default function MenuList({
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   const [banners, setBanners] = useState<any[]>(initialBanners || []);
+  const [developerPromo, setDeveloperPromo] = useState<any>(
+    menuContext?.developerPromo || initialDeveloperPromo || null
+  );
   const [activeBannerIdx, setActiveBannerIdx] = useState(0);
+  const [consultationModalOpen, setConsultationModalOpen] = useState(false);
+
 
   const defaultBanners = [
     {
@@ -247,7 +256,74 @@ export default function MenuList({
     }
   ];
 
-  const displayBanners = banners.length > 0 ? banners : defaultBanners;
+  const defaultDeveloperPromoItem = {
+    _id: 'default-developer-promo',
+    isDeveloperPromo: true,
+    position: 2,
+    headline: 'Your Business Deserves Better Software.',
+    subheadline: 'Custom websites, web apps, mobile apps & AI automation built to grow your business.',
+    ctaText: 'Book a Free Consultation',
+    ctaLink: 'https://growlic.com',
+    bgColorFrom: '#0F172A',
+    bgColorTo: '#1E1B4B',
+    textColor: '#FFFFFF',
+    ctaBgColor: '#F5C518',
+    ctaTextColor: '#1A1A1A',
+    badgeText: 'SOFTWARE & DIGITAL SOLUTIONS',
+    image: '/Screenshot 2026-08-03 175540.png',
+  };
+
+  const devPromoSlide = developerPromo
+    ? (developerPromo.active !== false ? {
+        _id: developerPromo._id || 'dev-promo-slide',
+        isDeveloperPromo: true,
+        position: developerPromo.position !== undefined ? Number(developerPromo.position) : 2,
+        headline: developerPromo.headline || 'Your Business Deserves Better Software.',
+        subheadline: developerPromo.subheadline || 'Custom websites, web apps, mobile apps & AI automation built to grow your business.',
+        ctaText: developerPromo.ctaText || 'Book a Free Consultation',
+        ctaLink: developerPromo.ctaLink || 'https://growlic.com',
+        bgColorFrom: developerPromo.bgColorFrom || '#0F172A',
+        bgColorTo: developerPromo.bgColorTo || '#1E1B4B',
+        textColor: developerPromo.textColor || '#FFFFFF',
+        ctaBgColor: developerPromo.ctaBgColor || '#F5C518',
+        ctaTextColor: developerPromo.ctaTextColor || '#1A1A1A',
+        badgeText: developerPromo.badgeText || 'SOFTWARE & DIGITAL SOLUTIONS',
+        image: developerPromo.image || '/Screenshot 2026-08-03 175540.png',
+      } : null)
+    : defaultDeveloperPromoItem;
+
+  const rawBanners = banners.length > 0 ? banners : defaultBanners;
+
+  const displayBanners = React.useMemo(() => {
+    if (!devPromoSlide) return rawBanners;
+    const result = [...rawBanners];
+    const pos = devPromoSlide.position !== undefined ? Number(devPromoSlide.position) : 2;
+    if (pos === 1) {
+      result.unshift(devPromoSlide);
+    } else {
+      result.push(devPromoSlide);
+    }
+    return result;
+  }, [devPromoSlide, rawBanners]);
+
+
+
+
+  useEffect(() => {
+    if (menuContext?.developerPromo || initialDeveloperPromo) return;
+    const fetchDevPromo = async () => {
+      try {
+        const promo = await getDeveloperPromo(restaurantId);
+        if (promo) {
+          setDeveloperPromo(promo);
+        }
+      } catch (err) {
+        console.error('Failed to load developer promo banner:', err);
+      }
+    };
+    fetchDevPromo();
+  }, [restaurantId, menuContext?.developerPromo, initialDeveloperPromo]);
+
 
   useEffect(() => {
     if (initialBanners && initialBanners.length > 0) {
@@ -476,54 +552,139 @@ export default function MenuList({
                 style={{ width: `${100 / (displayBanners.length || 1)}%` }}
               >
                 {/* Slide Content */}
-                <div className="bg-gradient-to-r from-bg-dark via-bg-dark to-primary w-full flex items-stretch">
-                  <div className="w-[60%] p-5 flex flex-col justify-center relative z-10">
-                    <h2 className="font-black text-lg sm:text-xl text-white leading-tight tracking-tight whitespace-pre-line">
-                      {banner.title}
-                    </h2>
-                    {banner.subtitle && (
-                      <p className="text-[0.7rem] text-white/70 mt-1.5 font-medium line-clamp-1">{banner.subtitle}</p>
-                    )}
-                    {banner.buttonLink && (
-                      <Link 
-                        href={banner.buttonLink}
-                        className="mt-3 bg-cta text-text-dark text-[0.7rem] font-bold uppercase px-5 py-2.5 rounded-full w-fit active:scale-95 transition-transform shadow-[0_4px_12px_rgba(245,197,24,0.3)] text-center block"
+                {banner.isDeveloperPromo ? (
+                  <div
+                    className="w-full h-full flex items-stretch relative overflow-hidden"
+                    style={{
+                      background: `linear-gradient(135deg, ${banner.bgColorFrom || '#0F172A'} 0%, ${banner.bgColorTo || '#1E1B4B'} 100%)`,
+                    }}
+                  >
+                    <div className="w-[65%] sm:w-[70%] p-3 sm:p-4 pb-6 flex flex-col justify-between relative z-10">
+                      <div>
+                        <span
+                          className="inline-block text-[8px] sm:text-[9px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wider mb-0.5"
+                          style={{
+                            backgroundColor: `${banner.ctaBgColor || '#F5C518'}25`,
+                            color: banner.ctaBgColor || '#F5C518',
+                            border: `1px solid ${banner.ctaBgColor || '#F5C518'}40`,
+                          }}
+                        >
+                          ⚡ {banner.badgeText || 'SOFTWARE & DIGITAL SOLUTIONS'}
+                        </span>
+                        <h2
+                          className="font-black text-xs sm:text-base leading-tight tracking-tight whitespace-pre-line line-clamp-2"
+                          style={{ color: banner.textColor || '#FFFFFF' }}
+                        >
+                          {banner.headline}
+                        </h2>
+                        {banner.subheadline && (
+                          <p
+                            className="text-[9px] sm:text-[11px] mt-0.5 font-medium line-clamp-1 opacity-80"
+                            style={{ color: banner.textColor || '#FFFFFF' }}
+                          >
+                            {banner.subheadline}
+                          </p>
+                        )}
+                      </div>
+
+                      {banner.ctaText && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (banner.ctaLink && banner.ctaLink.startsWith('http') && !banner.ctaLink.includes('growlic')) {
+                              window.open(banner.ctaLink, '_blank');
+                            } else {
+                              setConsultationModalOpen(true);
+                            }
+                          }}
+                          className="mt-1 text-[9px] sm:text-[11px] font-bold uppercase px-3 py-1.5 rounded-full w-fit shadow-md flex items-center gap-1 active:scale-95 transition-transform shrink-0 cursor-pointer"
+                          style={{
+                            backgroundColor: banner.ctaBgColor || '#F5C518',
+                            color: banner.ctaTextColor || '#1A1A1A',
+                          }}
+                        >
+                          <span>{banner.ctaText}</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </button>
+                      )}
+
+                    </div>
+
+                    {/* Right side Developer Image Container */}
+                    <div className="w-[35%] sm:w-[30%] relative overflow-hidden flex-shrink-0 bg-white/5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={getItemImage(banner.image || '/Screenshot 2026-08-03 175540.png')}
+                        alt={banner.headline || 'Developer Promo'}
+                        className="w-full h-full object-cover object-center scale-105"
+                      />
+                      {/* Curved Arc Separator matching gradient start color */}
+                      <svg
+                        className="absolute left-0 top-0 h-full w-6 z-10"
+                        viewBox="0 0 24 100"
+                        preserveAspectRatio="none"
+                        fill="none"
                       >
-                        {banner.buttonText || 'Order now'}
-                      </Link>
-                    )}
+                        <path
+                          d="M24,0 C0,25 0,75 24,100 L0,100 L0,0 Z"
+                          fill={banner.bgColorFrom || '#0F172A'}
+                        />
+                      </svg>
+                    </div>
                   </div>
-                  <div className="w-[40%] relative overflow-hidden flex-shrink-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={getItemImage(banner.image)}
-                      alt={banner.title}
-                      className="w-full h-full object-cover scale-110"
-                    />
-                    {/* Arc separator */}
-                    <svg
-                      className="absolute left-0 top-0 h-full w-6"
-                      viewBox="0 0 24 100"
-                      preserveAspectRatio="none"
-                      fill="none"
-                    >
-                      <path d="M24,0 C0,25 0,75 24,100 L0,100 L0,0 Z" fill="#8B0000" />
-                    </svg>
+                ) : (
+                  <div className="bg-gradient-to-r from-bg-dark via-bg-dark to-primary w-full flex items-stretch">
+                    <div className="w-[60%] sm:w-[65%] p-3.5 sm:p-4 pb-6 flex flex-col justify-between relative z-10">
+                      <div>
+                        <h2 className="font-black text-sm sm:text-lg text-white leading-tight tracking-tight whitespace-pre-line line-clamp-2">
+                          {banner.title}
+                        </h2>
+                        {banner.subtitle && (
+                          <p className="text-[0.65rem] sm:text-[0.7rem] text-white/70 mt-1 font-medium line-clamp-1">{banner.subtitle}</p>
+                        )}
+                      </div>
+                      {banner.buttonLink && (
+                        <Link 
+                          href={banner.buttonLink}
+                          className="mt-1 bg-cta text-text-dark text-[0.65rem] sm:text-[0.7rem] font-bold uppercase px-3.5 py-1.5 rounded-full w-fit active:scale-95 transition-transform shadow-[0_4px_12px_rgba(245,197,24,0.3)] text-center block shrink-0"
+                        >
+                          {banner.buttonText || 'Order now'}
+                        </Link>
+                      )}
+                    </div>
+                    <div className="w-[40%] sm:w-[35%] relative overflow-hidden flex-shrink-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={getItemImage(banner.image)}
+                        alt={banner.title}
+                        className="w-full h-full object-cover scale-110"
+                      />
+                      {/* Arc separator */}
+                      <svg
+                        className="absolute left-0 top-0 h-full w-6"
+                        viewBox="0 0 24 100"
+                        preserveAspectRatio="none"
+                        fill="none"
+                      >
+                        <path d="M24,0 C0,25 0,75 24,100 L0,100 L0,0 Z" fill="#8B0000" />
+                      </svg>
+                    </div>
                   </div>
-                </div>
+                )}
+
               </div>
             ))}
           </div>
 
-          {/* Slide Indicator Dots */}
+          {/* Slide Indicator Dots - Positioned on bottom right pill backdrop to prevent overlap */}
           {displayBanners.length > 1 && (
-            <div className="absolute bottom-3 left-5 flex gap-1.5 z-25">
+            <div className="absolute bottom-2.5 right-3.5 flex gap-1.5 z-25 bg-black/40 backdrop-blur-md px-2 py-1 rounded-full border border-white/10 shadow-sm">
               {displayBanners.map((_, idx) => (
                 <button
                   key={idx}
                   onClick={() => setActiveBannerIdx(idx)}
-                  className={`w-1.5 h-1.5 rounded-full transition-all ${
-                    activeBannerIdx === idx ? 'bg-cta w-3' : 'bg-white/40'
+                  className={`h-1.5 rounded-full transition-all ${
+                    activeBannerIdx === idx ? 'bg-cta w-3.5' : 'bg-white/50 w-1.5'
                   }`}
                   title={`Go to slide ${idx + 1}`}
                 />
@@ -682,6 +843,13 @@ export default function MenuList({
           pairedData={getPairedItem(selectedDetailedItem)}
         />
       )}
+
+      {/* Free Consultation Qualification Modal */}
+      <ConsultationModal
+        isOpen={consultationModalOpen}
+        onClose={() => setConsultationModalOpen(false)}
+        restaurantId={restaurantId}
+      />
     </div>
   );
 }

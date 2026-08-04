@@ -44,6 +44,8 @@ export async function saveRestaurantBranding(data: {
   callStaffEnabled?: boolean;
   stampsRequired?: number;
   discountPercentage?: number;
+  whatsappNumber?: string;
+  phone?: string;
 }) {
   try {
     const admin = await checkAdminAuth();

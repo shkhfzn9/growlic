@@ -1,7 +1,8 @@
 import React from 'react';
 import { getMenuItemById } from '@/actions/menu';
-import { EditItemForm } from '@/features/menu';
+import EditItemForm from '@/features/menu/components/EditItemForm';
 import Link from 'next/link';
+
 
 interface PageProps {
   params: Promise<{ id: string }>;

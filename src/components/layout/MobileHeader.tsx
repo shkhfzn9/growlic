@@ -14,6 +14,7 @@ import {
   Menu,
   X,
   Megaphone,
+  Code2,
 } from 'lucide-react';
 
 interface MobileHeaderProps {
@@ -30,7 +31,9 @@ const navLinks = [
   { href: '/admin/settings', label: 'Settings & QR', icon: Settings },
   { href: '/admin/upsell', label: 'Upsell & Rules', icon: TrendingUp },
   { href: '/admin/promos', label: 'Promos & Ads', icon: Megaphone },
+  { href: '/admin/developer-promo', label: 'Developer Promo', icon: Code2 },
 ];
+
 
 export default function MobileHeader({ restaurantName, email, onLogout }: MobileHeaderProps) {
   const pathname = usePathname();

@@ -2,9 +2,11 @@
 
 import React, { useEffect, useState } from 'react';
 import { getOrderById, getCustomerLoyaltyInfo } from '@/actions/orders';
+import { getDeveloperPromo } from '@/actions/developerPromo';
 import Link from 'next/link';
-import { Check, Clock, ChefHat, UtensilsCrossed, PartyPopper, XCircle } from 'lucide-react';
+import { Check, Clock, ChefHat, UtensilsCrossed, PartyPopper, XCircle, ExternalLink, Sparkles, MessageCircle, PhoneCall } from 'lucide-react';
 import { CustomerNavbar } from '@/components/layout';
+import ConsultationModal from '@/components/ui/ConsultationModal';
 import { TRACK_NUDGES } from '../constants/trackNudges';
 
 interface OrderItem {
@@ -19,6 +21,7 @@ interface OrderData {
   restaurantId: string;
   customerName: string;
   customerPhone: string;
+  restaurantWhatsApp?: string;
   items: OrderItem[];
   subtotal: number;
   total: number;
@@ -48,6 +51,19 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
     stampsRequired: number;
     stampCount: number;
   } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [devPromo, setDevPromo] = useState<any>(null);
+  const [consultationModalOpen, setConsultationModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (order.restaurantId) {
+      getDeveloperPromo(order.restaurantId)
+        .then((data) => {
+          if (data) setDevPromo(data);
+        })
+        .catch((err) => console.error('Error fetching dev promo on tracker:', err));
+    }
+  }, [order.restaurantId]);
 
   useEffect(() => {
     if (order.customerPhone && order.restaurantId) {
@@ -155,6 +171,36 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
 
   const currentStepIndex = getStepIndex(order.status);
   const displayId = order._id.substring(order._id.length - 6).toUpperCase();
+
+  // WhatsApp & Emergency Contact calculations
+  const targetWhatsAppNum = order.restaurantWhatsApp || '9541234068';
+  const cleanPhoneDigits = targetWhatsAppNum.replace(/\D/g, '');
+  const formattedWaPhone = cleanPhoneDigits.length === 10 ? `91${cleanPhoneDigits}` : cleanPhoneDigits;
+
+  const elapsedMs = now - new Date(order.createdAt).getTime();
+  const isUnacceptedOver5Min = (order.status === 'received' || order.status === 'accepted') && elapsedMs >= 5 * 60 * 1000;
+
+  const orderItemsFormatted = order.items
+    .map((item) => `• *${item.name}* ×${item.quantity} - ₹${item.price * item.quantity}`)
+    .join('\n');
+
+  const currentTrackUrl = typeof window !== 'undefined' ? window.location.href : '';
+
+  const whatsappMessageText = `Hello! I just placed an order on your digital menu:
+
+*Order ID:* #${displayId} (${order._id})
+*Customer:* ${order.customerName}
+*Phone:* ${order.customerPhone}
+
+*Items:*
+${orderItemsFormatted}
+
+*Total Amount:* ₹${order.total}${order.notes ? `\n*Note:* ${order.notes}` : ''}
+
+Please confirm and prepare my order!
+*Track Order:* ${currentTrackUrl}`;
+
+  const whatsappUrl = `https://wa.me/${formattedWaPhone}?text=${encodeURIComponent(whatsappMessageText)}`;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-bg-dark to-bg-darker flex flex-col relative overflow-hidden pb-28">
@@ -368,6 +414,135 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
             </div>
           </div>
 
+          {/* WhatsApp & Emergency Call Action Card (Placed below Order Total) */}
+          {order.status !== 'cancelled' && order.status !== 'completed' && (
+            <div className={`rounded-2xl p-4 flex flex-col gap-3 shadow-sm border transition-all ${
+              isUnacceptedOver5Min
+                ? 'bg-[#FFF5F5] border-[#FECACA] animate-in fade-in duration-300 ring-2 ring-red-400/20'
+                : 'bg-[#F0FDF4] border-[#BBF7D0]'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-3 w-3">
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                      isUnacceptedOver5Min ? 'bg-red-400' : 'bg-emerald-400'
+                    }`}></span>
+                    <span className={`relative inline-flex rounded-full h-3 w-3 ${
+                      isUnacceptedOver5Min ? 'bg-red-500' : 'bg-emerald-500'
+                    }`}></span>
+                  </span>
+                  <span className="font-extrabold text-xs text-gray-900 uppercase tracking-wide">
+                    {isUnacceptedOver5Min ? 'Order Pending (> 5 Min)' : 'Direct Restaurant Connect'}
+                  </span>
+                </div>
+
+                <span className="text-[9px] font-black uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                  WhatsApp Active
+                </span>
+              </div>
+
+              <p className="text-xs text-gray-700 font-semibold leading-relaxed">
+                {isUnacceptedOver5Min
+                  ? 'Your order has been pending for over 5 minutes! Tap below to send this exact order copy directly to the restaurant on WhatsApp or call for immediate confirmation.'
+                  : 'Tap below to send this order copy directly to the restaurant on WhatsApp or call for quick updates.'}
+              </p>
+
+              {/* Note for 5 minute contact */}
+              <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-2.5 text-[10px] text-amber-900 font-bold leading-snug">
+                <span className="font-extrabold uppercase text-[#B45309] block mb-0.5">⚠️ Contact Note</span>
+                If order is not accepted in 5 min, please contact directly on WhatsApp or Call below.
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2 mt-0.5">
+                {/* Send on WhatsApp Button */}
+                <a
+                  href={whatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 bg-[#25D366] hover:bg-[#20bd5a] text-white font-extrabold text-xs py-3 px-3.5 rounded-xl uppercase tracking-wide flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all text-center"
+                >
+                  <MessageCircle className="w-4 h-4 fill-current flex-shrink-0" />
+                  <span>Send Order on WhatsApp</span>
+                </a>
+
+                {/* Call Restaurant Button */}
+                <a
+                  href={`tel:${cleanPhoneDigits}`}
+                  className="bg-[#1E293B] hover:bg-slate-900 text-white font-extrabold text-xs py-3 px-3.5 rounded-xl uppercase tracking-wide flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all text-center flex-shrink-0"
+                >
+                  <PhoneCall className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  <span>Call</span>
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* Developer Promo Banner Ad Glimpse for Waiting Customers */}
+          {devPromo?.active !== false && (
+            <div
+              className="rounded-2xl p-4 shadow-md flex flex-col justify-between relative overflow-hidden text-white my-1 border border-white/10"
+              style={{
+                background: `linear-gradient(135deg, ${devPromo?.bgColorFrom || '#0F172A'} 0%, ${devPromo?.bgColorTo || '#1E1B4B'} 100%)`,
+              }}
+            >
+              <div className="flex items-start justify-between gap-3 relative z-10">
+                <div className="flex-1 min-w-0">
+                  <span
+                    className="inline-block text-[8px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wider mb-1.5"
+                    style={{
+                      backgroundColor: `${devPromo?.ctaBgColor || '#F5C518'}25`,
+                      color: devPromo?.ctaBgColor || '#F5C518',
+                      border: `1px solid ${devPromo?.ctaBgColor || '#F5C518'}40`,
+                    }}
+                  >
+                    ⚡ {devPromo?.badgeText || 'SOFTWARE & DIGITAL SOLUTIONS'}
+                  </span>
+                  <h3
+                    className="font-black text-sm leading-snug tracking-tight truncate"
+                    style={{ color: devPromo?.textColor || '#FFFFFF' }}
+                  >
+                    {devPromo?.headline || 'Your Business Deserves Better Software.'}
+                  </h3>
+                  <p
+                    className="text-[10px] mt-1 font-medium opacity-85 leading-relaxed line-clamp-2"
+                    style={{ color: devPromo?.textColor || '#FFFFFF' }}
+                  >
+                    {devPromo?.subheadline || 'Custom websites, web apps, mobile apps & AI automation built to grow your business.'}
+                  </p>
+                </div>
+
+                {/* Right side Image Graphic */}
+                <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 relative border border-white/15 bg-white/5 shadow-inner">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={devPromo?.image || '/Screenshot 2026-08-03 175540.png'}
+                    alt="Developer Promo"
+                    className="w-full h-full object-cover object-center scale-105"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between relative z-10">
+                <span className="text-[9.5px] text-white/70 font-semibold flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-yellow-400 fill-current animate-pulse flex-shrink-0" />
+                  Explore software while waiting
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setConsultationModalOpen(true)}
+                  className="text-[9.5px] font-extrabold uppercase px-3 py-1.5 rounded-xl shadow-md flex items-center gap-1 active:scale-95 transition-transform cursor-pointer"
+                  style={{
+                    backgroundColor: devPromo?.ctaBgColor || '#F5C518',
+                    color: devPromo?.ctaTextColor || '#1A1A1A',
+                  }}
+                >
+                  <span>{devPromo?.ctaText || 'Book a Free Consultation'}</span>
+                  <ExternalLink className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Back to Menu */}
           <Link
             href={`/menu/${order.restaurantId}`}
@@ -377,6 +552,14 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
           </Link>
         </div>
       </div>
+
+      {/* Free Consultation Qualification Modal */}
+      <ConsultationModal
+        isOpen={consultationModalOpen}
+        onClose={() => setConsultationModalOpen(false)}
+        restaurantId={order.restaurantId}
+      />
+
       <CustomerNavbar restaurantId={order.restaurantId} />
     </div>
   );

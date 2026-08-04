@@ -6,6 +6,7 @@ export interface IAdminDocument extends Document {
   restaurantId: string;
   restaurantName: string;
   phone: string;
+  whatsappNumber?: string;
   designation: string;
   role: 'owner' | 'manager' | 'staff' | 'restaurant_admin' | 'super_admin';
   logoUrl?: string;
@@ -28,6 +29,7 @@ const AdminSchema: Schema = new Schema<IAdminDocument>(
     restaurantId: { type: String, required: true, unique: true, index: true },
     restaurantName: { type: String, required: true },
     phone: { type: String, required: true },
+    whatsappNumber: { type: String, default: '9541234068' },
     designation: { type: String, required: true },
     role: { type: String, enum: ['owner', 'manager', 'staff', 'restaurant_admin', 'super_admin'], default: 'staff', required: true },
     logoUrl: { type: String, default: '' },

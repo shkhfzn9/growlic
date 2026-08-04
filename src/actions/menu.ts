@@ -255,25 +255,14 @@ export async function getRestaurantMenuContext(restaurantId: string) {
       throw new Error('Restaurant ID is required');
     }
 
-    const cachedFetch = unstable_cache(
-      async (restId: string) => {
-        const [admin, banners, upsellConfig] = await Promise.all([
-          getAdminByRestaurantId(restId),
-          menuService.getActiveBanners(restId),
-          menuService.getUpsellConfig(restId),
-        ]);
-        return { admin, banners, upsellConfig };
-      },
-      ['restaurant-menu-context'],
-      {
-        tags: [`menu-${restaurantId}`],
-        revalidate: 30,
-      }
-    );
+    const [admin, banners, upsellConfig, developerPromo] = await Promise.all([
+      getAdminByRestaurantId(restaurantId),
+      menuService.getActiveBanners(restaurantId),
+      menuService.getUpsellConfig(restaurantId),
+      menuService.getDeveloperPromo(restaurantId),
+    ]);
 
-    const data = await cachedFetch(restaurantId);
-
-    return JSON.parse(JSON.stringify(data));
+    return JSON.parse(JSON.stringify({ admin, banners, upsellConfig, developerPromo }));
   } catch (error) {
     console.error('Error fetching restaurant menu context action:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch restaurant menu context';

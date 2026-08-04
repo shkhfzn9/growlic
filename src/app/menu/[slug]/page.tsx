@@ -1,7 +1,8 @@
 import React from 'react';
 import { getRestaurantMenuContext } from '@/actions/menu';
-import { MenuList } from '@/features/menu';
+import MenuList from '@/features/menu/components/MenuList';
 import Link from 'next/link';
+
 import { AlertTriangle, UtensilsCrossed } from 'lucide-react';
 
 interface PageProps {
