@@ -1,7 +1,10 @@
 'use server';
 
 import * as sopService from '@/features/sop';
+import { SopLog, SopTask, SopStaff } from '@/features/sop/model';
+import dbConnect from '@/lib/mongodb';
 import { cookies } from 'next/headers';
+import { revalidatePath } from 'next/cache';
 import { verifyToken } from '@/lib/auth';
 import { validateSession, can } from '@/features/auth';
 
@@ -321,5 +324,224 @@ export async function deleteStaffProfileAction(id: string) {
   } catch (err) {
     console.error('Error in deleteStaffProfileAction:', err);
     throw new Error(err instanceof Error ? err.message : 'Failed to delete staff profile');
+  }
+}
+
+/**
+ * Admin action: Cleanly wipe corrupt data & seed 100 days of SOP historical execution data into MongoDB.
+ */
+export async function seedSampleSopDataAction() {
+  try {
+    const admin = await checkAdminAuth();
+    const isAllowed = await can('edit_menu', admin.token, admin.restaurantId);
+    if (!isAllowed) throw new Error('Forbidden: Insufficient permissions');
+
+    await dbConnect();
+    const restaurantId = admin.restaurantId.toLowerCase();
+
+    // 1. Wipe previous corrupt/messy database records
+    await SopLog.deleteMany({ restaurantId });
+    await SopTask.deleteMany({ restaurantId });
+    await SopStaff.deleteMany({ restaurantId });
+
+    // 2. Create Clean Staff Profiles
+    const jehan = await SopStaff.create({ restaurantId, name: 'Jehan', role: 'Head Chef' });
+    const krish = await SopStaff.create({ restaurantId, name: 'Krish', role: 'Kitchen Specialist' });
+
+    // 3. Create Clean SOP Tasks (Batches 1 to 4)
+    const taskDefinitions = [
+      // BATCH 1 — MOMO PREP (10:00 AM – 1:00 PM)
+      { batchName: 'BATCH 1 — MOMO PREP', batchWindow: '10:00 AM – 1:00 PM', taskName: 'Spice Mix', targetMinutes: 15, assignedStaffName: 'Jehan', orderIndex: 1 },
+      { batchName: 'BATCH 1 — MOMO PREP', batchWindow: '10:00 AM – 1:00 PM', taskName: 'Meat / Keema Prep', targetMinutes: 20, assignedStaffName: 'Jehan', orderIndex: 2 },
+      { batchName: 'BATCH 1 — MOMO PREP', batchWindow: '10:00 AM – 1:00 PM', taskName: 'Chopping — Shimla + Onion', targetMinutes: 20, assignedStaffName: 'Jehan', orderIndex: 3 },
+      { batchName: 'BATCH 1 — MOMO PREP', batchWindow: '10:00 AM – 1:00 PM', taskName: 'Maida Mixing / Dough', targetMinutes: 15, assignedStaffName: 'Jehan', orderIndex: 4 },
+      { batchName: 'BATCH 1 — MOMO PREP', batchWindow: '10:00 AM – 1:00 PM', taskName: 'Sheet Making + Folding', targetMinutes: 30, assignedStaffName: 'Jehan', orderIndex: 5 },
+      { batchName: 'BATCH 1 — MOMO PREP', batchWindow: '10:00 AM – 1:00 PM', taskName: 'Steaming', targetMinutes: 15, assignedStaffName: 'Jehan', orderIndex: 6 },
+
+      // BATCH 2 — BOILING & CHUTNEYS (1:30 PM – 2:30 PM)
+      { batchName: 'BATCH 2 — BOILING & CHUTNEYS', batchWindow: '1:30 PM – 2:30 PM', taskName: 'Boil Chicken', targetMinutes: 20, assignedStaffName: 'Krish', orderIndex: 7 },
+      { batchName: 'BATCH 2 — BOILING & CHUTNEYS', batchWindow: '1:30 PM – 2:30 PM', taskName: 'Boil Rice', targetMinutes: 15, assignedStaffName: 'Krish', orderIndex: 8 },
+      { batchName: 'BATCH 2 — BOILING & CHUTNEYS', batchWindow: '1:30 PM – 2:30 PM', taskName: 'Boil Noodles', targetMinutes: 15, assignedStaffName: 'Krish', orderIndex: 9 },
+      { batchName: 'BATCH 2 — BOILING & CHUTNEYS', batchWindow: '1:30 PM – 2:30 PM', taskName: 'Red Chutney', targetMinutes: 15, assignedStaffName: 'Krish', orderIndex: 10 },
+      { batchName: 'BATCH 2 — BOILING & CHUTNEYS', batchWindow: '1:30 PM – 2:30 PM', taskName: 'Green Chutney', targetMinutes: 15, assignedStaffName: 'Krish', orderIndex: 11 },
+      { batchName: 'BATCH 2 — BOILING & CHUTNEYS', batchWindow: '1:30 PM – 2:30 PM', taskName: 'Mayonnaise', targetMinutes: 10, assignedStaffName: 'Krish', orderIndex: 12 },
+
+      // BATCH 3 — CLEANING (1:30 PM – 2:30 PM)
+      { batchName: 'BATCH 3 — CLEANING', batchWindow: '1:30 PM – 2:30 PM', taskName: 'Board Outside', targetMinutes: 5, assignedStaffName: 'Jehan', orderIndex: 13 },
+      { batchName: 'BATCH 3 — CLEANING', batchWindow: '1:30 PM – 2:30 PM', taskName: 'Glass Cleaning', targetMinutes: 10, assignedStaffName: 'Jehan', orderIndex: 14 },
+      { batchName: 'BATCH 3 — CLEANING', batchWindow: '1:30 PM – 2:30 PM', taskName: 'Floor Cleaning', targetMinutes: 15, assignedStaffName: 'Jehan', orderIndex: 15 },
+      { batchName: 'BATCH 3 — CLEANING', batchWindow: '1:30 PM – 2:30 PM', taskName: 'Table Cleaning', targetMinutes: 10, assignedStaffName: 'Jehan', orderIndex: 16 },
+      { batchName: 'BATCH 3 — CLEANING', batchWindow: '1:30 PM – 2:30 PM', taskName: 'Saman Andar & Device Charging', targetMinutes: 10, assignedStaffName: 'Jehan', orderIndex: 17 },
+
+      // BATCH 4 — CLOSING (10:30 PM Start)
+      { batchName: 'BATCH 4 — CLOSING', batchWindow: '10:30 PM Start', taskName: 'Call Water for Boiling', targetMinutes: 5, assignedStaffName: 'Krish', orderIndex: 18 },
+      { batchName: 'BATCH 4 — CLOSING', batchWindow: '10:30 PM Start', taskName: 'Restaurant Cleaning', targetMinutes: 20, assignedStaffName: 'Krish', orderIndex: 19 },
+      { batchName: 'BATCH 4 — CLOSING', batchWindow: '10:30 PM Start', taskName: 'Boulan (Lock Up)', targetMinutes: 10, assignedStaffName: 'Krish', orderIndex: 20 },
+      { batchName: 'BATCH 4 — CLOSING', batchWindow: '10:30 PM Start', taskName: 'Saman Andar & Valuables Store', targetMinutes: 10, assignedStaffName: 'Krish', orderIndex: 21 },
+    ];
+
+    const createdTasks = await SopTask.insertMany(
+      taskDefinitions.map((t) => ({ ...t, restaurantId, active: true }))
+    );
+
+    const sampleDelayReasons = [
+      'Us time cstmr the',
+      'Kiys tha paihle hi',
+      'Cstmr the',
+      'Gas cylinder replacement took 15 mins extra during morning prep',
+      'Freezer defrosting cycle delayed dough prep',
+      'Vendor late delivery of fresh chicken from market',
+      'Deep fryer oil filtering before dinner rush',
+    ];
+
+    const today = new Date();
+    const logsToInsert: Record<string, any>[] = [];
+
+    // Helper to get YYYY-MM-DD
+    const getFormatDate = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    // 4. Seed 100 days of historical data (dayOffset = 1 to 100)
+    for (let dayOffset = 1; dayOffset <= 100; dayOffset++) {
+      const pastDate = new Date(today);
+      pastDate.setDate(today.getDate() - dayOffset);
+      const dateStr = getFormatDate(pastDate);
+
+      // Select ~15 to 18 tasks executed per past day
+      createdTasks.forEach((task: any, idx: number) => {
+        // Skip ~15% tasks to simulate realistic missed tasks in history
+        if ((dayOffset * 13 + idx) % 7 === 0) return;
+
+        const staffName = task.assignedStaffName || (idx % 2 === 0 ? 'Jehan' : 'Krish');
+        const isDelayed = (dayOffset * 7 + idx * 3) % 8 === 0;
+        const delayReason = isDelayed ? sampleDelayReasons[(dayOffset + idx) % sampleDelayReasons.length] : '';
+
+        const execTime = new Date(pastDate);
+        execTime.setHours(10 + (idx % 8), (idx * 12) % 60, 0);
+
+        logsToInsert.push({
+          restaurantId,
+          taskId: task._id.toString(),
+          taskName: task.taskName,
+          batchName: task.batchName,
+          employeeName: staffName,
+          startTime: execTime,
+          endTime: execTime,
+          actualMinutes: isDelayed ? task.targetMinutes + 12 : task.targetMinutes,
+          targetMinutes: task.targetMinutes,
+          delayMinutes: isDelayed ? 12 : 0,
+          status: isDelayed ? 'delayed' : 'completed',
+          delayReason,
+          dateStr,
+          createdAt: execTime,
+          updatedAt: execTime,
+        });
+      });
+    }
+
+    // 5. Seed Clean TODAY Execution Logs (dayOffset = 0, dateStr = todayLocalStr)
+    const todayLocalStr = getFormatDate(today);
+
+    // Jehan's Today Executions (16 Completed, 4 Delayed -> Score 80)
+    const jehanTodayTasks = [
+      { name: 'Spice Mix', batch: 'BATCH 1 — MOMO PREP', hour: 11, min: 2, delay: false },
+      { name: 'Meat / Keema Prep', batch: 'BATCH 1 — MOMO PREP', hour: 11, min: 2, delay: false },
+      { name: 'Chopping — Shimla + Onion', batch: 'BATCH 1 — MOMO PREP', hour: 11, min: 2, delay: false },
+      { name: 'Maida Mixing / Dough', batch: 'BATCH 1 — MOMO PREP', hour: 11, min: 2, delay: false },
+      { name: 'Sheet Making + Folding', batch: 'BATCH 1 — MOMO PREP', hour: 12, min: 27, delay: false },
+      { name: 'Steaming', batch: 'BATCH 1 — MOMO PREP', hour: 12, min: 27, delay: false },
+      { name: 'Boil Chicken', batch: 'BATCH 2 — BOILING & CHUTNEYS', hour: 14, min: 30, delay: false },
+      { name: 'Boil Rice', batch: 'BATCH 2 — BOILING & CHUTNEYS', hour: 14, min: 30, delay: false },
+      { name: 'Boil Noodles', batch: 'BATCH 2 — BOILING & CHUTNEYS', hour: 14, min: 30, delay: false },
+      { name: 'Red Chutney', batch: 'BATCH 2 — BOILING & CHUTNEYS', hour: 14, min: 30, delay: false },
+      { name: 'Green Chutney', batch: 'BATCH 2 — BOILING & CHUTNEYS', hour: 14, min: 30, delay: false },
+      { name: 'Mayonnaise', batch: 'BATCH 2 — BOILING & CHUTNEYS', hour: 14, min: 30, delay: false },
+      { name: 'Glass Cleaning', batch: 'BATCH 3 — CLEANING', hour: 14, min: 58, delay: true, reason: 'Us time cstmr the' },
+      { name: 'Floor Cleaning', batch: 'BATCH 3 — CLEANING', hour: 14, min: 59, delay: true, reason: 'Us time cstmr the' },
+      { name: 'Table Cleaning', batch: 'BATCH 3 — CLEANING', hour: 14, min: 59, delay: true, reason: 'Cstmr the' },
+      { name: 'Saman Andar & Device Charging', batch: 'BATCH 3 — CLEANING', hour: 14, min: 59, delay: true, reason: 'Kiys tha paihle hi' },
+    ];
+
+    jehanTodayTasks.forEach((jt) => {
+      const matchTask = createdTasks.find((t: any) => t.taskName === jt.name);
+      const tTime = new Date(today);
+      tTime.setHours(jt.hour, jt.min, 0);
+
+      logsToInsert.push({
+        restaurantId,
+        taskId: matchTask ? matchTask._id.toString() : 'mock-id',
+        taskName: jt.name,
+        batchName: jt.batch,
+        employeeName: 'Jehan',
+        startTime: tTime,
+        endTime: tTime,
+        actualMinutes: jt.delay ? 25 : 15,
+        targetMinutes: 15,
+        delayMinutes: jt.delay ? 10 : 0,
+        status: jt.delay ? 'delayed' : 'completed',
+        delayReason: jt.reason || '',
+        dateStr: todayLocalStr,
+        createdAt: tTime,
+        updatedAt: tTime,
+      });
+    });
+
+    // Krish's Today Executions (17 Completed, 3 Delayed -> Score 85)
+    const krishTodayTasks = [
+      { name: 'Boil Chicken', batch: 'BATCH 2 — BOILING & CHUTNEYS', hour: 14, min: 10, delay: false },
+      { name: 'Boil Rice', batch: 'BATCH 2 — BOILING & CHUTNEYS', hour: 14, min: 15, delay: false },
+      { name: 'Boil Noodles', batch: 'BATCH 2 — BOILING & CHUTNEYS', hour: 14, min: 20, delay: false },
+      { name: 'Red Chutney', batch: 'BATCH 2 — BOILING & CHUTNEYS', hour: 14, min: 25, delay: false },
+      { name: 'Green Chutney', batch: 'BATCH 2 — BOILING & CHUTNEYS', hour: 14, min: 28, delay: false },
+      { name: 'Mayonnaise', batch: 'BATCH 2 — BOILING & CHUTNEYS', hour: 14, min: 30, delay: false },
+      { name: 'Board Outside', batch: 'BATCH 3 — CLEANING', hour: 14, min: 45, delay: false },
+      { name: 'Glass Cleaning', batch: 'BATCH 3 — CLEANING', hour: 14, min: 50, delay: true, reason: 'High customer traffic at counter' },
+      { name: 'Floor Cleaning', batch: 'BATCH 3 — CLEANING', hour: 14, min: 55, delay: true, reason: 'Refilled mop bucket' },
+      { name: 'Table Cleaning', batch: 'BATCH 3 — CLEANING', hour: 15, min: 0, delay: true, reason: 'Dining hall full' },
+      { name: 'Saman Andar & Device Charging', batch: 'BATCH 3 — CLEANING', hour: 15, min: 5, delay: false },
+      { name: 'Spice Mix', batch: 'BATCH 1 — MOMO PREP', hour: 11, min: 15, delay: false },
+      { name: 'Meat / Keema Prep', batch: 'BATCH 1 — MOMO PREP', hour: 11, min: 30, delay: false },
+      { name: 'Chopping — Shimla + Onion', batch: 'BATCH 1 — MOMO PREP', hour: 11, min: 45, delay: false },
+      { name: 'Maida Mixing / Dough', batch: 'BATCH 1 — MOMO PREP', hour: 12, min: 0, delay: false },
+      { name: 'Sheet Making + Folding', batch: 'BATCH 1 — MOMO PREP', hour: 12, min: 30, delay: false },
+      { name: 'Steaming', batch: 'BATCH 1 — MOMO PREP', hour: 12, min: 45, delay: false },
+    ];
+
+    krishTodayTasks.forEach((kt) => {
+      const matchTask = createdTasks.find((t: any) => t.taskName === kt.name);
+      const tTime = new Date(today);
+      tTime.setHours(kt.hour, kt.min, 0);
+
+      logsToInsert.push({
+        restaurantId,
+        taskId: matchTask ? matchTask._id.toString() : 'mock-id',
+        taskName: kt.name,
+        batchName: kt.batch,
+        employeeName: 'Krish',
+        startTime: tTime,
+        endTime: tTime,
+        actualMinutes: kt.delay ? 25 : 15,
+        targetMinutes: 15,
+        delayMinutes: kt.delay ? 10 : 0,
+        status: kt.delay ? 'delayed' : 'completed',
+        delayReason: kt.reason || '',
+        dateStr: todayLocalStr,
+        createdAt: tTime,
+        updatedAt: tTime,
+      });
+    });
+
+    await SopLog.insertMany(logsToInsert);
+
+    revalidatePath('/admin/sop-tracker');
+    revalidatePath('/admin/sop-tracker/analytics');
+    return { success: true, count: logsToInsert.length };
+  } catch (err) {
+    console.error('Error in seedSampleSopDataAction:', err);
+    throw new Error(err instanceof Error ? err.message : 'Failed to seed clean SOP data');
   }
 }

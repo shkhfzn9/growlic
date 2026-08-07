@@ -211,6 +211,8 @@ export async function resetToDefaultSop(restaurantId: string): Promise<PlainSopT
   return repo.insertManyTasks(tasksToInsert);
 }
 
+export const resetDefaultSop = resetToDefaultSop;
+
 /**
  * Submits employee task completion log.
  */
@@ -224,8 +226,10 @@ export async function logTaskCompletion(data: {
   endTimeIso?: string;
   completedAtIso?: string;
   targetMinutes: number;
+  actualMinutes?: number;
   delayReason?: string;
   isDelayed?: boolean;
+  overrideDateStr?: string;
 }): Promise<PlainSopLog> {
   const saveTime = data.completedAtIso
     ? new Date(data.completedAtIso)
@@ -238,7 +242,7 @@ export async function logTaskCompletion(data: {
   const isDelayed = Boolean(data.isDelayed || hasReason || actualMinutes > data.targetMinutes);
   const delayMinutes = isDelayed ? Math.max(5, Math.abs(actualMinutes - data.targetMinutes) || 5) : 0;
 
-  const dateStr = saveTime.toISOString().split('T')[0];
+  const dateStr = data.overrideDateStr || saveTime.toISOString().split('T')[0];
 
   return repo.createLog({
     restaurantId: data.restaurantId.toLowerCase(),

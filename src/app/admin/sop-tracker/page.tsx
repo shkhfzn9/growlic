@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import Link from 'next/link';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import {
@@ -13,11 +14,14 @@ import {
   resetDefaultSopAction,
   createStaffProfileAction,
   deleteStaffProfileAction,
+  seedSampleSopDataAction,
 } from '@/actions/sop';
+import { computeStaffPerformanceMetrics, formatExecutionTime, deduplicateSopLogs } from '@/features/sop/analyticsEngine';
 import { PageHeader, AdminButton } from '@/components/ui';
 import {
   CheckCircle,
   AlertTriangle,
+  AlertCircle,
   Clock,
   Plus,
   Trash2,
@@ -43,10 +47,14 @@ import {
   Target,
   UserPlus,
   ShieldCheck,
+  BarChart2,
+  Database,
+  Sparkles,
 } from 'lucide-react';
 
 interface PlainSopTask {
   _id: string;
+  restaurantId: string;
   batchName: string;
   batchWindow: string;
   taskName: string;
@@ -58,14 +66,14 @@ interface PlainSopTask {
 }
 
 interface PlainSopLog {
-  _id: string;
+  _id?: string;
   taskId?: string;
   taskName: string;
   batchName: string;
   employeeName: string;
-  actualMinutes: number;
-  targetMinutes: number;
-  delayMinutes: number;
+  actualMinutes?: number;
+  targetMinutes?: number;
+  delayMinutes?: number;
   status: 'completed' | 'delayed';
   delayReason?: string;
   dateStr: string;
@@ -103,12 +111,14 @@ interface StaffProfileDetail {
   assignedTasks: PlainSopTask[];
   logs: PlainSopLog[];
   todayLogs: PlainSopLog[];
+  todayDelaysCount: number;
   delayedLogs: PlainSopLog[];
   onTimeCount: number;
   delayedCount: number;
   penaltyDeductions: number;
   score: number;
   pendingTodayTasks: PlainSopTask[];
+  dailyBreakdown: { dateStr: string; total: number; delayed: number; score: number }[];
 }
 
 export default function AdminSopTrackerPage() {
@@ -161,6 +171,12 @@ export default function AdminSopTrackerPage() {
   const [expandedStaff, setExpandedStaff] = useState<Record<string, boolean>>({});
 
   const [publicStaffUrl, setPublicStaffUrl] = useState(`/staff-tracker/${auth.restaurantId || 'tokyo-momos'}`);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -193,7 +209,12 @@ export default function AdminSopTrackerPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const { startDateStr, endDateStr } = getDateRangeStrings(timeframe);
+      const today = new Date();
+      const endDateStr = today.toISOString().split('T')[0];
+      const start = new Date();
+      start.setDate(today.getDate() - 100);
+      const startDateStr = start.toISOString().split('T')[0];
+
       const res = await getAdminSopAnalyticsAction(startDateStr, endDateStr, selectedBatch);
       setAnalytics(res);
     } catch (err) {
@@ -205,7 +226,7 @@ export default function AdminSopTrackerPage() {
 
   useEffect(() => {
     loadData();
-  }, [timeframe, selectedBatch]);
+  }, [selectedBatch]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(publicStaffUrl);
@@ -222,12 +243,13 @@ export default function AdminSopTrackerPage() {
         name: newStaffNameInput.trim(),
         role: newStaffRoleInput.trim() || 'Kitchen Staff',
       });
+      showToast('Staff profile created successfully!', 'success');
       setNewStaffNameInput('');
       setShowCreateProfileModal(false);
       await loadData();
     } catch (err) {
       console.error(err);
-      alert('Failed to create staff profile: ' + (err instanceof Error ? err.message : 'Error'));
+      showToast('Failed to create staff profile: ' + (err instanceof Error ? err.message : 'Error'), 'error');
     } finally {
       setCreatingProfile(false);
     }
@@ -237,10 +259,11 @@ export default function AdminSopTrackerPage() {
     if (!confirm(`Are you sure you want to remove staff profile "${name}"?`)) return;
     try {
       await deleteStaffProfileAction(id);
+      showToast(`Removed staff profile "${name}"`, 'info');
       await loadData();
     } catch (err) {
       console.error(err);
-      alert('Failed to delete staff profile');
+      showToast('Failed to delete staff profile', 'error');
     }
   };
 
@@ -257,6 +280,7 @@ export default function AdminSopTrackerPage() {
         targetMinutes: Number(newTargetMinutes) || 15,
         assignedStaffName: newStaffName,
       });
+      showToast('New SOP task added successfully!', 'success');
       setShowAddModal(false);
       setNewTaskName('');
       setNewDesc('');
@@ -264,7 +288,7 @@ export default function AdminSopTrackerPage() {
       loadData();
     } catch (err) {
       console.error(err);
-      alert('Failed to add task: ' + (err instanceof Error ? err.message : 'Error'));
+      showToast('Failed to add task: ' + (err instanceof Error ? err.message : 'Error'), 'error');
     } finally {
       setSavingTask(false);
     }
@@ -283,11 +307,12 @@ export default function AdminSopTrackerPage() {
         targetMinutes: editingTask.targetMinutes,
         assignedStaffName: editingTask.assignedStaffName,
       });
+      showToast('Task updated successfully!', 'success');
       setEditingTask(null);
       loadData();
     } catch (err) {
       console.error(err);
-      alert('Failed to update task');
+      showToast('Failed to update task', 'error');
     } finally {
       setSavingTask(false);
     }
@@ -300,11 +325,12 @@ export default function AdminSopTrackerPage() {
     try {
       setSavingTask(true);
       await assignBatchStaffAction(batchAssignModal.batchName, batchAssignModal.staffName.trim());
+      showToast(`Batch assigned to ${batchAssignModal.staffName.trim()}`, 'success');
       setBatchAssignModal(null);
       await loadData();
     } catch (err) {
       console.error(err);
-      alert('Failed to assign batch staff');
+      showToast('Failed to assign batch staff', 'error');
     } finally {
       setSavingTask(false);
     }
@@ -314,10 +340,11 @@ export default function AdminSopTrackerPage() {
     if (!confirm('Are you sure you want to remove this SOP task?')) return;
     try {
       await deleteAdminSopTaskAction(id);
+      showToast('SOP task deleted', 'info');
       loadData();
     } catch (err) {
       console.error(err);
-      alert('Failed to delete task');
+      showToast('Failed to delete task', 'error');
     }
   };
 
@@ -348,10 +375,10 @@ export default function AdminSopTrackerPage() {
       setLoading(true);
       await resetDefaultSopAction();
       await loadData();
-      alert('SOP checklist reset & seeded successfully!');
+      showToast('SOP checklist reset & seeded successfully!', 'success');
     } catch (err) {
       console.error(err);
-      alert('Failed to reset SOP');
+      showToast('Failed to reset SOP', 'error');
     } finally {
       setLoading(false);
     }
@@ -363,12 +390,14 @@ export default function AdminSopTrackerPage() {
   const todayLocalStr = now.toLocaleDateString('en-CA');
 
   const { todayLogsList, createdStaffList, staffProfilesList } = useMemo(() => {
-    const todayLogs = (analytics?.logs || []).filter((l) => {
-      if (!l) return false;
-      if (l.dateStr === todayUtcStr || l.dateStr === todayLocalStr) return true;
-      if (l.createdAt && new Date(l.createdAt).toDateString() === now.toDateString()) return true;
-      return false;
+    // Filter logs strictly by dateStr matching today's local date or UTC date
+    const rawTodayLogs = (analytics?.logs || []).filter((l) => {
+      if (!l || !l.dateStr) return false;
+      return l.dateStr === todayUtcStr || l.dateStr === todayLocalStr;
     });
+
+    // Deduplicate today's logs so 1 task = 1 completion per employee per day
+    const todayLogs = deduplicateSopLogs(rawTodayLogs);
 
     const createdStaff = analytics?.staffProfiles || [];
 
@@ -410,10 +439,15 @@ export default function AdminSopTrackerPage() {
         (l) => l.employeeName?.trim().toLowerCase() === sName.toLowerCase()
       );
 
+      const todayDelaysForStaff = todayLogsForStaff.filter(
+        (l) => l.status === 'delayed' || Boolean(l.delayReason?.trim())
+      );
+
+      // Leaderboard Card Score is TODAY'S SCORE starting at 100 (-5 per today delay)
+      const todayScore = Math.max(0, 100 - (todayDelaysForStaff.length * 5));
+
       const delayedLogs = logs.filter((l) => l.status === 'delayed' || Boolean(l.delayReason?.trim()));
       const onTimeCount = logs.length - delayedLogs.length;
-      const penaltyDeductions = delayedLogs.length * 5;
-      const score = Math.max(0, Math.min(100, 100 - penaltyDeductions));
 
       const todayCompletedTaskIds = new Set(todayLogsForStaff.map((l) => l.taskId).filter(Boolean));
       const pendingTodayTasks = assignedTasks.filter((t) => !todayCompletedTaskIds.has(t._id));
@@ -425,16 +459,18 @@ export default function AdminSopTrackerPage() {
         assignedTasks,
         logs,
         todayLogs: todayLogsForStaff,
+        todayDelaysCount: todayDelaysForStaff.length,
         delayedLogs,
         onTimeCount,
         delayedCount: delayedLogs.length,
-        penaltyDeductions,
-        score,
+        penaltyDeductions: todayDelaysForStaff.length * 5,
+        score: todayScore,
         pendingTodayTasks,
+        dailyBreakdown: [],
       };
     });
 
-    profilesList.sort((a, b) => b.score - a.score || b.logs.length - a.logs.length);
+    profilesList.sort((a, b) => b.score - a.score || b.todayLogs.length - a.todayLogs.length);
 
     return {
       todayLogsList: todayLogs,
@@ -443,12 +479,37 @@ export default function AdminSopTrackerPage() {
     };
   }, [analytics, todayUtcStr, todayLocalStr]);
 
+  const handleSeedSampleData = async () => {
+    if (!confirm('Seed multi-day sample SOP execution history to test timeframe performance graphs & score breakdown?')) return;
+    try {
+      setLoading(true);
+      await seedSampleSopDataAction();
+      await loadData();
+      showToast('Sample multi-day historical performance data seeded successfully!', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to seed sample data: ' + (err instanceof Error ? err.message : 'Error'), 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 max-w-6xl pb-16 font-sans">
-      <PageHeader
-        title="SOP Staff Profiles & Bottleneck Analytics"
-        subtitle="Create staff profiles, assign tasks strictly to created profiles, and track performance scores out of 100"
-      />
+      {/* Page Header Bar with Link to In-Depth Charts */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <PageHeader
+          title="SOP Staff Profiles & Operational Tracking"
+          subtitle="Create staff profiles, assign tasks, track execution timelines & timing delays"
+        />
+        <Link
+          href="/admin/sop-tracker/analytics"
+          className="bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-black px-4 py-2.5 rounded-xl border border-slate-700 flex items-center gap-2 shadow-md shrink-0 w-fit active:scale-95 transition-transform"
+        >
+          <BarChart3 className="w-4 h-4 text-[#F5C518]" />
+          <span>Charts with Detailed Analysis 📈</span>
+        </Link>
+      </div>
 
       {/* Shareable Employee Link Box */}
       <div className="bg-[#0F172A] border border-slate-800 text-white rounded-2xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
@@ -497,12 +558,14 @@ export default function AdminSopTrackerPage() {
             </div>
           </div>
 
-          <AdminButton
-            onClick={() => setShowCreateProfileModal(true)}
-            icon={<UserPlus className="w-4 h-4" />}
-          >
-            Create Staff Profile
-          </AdminButton>
+          <div className="flex items-center gap-2">
+            <AdminButton
+              onClick={() => setShowCreateProfileModal(true)}
+              icon={<UserPlus className="w-4 h-4" />}
+            >
+              Create Staff Profile
+            </AdminButton>
+          </div>
         </div>
 
         {/* List of Created Staff Profiles */}
@@ -644,12 +707,12 @@ export default function AdminSopTrackerPage() {
 
                     <div className="flex flex-col">
                       <span className="text-[9px] text-red-700 font-bold uppercase">Delays (-5)</span>
-                      <span className="font-black text-red-600">{staff.delayedCount}</span>
+                      <span className="font-black text-red-600">{staff.todayDelaysCount}</span>
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] font-black text-[#C0181A] group-hover:underline pt-1 border-t border-[#E2E6EA]">
-                    <span>View Full Analytics Profile & Timeline →</span>
+                    <span>View Today Profile & Timeline →</span>
                   </div>
                 </button>
               );
@@ -834,188 +897,274 @@ export default function AdminSopTrackerPage() {
         </div>
       )}
 
-      {/* INTERACTIVE IN-DEPTH STAFF ANALYTICS PROFILE MODAL */}
-      {selectedStaffProfile && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col gap-5 shadow-2xl animate-in zoom-in-95">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-[#E2E6EA] pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-[#111827] text-[#F5C518] font-black text-xl flex items-center justify-center shadow">
-                  {selectedStaffProfile.name.charAt(0).toUpperCase()}
+      {/* SIMPLE & READABLE STAFF PERFORMANCE PROFILE & TIMELINE MODAL */}
+      {selectedStaffProfile && (() => {
+        const staffName = selectedStaffProfile.name;
+        const assignedTasks = selectedStaffProfile.assignedTasks || [];
+        const totalAssigned = assignedTasks.length;
+
+        // Today's logs for staff
+        const todayLogsForStaff = (todayLogsList || []).filter(
+          (l) => l.employeeName?.trim().toLowerCase() === staffName.trim().toLowerCase()
+        );
+
+        // Sort execution timeline by completion time desc
+        const todayTimeline = [...todayLogsForStaff].sort((a, b) => {
+          const tA = a.completedAtIso || a.createdAt || '';
+          const tB = b.completedAtIso || b.createdAt || '';
+          return tB.localeCompare(tA);
+        });
+
+        const completedTodayCount = todayTimeline.length;
+
+        // Delays logged today
+        const todayDelays = todayTimeline.filter(
+          (l) => l.status === 'delayed' || Boolean(l.delayReason?.trim())
+        );
+        const delaysCount = todayDelays.length;
+        const penaltyScore = -1 * (delaysCount * 5);
+        const todayScore = Math.max(0, 100 + penaltyScore);
+
+        return (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col gap-5 shadow-2xl animate-in zoom-in-95 text-slate-900">
+              {/* Modal Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E2E6EA] pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-[#111827] text-[#F5C518] font-black text-xl flex items-center justify-center shadow shrink-0">
+                    {staffName.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="font-black text-lg text-[#111827]">
+                      {staffName}'s Performance Profile
+                    </h3>
+                    <p className="text-xs text-[#6B7280] font-medium">
+                      {selectedStaffProfile.role || 'Kitchen Staff'} • Detailed activity & delay logs
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-black text-lg text-[#111827]">
-                    {selectedStaffProfile.name}'s Performance Profile
-                  </h3>
-                  <span className="text-xs text-[#6B7280] font-medium">
-                    {selectedStaffProfile.role || 'Kitchen Staff'} • Detailed activity & delay logs
-                  </span>
+
+                <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
+                  <div className="flex flex-col items-end bg-slate-900 text-white px-4 py-1.5 rounded-2xl shadow-sm">
+                    <span className="font-black text-lg text-[#F5C518]">{todayScore} <span className="text-xs text-white opacity-80">/ 100</span></span>
+                    <span className="text-[9px] text-slate-300 font-bold uppercase tracking-wider">Today Score</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStaffProfile(null)}
+                    className="p-2 text-gray-400 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <div
-                  className={`px-4 py-2 rounded-2xl font-black text-base shadow-sm flex items-center gap-1 ${
-                    selectedStaffProfile.score >= 90
-                      ? 'bg-emerald-500 text-white'
-                      : selectedStaffProfile.score >= 75
-                      ? 'bg-amber-500 text-white'
-                      : 'bg-red-600 text-white'
-                  }`}
-                >
-                  <span>{selectedStaffProfile.score}</span>
-                  <span className="text-xs opacity-80">/ 100</span>
+              {/* 4 Summary KPI Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 flex flex-col gap-0.5">
+                  <span className="text-[10px] font-extrabold uppercase text-gray-500">Assigned Tasks</span>
+                  <span className="text-xl font-black text-slate-900">{totalAssigned}</span>
+                </div>
+                <div className="bg-emerald-50 p-3.5 rounded-2xl border border-emerald-200 flex flex-col gap-0.5">
+                  <span className="text-[10px] font-extrabold uppercase text-emerald-800">Completed Today</span>
+                  <span className="text-xl font-black text-emerald-700">{completedTodayCount}</span>
+                </div>
+                <div className="bg-amber-50 p-3.5 rounded-2xl border border-amber-200 flex flex-col gap-0.5">
+                  <span className="text-[10px] font-extrabold uppercase text-amber-800">Timing Delays</span>
+                  <span className="text-xl font-black text-amber-700">{delaysCount}</span>
+                </div>
+                <div className="bg-red-50 p-3.5 rounded-2xl border border-red-200 flex flex-col gap-0.5">
+                  <span className="text-[10px] font-extrabold uppercase text-red-800">Penalty Score</span>
+                  <span className="text-xl font-black text-red-600">{penaltyScore} pts</span>
+                </div>
+              </div>
+
+
+              {/* Batch-by-Batch Today Execution & Task Tracker */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-extrabold text-xs uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-[#C0181A]" />
+                    <span>Batch-by-Batch Progress & Checklist ({totalAssigned} Assigned Tasks)</span>
+                  </h4>
                 </div>
 
+                {(() => {
+                  const allTasks = analytics?.tasks || [];
+                  const groupedBatches = allTasks.reduce((acc, t) => {
+                    const b = t.batchName || 'General SOP';
+                    if (!acc[b]) acc[b] = [];
+                    acc[b].push(t);
+                    return acc;
+                  }, {} as Record<string, PlainSopTask[]>);
+
+                  if (allTasks.length === 0) {
+                    return (
+                      <p className="text-xs italic text-gray-500 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                        No SOP tasks currently defined in the system.
+                      </p>
+                    );
+                  }
+
+                  return (
+                    <div className="flex flex-col gap-3 max-h-[340px] overflow-y-auto pr-1">
+                      {Object.entries(groupedBatches).map(([batchName, bTasks]) => {
+                        const batchWindow = bTasks[0]?.batchWindow || '';
+
+                        // Count completed tasks in this batch for this staff member today
+                        const batchCompletedCount = bTasks.filter((t) => {
+                          return todayLogsList.some(
+                            (l) =>
+                              l.employeeName?.trim().toLowerCase() === staffName.trim().toLowerCase() &&
+                              ((l.taskId && l.taskId === t._id) || (l.taskName.trim().toLowerCase() === t.taskName.trim().toLowerCase()))
+                          );
+                        }).length;
+
+                        const progressPct = bTasks.length > 0 ? Math.round((batchCompletedCount / bTasks.length) * 100) : 0;
+
+                        return (
+                          <div key={batchName} className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 flex flex-col gap-2.5 shadow-2xs">
+                            {/* Batch Header Bar */}
+                            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="font-black text-xs text-slate-900 uppercase tracking-wider">{batchName}</span>
+                                <span className="text-[10px] font-bold bg-white text-slate-500 px-2 py-0.5 rounded border border-slate-200">
+                                  {batchWindow}
+                                </span>
+                              </div>
+
+                              <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${
+                                batchCompletedCount === bTasks.length
+                                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                  : batchCompletedCount > 0
+                                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                  : 'bg-slate-200 text-slate-600 border-slate-300'
+                              }`}>
+                                {batchCompletedCount} / {bTasks.length} Done ({progressPct}%)
+                              </span>
+                            </div>
+
+                            {/* Batch Tasks List */}
+                            <div className="flex flex-col gap-1.5">
+                              {bTasks.map((t) => {
+                                const completedLog = todayLogsList.find(
+                                  (l) =>
+                                    l.employeeName?.trim().toLowerCase() === staffName.trim().toLowerCase() &&
+                                    ((l.taskId && l.taskId === t._id) || (l.taskName.trim().toLowerCase() === t.taskName.trim().toLowerCase()))
+                                );
+
+                                const isDone = Boolean(completedLog);
+                                const isDel = completedLog && (completedLog.status === 'delayed' || Boolean(completedLog.delayReason?.trim()));
+                                const isAssignedToThisStaff = t.assignedStaffName?.trim().toLowerCase() === staffName.trim().toLowerCase();
+
+                                return (
+                                  <div
+                                    key={t._id}
+                                    className={`p-2.5 rounded-xl border flex items-center justify-between text-xs transition-all ${
+                                      isDone
+                                        ? isDel
+                                          ? 'bg-red-50/70 border-red-200'
+                                          : 'bg-emerald-50/70 border-emerald-200'
+                                        : 'bg-white border-slate-200'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex flex-col">
+                                        <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                                          <span>{t.taskName}</span>
+                                          {isAssignedToThisStaff && (
+                                            <span className="text-[9px] font-extrabold text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded">
+                                              Assigned
+                                            </span>
+                                          )}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div>
+                                      {isDone ? (
+                                        isDel ? (
+                                          <span className="bg-red-100 text-red-700 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border border-red-200 font-mono">
+                                            🔴 Delayed ({formatExecutionTime(completedLog?.completedAtIso, completedLog?.createdAt)})
+                                          </span>
+                                        ) : (
+                                          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border border-emerald-200 font-mono">
+                                            🟢 Completed ({formatExecutionTime(completedLog?.completedAtIso, completedLog?.createdAt)})
+                                          </span>
+                                        )
+                                      ) : (
+                                        <span className="bg-slate-100 text-slate-500 text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-md border border-slate-200">
+                                          ⏳ Pending
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Stated Delay Reasons (N Delays) */}
+              <div className="flex flex-col gap-2.5">
+                <h4 className="font-extrabold text-xs uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-red-600" />
+                  <span>Stated Delay Reasons ({todayDelays.length} Delays)</span>
+                </h4>
+
+                {todayDelays.length === 0 ? (
+                  <p className="text-xs italic text-emerald-700 bg-emerald-50/60 p-3 rounded-2xl border border-emerald-200">
+                    🟢 Zero delays recorded today for {staffName}! Perfect execution.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-2 max-h-[180px] overflow-y-auto pr-1">
+                    {todayDelays.map((del) => (
+                      <div key={del._id} className="bg-red-50 p-3 rounded-2xl border border-red-200 flex flex-col gap-1 text-xs">
+                        <div className="flex justify-between items-center font-extrabold text-red-950">
+                          <span>
+                            {del.taskName} <span className="text-[10px] text-gray-500 font-normal">({del.batchName})</span>
+                          </span>
+                          <span className="text-xs font-mono font-bold text-red-700">
+                            {formatExecutionTime(del.completedAtIso, del.createdAt)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-red-900 bg-white p-2.5 rounded-xl border border-red-200 italic mt-0.5">
+                          "{del.delayReason || 'No reason provided'}"
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer Link Button to Advanced Analytics */}
+              <div className="border-t border-[#E2E6EA] pt-4 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={() => setSelectedStaffProfile(null)}
-                  className="p-2 text-gray-400 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl"
+                  className="px-4 py-2.5 text-xs font-bold text-gray-500 hover:text-gray-800 bg-gray-100 rounded-xl text-center"
                 >
-                  <X className="w-5 h-5" />
+                  Close Profile
                 </button>
+
+                <Link
+                  href={`/admin/sop-tracker/analytics?staff=${encodeURIComponent(staffName)}`}
+                  className="bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-black px-4 py-2.5 rounded-xl border border-slate-700 flex items-center justify-center gap-2 shadow-md active:scale-95 transition-transform"
+                >
+                  <BarChart3 className="w-4 h-4 text-[#F5C518]" />
+                  <span>Charts with Detailed Analysis 📈</span>
+                </Link>
               </div>
             </div>
-
-            {/* Score & Performance Summary Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="bg-[#F8FAFC] border border-[#E2E6EA] rounded-xl p-3 flex flex-col gap-0.5 text-center">
-                <span className="text-[10px] font-bold uppercase text-[#6B7280]">Assigned Tasks</span>
-                <span className="text-xl font-black text-[#111827]">
-                  {selectedStaffProfile.assignedTasks.length}
-                </span>
-              </div>
-
-              <div className="bg-[#F8FAFC] border border-[#E2E6EA] rounded-xl p-3 flex flex-col gap-0.5 text-center">
-                <span className="text-[10px] font-bold uppercase text-[#6B7280]">Completed Today</span>
-                <span className="text-xl font-black text-emerald-600">
-                  {selectedStaffProfile.todayLogs.length}
-                </span>
-              </div>
-
-              <div className="bg-[#F8FAFC] border border-[#E2E6EA] rounded-xl p-3 flex flex-col gap-0.5 text-center">
-                <span className="text-[10px] font-bold uppercase text-[#6B7280]">Timing Delays</span>
-                <span className="text-xl font-black text-red-600">
-                  {selectedStaffProfile.delayedCount}
-                </span>
-              </div>
-
-              <div className="bg-[#F8FAFC] border border-[#E2E6EA] rounded-xl p-3 flex flex-col gap-0.5 text-center">
-                <span className="text-[10px] font-bold uppercase text-[#6B7280]">Penalty Score</span>
-                <span className="text-xl font-black text-red-600">
-                  -{selectedStaffProfile.penaltyDeductions} pts
-                </span>
-              </div>
-            </div>
-
-            {/* Section 1: Today's Execution Activity Timeline */}
-            <div className="flex flex-col gap-3">
-              <h4 className="font-extrabold text-xs uppercase tracking-wider text-[#111827] flex items-center gap-1.5">
-                <Zap className="w-4 h-4 text-[#F5C518]" />
-                <span>Today's Execution Timeline ({selectedStaffProfile.todayLogs.length} Tasks)</span>
-              </h4>
-
-              {selectedStaffProfile.todayLogs.length === 0 ? (
-                <p className="text-xs text-[#6B7280] italic bg-[#F8FAFC] p-3 rounded-xl border border-[#E2E6EA]">
-                  No tasks saved by {selectedStaffProfile.name} today yet.
-                </p>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {selectedStaffProfile.todayLogs.map((log) => (
-                    <div
-                      key={log._id}
-                      className="bg-[#F8FAFC] border border-[#E2E6EA] rounded-xl p-3 flex items-center justify-between gap-2 text-xs"
-                    >
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                        <div>
-                          <span className="font-extrabold text-[#111827]">{log.taskName}</span>
-                          <span className="text-[10px] text-[#6B7280] font-normal block">{log.batchName}</span>
-                        </div>
-                      </div>
-
-                      <span className="font-mono text-[10px] font-bold text-gray-500 bg-white px-2 py-1 rounded border border-[#E2E6EA]">
-                        {new Date(log.completedAtIso || log.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Section 2: Assigned Tasks Checklist & Status */}
-            <div className="flex flex-col gap-3">
-              <h4 className="font-extrabold text-xs uppercase tracking-wider text-[#111827] flex items-center gap-1.5">
-                <Target className="w-4 h-4 text-emerald-600" />
-                <span>Assigned Tasks Checklist ({selectedStaffProfile.assignedTasks.length} Tasks)</span>
-              </h4>
-
-              {selectedStaffProfile.assignedTasks.length === 0 ? (
-                <p className="text-xs text-[#6B7280] italic bg-[#F8FAFC] p-3 rounded-xl border border-[#E2E6EA]">
-                  No tasks explicitly assigned to {selectedStaffProfile.name} yet.
-                </p>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {selectedStaffProfile.assignedTasks.map((task) => {
-                    const isDoneToday = selectedStaffProfile.todayLogs.some(
-                      (l) => l.taskId === task._id || l.taskName.trim().toLowerCase() === task.taskName.trim().toLowerCase()
-                    );
-
-                    return (
-                      <div
-                        key={task._id}
-                        className="bg-[#F8FAFC] border border-[#E2E6EA] rounded-xl p-3 flex items-center justify-between gap-2 text-xs"
-                      >
-                        <div className="flex flex-col">
-                          <span className="font-extrabold text-[#111827]">{task.taskName}</span>
-                          <span className="text-[10px] text-[#6B7280]">{task.batchName} ({task.batchWindow})</span>
-                        </div>
-
-                        <span
-                          className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full border ${
-                            isDoneToday
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : 'bg-amber-50 text-amber-800 border-amber-200'
-                          }`}
-                        >
-                          {isDoneToday ? '🟢 Completed Today' : '⏳ Pending Today'}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Section 3: Delay Reasons & Stated Messages Log */}
-            {selectedStaffProfile.delayedCount > 0 && (
-              <div className="flex flex-col gap-3">
-                <h4 className="font-extrabold text-xs uppercase tracking-wider text-red-600 flex items-center gap-1.5">
-                  <AlertTriangle className="w-4 h-4 text-red-600" />
-                  <span>Stated Delay Reasons ({selectedStaffProfile.delayedCount} Delays)</span>
-                </h4>
-
-                <div className="flex flex-col gap-2 bg-red-50/60 border border-red-200 rounded-2xl p-4 text-xs">
-                  {selectedStaffProfile.delayedLogs.map((dLog, idx) => (
-                    <div key={idx} className="flex flex-col gap-1 border-b border-red-200/50 pb-2.5 last:border-0 last:pb-0">
-                      <div className="flex justify-between items-center font-extrabold text-red-950">
-                        <span>{dLog.taskName} ({dLog.batchName})</span>
-                        <span className="text-[10px] font-mono text-red-600">
-                          {new Date(dLog.completedAtIso || dLog.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      <p className="text-xs text-red-800 bg-white p-2 rounded-xl border border-red-200 italic">
-                        "{dLog.delayReason || 'Task completed outside scheduled timing window'}"
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Assign Whole Batch Modal with Created Staff Select Dropdown */}
       {batchAssignModal && (
@@ -1225,6 +1374,36 @@ export default function AdminSopTrackerPage() {
               </AdminButton>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Animated Toast Notification Banner */}
+      {toast && (
+        <div
+          className={`fixed bottom-6 right-6 z-[100] max-w-md px-4 py-3.5 rounded-2xl shadow-2xl border flex items-center justify-between gap-3 animate-in slide-in-from-bottom-5 fade-in duration-300 ${
+            toast.type === 'error'
+              ? 'bg-red-950 text-red-100 border-red-800'
+              : toast.type === 'info'
+              ? 'bg-slate-900 text-slate-100 border-slate-700'
+              : 'bg-emerald-950 text-emerald-100 border-emerald-800'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            {toast.type === 'error' ? (
+              <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+            ) : toast.type === 'info' ? (
+              <Zap className="w-5 h-5 text-amber-400 shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            )}
+            <span className="text-xs font-black tracking-wide">{toast.message}</span>
+          </div>
+          <button
+            onClick={() => setToast(null)}
+            className="text-white/60 hover:text-white p-1 rounded-lg transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
     </div>

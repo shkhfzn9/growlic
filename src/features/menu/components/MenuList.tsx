@@ -227,6 +227,86 @@ export default function MenuList({
   );
   const [activeBannerIdx, setActiveBannerIdx] = useState(0);
   const [consultationModalOpen, setConsultationModalOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Banner Carousel Touch & Mouse Drag Swipe State
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
+  const [isMouseDown, setIsMouseDown] = useState(false);
+  const [dragStartX, setDragStartX] = useState(0);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDraggingGesture, setIsDraggingGesture] = useState(false);
+
+  // Touch Handlers for Finger Swiping on Mobile
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.targetTouches[0].clientX);
+    setTouchEndX(null);
+    setIsDraggingGesture(false);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartX === null) return;
+    const currentX = e.targetTouches[0].clientX;
+    setTouchEndX(currentX);
+    const diff = currentX - touchStartX;
+    setDragOffset(diff);
+    if (Math.abs(diff) > 10) {
+      setIsDraggingGesture(true);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX !== null && touchEndX !== null) {
+      const diff = touchEndX - touchStartX;
+      if (diff < -40) {
+        // Swiped Left -> Go to Next Ad
+        setActiveBannerIdx((prev) => (prev + 1) % (displayBanners.length || 1));
+      } else if (diff > 40) {
+        // Swiped Right -> Go to Prev Ad
+        setActiveBannerIdx((prev) => (prev - 1 + (displayBanners.length || 1)) % (displayBanners.length || 1));
+      }
+    }
+    setTouchStartX(null);
+    setTouchEndX(null);
+    setDragOffset(0);
+    setTimeout(() => setIsDraggingGesture(false), 50);
+  };
+
+  // Mouse Handlers for Dragging / Sliding on Desktop
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsMouseDown(true);
+    setDragStartX(e.clientX);
+    setDragOffset(0);
+    setIsDraggingGesture(false);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isMouseDown) return;
+    const diff = e.clientX - dragStartX;
+    setDragOffset(diff);
+    if (Math.abs(diff) > 10) {
+      setIsDraggingGesture(true);
+    }
+  };
+
+  const handleMouseUpOrLeave = () => {
+    if (isMouseDown) {
+      if (dragOffset < -40) {
+        // Dragged Left -> Go to Next Ad
+        setActiveBannerIdx((prev) => (prev + 1) % (displayBanners.length || 1));
+      } else if (dragOffset > 40) {
+        // Dragged Right -> Go to Prev Ad
+        setActiveBannerIdx((prev) => (prev - 1 + (displayBanners.length || 1)) % (displayBanners.length || 1));
+      }
+    }
+    setIsMouseDown(false);
+    setDragOffset(0);
+    setTimeout(() => setIsDraggingGesture(false), 50);
+  };
 
 
   const defaultBanners = [
@@ -534,9 +614,18 @@ export default function MenuList({
         </div>
       </header>
 
-      {/* Promo Banner Carousel */}
+      {/* Promo Banner Carousel with Touch & Mouse Drag Swiping */}
       <div className="w-full px-4 py-4 bg-white relative group select-none">
-        <div className="max-w-2xl mx-auto relative overflow-hidden rounded-2xl h-[140px] shadow-[0_6px_24px_rgba(139,0,0,0.25)]">
+        <div 
+          className="max-w-2xl mx-auto relative overflow-hidden rounded-2xl h-[140px] shadow-[0_6px_24px_rgba(139,0,0,0.25)] cursor-grab active:cursor-grabbing touch-pan-y"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUpOrLeave}
+          onMouseLeave={handleMouseUpOrLeave}
+        >
           {/* Carousel Slides Container */}
           <div 
             className="flex h-full transition-transform duration-500 ease-out"
@@ -590,7 +679,11 @@ export default function MenuList({
                       {banner.ctaText && (
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={(e) => {
+                            if (isDraggingGesture) {
+                              e.preventDefault();
+                              return;
+                            }
                             if (banner.ctaLink && banner.ctaLink.startsWith('http') && !banner.ctaLink.includes('growlic')) {
                               window.open(banner.ctaLink, '_blank');
                             } else {
@@ -616,7 +709,7 @@ export default function MenuList({
                       <img
                         src={getItemImage(banner.image || '/Screenshot 2026-08-03 175540.png')}
                         alt={banner.headline || 'Developer Promo'}
-                        className="w-full h-full object-cover object-center scale-105"
+                        className="w-full h-full object-cover object-center scale-105 pointer-events-none"
                       />
                       {/* Curved Arc Separator matching gradient start color */}
                       <svg
@@ -646,6 +739,11 @@ export default function MenuList({
                       {banner.buttonLink && (
                         <Link 
                           href={banner.buttonLink}
+                          onClick={(e) => {
+                            if (isDraggingGesture) {
+                              e.preventDefault();
+                            }
+                          }}
                           className="mt-1 bg-cta text-text-dark text-[0.65rem] sm:text-[0.7rem] font-bold uppercase px-3.5 py-1.5 rounded-full w-fit active:scale-95 transition-transform shadow-[0_4px_12px_rgba(245,197,24,0.3)] text-center block shrink-0"
                         >
                           {banner.buttonText || 'Order now'}
@@ -657,7 +755,7 @@ export default function MenuList({
                       <img
                         src={getItemImage(banner.image)}
                         alt={banner.title}
-                        className="w-full h-full object-cover scale-110"
+                        className="w-full h-full object-cover scale-110 pointer-events-none"
                       />
                       {/* Arc separator */}
                       <svg
@@ -676,7 +774,35 @@ export default function MenuList({
             ))}
           </div>
 
-          {/* Slide Indicator Dots - Positioned on bottom right pill backdrop to prevent overlap */}
+          {/* Desktop Hover Navigation Arrows */}
+          {isMounted && displayBanners.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveBannerIdx((prev) => (prev - 1 + displayBanners.length) % displayBanners.length);
+                }}
+                className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-black/40 hover:bg-black/80 text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 shadow-md active:scale-95 cursor-pointer"
+                title="Previous Slide"
+              >
+                <ChevronLeft className="w-5 h-5 text-white" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveBannerIdx((prev) => (prev + 1) % displayBanners.length);
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-black/40 hover:bg-black/80 text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 shadow-md active:scale-95 cursor-pointer"
+                title="Next Slide"
+              >
+                <ChevronRight className="w-5 h-5 text-white" />
+              </button>
+            </>
+          )}
+
+          {/* Slide Indicator Dots - Positioned on bottom right pill backdrop */}
           {displayBanners.length > 1 && (
             <div className="absolute bottom-2.5 right-3.5 flex gap-1.5 z-25 bg-black/40 backdrop-blur-md px-2 py-1 rounded-full border border-white/10 shadow-sm">
               {displayBanners.map((_, idx) => (
