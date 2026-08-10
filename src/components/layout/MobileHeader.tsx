@@ -15,6 +15,7 @@ import {
   X,
   Megaphone,
   Code2,
+  Wallet,
 } from 'lucide-react';
 
 interface MobileHeaderProps {
@@ -26,6 +27,7 @@ interface MobileHeaderProps {
 const navLinks = [
   { href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/admin/expense', label: 'Expense Tracker', icon: Wallet },
   { href: '/admin/menu', label: 'Menu', icon: UtensilsCrossed },
   { href: '/admin/customers', label: 'Customers', icon: Users },
   { href: '/admin/settings', label: 'Settings & QR', icon: Settings },

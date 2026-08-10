@@ -16,6 +16,7 @@ import {
   Megaphone,
   Code2,
   ClipboardList,
+  Wallet,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -27,6 +28,7 @@ interface SidebarProps {
 const navLinks = [
   { href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/admin/expense', label: 'Expense Tracker', icon: Wallet },
   { href: '/admin/menu', label: 'Menu', icon: UtensilsCrossed },
   { href: '/admin/customers', label: 'Customers', icon: Users },
   { href: '/admin/sop-tracker', label: 'SOP & Staff', icon: ClipboardList },
