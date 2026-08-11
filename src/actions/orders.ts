@@ -114,15 +114,18 @@ export async function getAdminOrders(limit?: number, skip?: number, status?: str
     const isAllowed = (await can('manage_orders', admin.token, admin.restaurantId)) ||
                       (await can('update_order_status', admin.token, admin.restaurantId));
     if (!isAllowed) {
-      throw new Error('Forbidden: Insufficient permissions to view orders');
+      return { orders: [], total: 0, totalCount: 0, unauthorized: true, error: 'Forbidden: Insufficient permissions to view orders' };
     }
 
     const result = await orderService.getAdminOrders(admin.restaurantId, limit, skip, status);
     return JSON.parse(JSON.stringify(result));
   } catch (error) {
+    if (error instanceof Error && error.message.includes('Unauthorized')) {
+      return { orders: [], total: 0, totalCount: 0, unauthorized: true, error: error.message };
+    }
     console.error('Error fetching admin orders action:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch orders';
-    throw new Error(message);
+    return { orders: [], total: 0, totalCount: 0, error: message };
   }
 }
 
@@ -134,7 +137,16 @@ export async function getAdminOrders(limit?: number, skip?: number, status?: str
  * @param status The updated status state (received, accepted, preparing, ready, completed, cancelled).
  * @returns Serialized, plain updated order object.
  */
-export async function updateOrderStatus(id: string, status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled') {
+export async function updateOrderStatus(
+  id: string,
+  status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled',
+  delayData?: {
+    actualPrepTimeMinutes?: number;
+    delayMinutes?: number;
+    isDelayed?: boolean;
+    delayReason?: string;
+  }
+) {
   try {
     const admin = await checkAdminAuth();
     const isAllowed = await can('update_order_status', admin.token, admin.restaurantId);
@@ -143,13 +155,11 @@ export async function updateOrderStatus(id: string, status: 'received' | 'accept
     }
 
     const existing = await orderService.getOrderById(id, admin.restaurantId);
-    const order = await orderService.updateOrderStatus(id, admin.restaurantId, status);
+    const order = await orderService.updateOrderStatus(id, admin.restaurantId, status, delayData);
 
     // Audit log order status change
     await logAction(admin.restaurantId, admin.userId, 'ORDER_STATUS_CHANGED', existing, order);
 
-    // revalidatePath(`/admin/dashboard`);
-    // revalidatePath(`/admin/orders`);
     return JSON.parse(JSON.stringify(order));
   } catch (error) {
     console.error('Error updating order status action:', error);
@@ -374,13 +384,16 @@ export async function getPendingStaffCallsAction(restaurantId: string) {
   try {
     const admin = await checkAdminAuth();
     if (admin.restaurantId.toLowerCase() !== restaurantId.toLowerCase()) {
-      throw new Error('Unauthorized restaurant access');
+      return [];
     }
     const result = await orderService.getPendingStaffCalls(restaurantId);
     return JSON.parse(JSON.stringify(result));
   } catch (error) {
+    if (error instanceof Error && error.message.includes('Unauthorized')) {
+      return [];
+    }
     console.error('Error getting pending staff calls:', error);
-    throw new Error(error instanceof Error ? error.message : 'Failed to get staff calls');
+    return [];
   }
 }
 

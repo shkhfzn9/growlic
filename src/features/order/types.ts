@@ -23,7 +23,10 @@ export interface IOrder {
   status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
   notes?: string;
   estimatedTime?: number;
+  actualPrepTimeMinutes?: number;
+  delayMinutes?: number;
+  isDelayed?: boolean;
+  delayReason?: string;
   createdAt?: string;
   updatedAt?: string;
 }
-

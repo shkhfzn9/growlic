@@ -510,7 +510,7 @@ export default function MenuList({
     const matchesSearch =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch && item.available;
+    return matchesCategory && matchesSearch;
   });
 
   const showPagination = selectedCategory === null && filteredItems.length > itemsToShow;
@@ -710,6 +710,7 @@ export default function MenuList({
                         src={getItemImage(banner.image || '/Screenshot 2026-08-03 175540.png')}
                         alt={banner.headline || 'Developer Promo'}
                         className="w-full h-full object-cover object-center scale-105 pointer-events-none"
+                        suppressHydrationWarning
                       />
                       {/* Curved Arc Separator matching gradient start color */}
                       <svg
@@ -756,6 +757,7 @@ export default function MenuList({
                         src={getItemImage(banner.image)}
                         alt={banner.title}
                         className="w-full h-full object-cover scale-110 pointer-events-none"
+                        suppressHydrationWarning
                       />
                       {/* Arc separator */}
                       <svg
@@ -1006,20 +1008,34 @@ const MenuItemCard = React.memo(function MenuItemCard({
   );
 
   const tag = getItemTag(item.name, item.category, item.price);
+  const isOutOfStock = item.available === false;
 
   return (
-    <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-3.5 flex gap-3.5 animate-in fade-in duration-300">
-      {/* Image */}
+    <div
+      className={`rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-3.5 flex gap-3.5 animate-in fade-in duration-300 relative transition-all ${
+        isOutOfStock
+          ? 'bg-neutral-50/90 border border-neutral-200/80 opacity-60 grayscale-[20%]'
+          : 'bg-white'
+      }`}
+    >
+      {/* Image Container */}
       <div
         onClick={() => onOpenModal(item)}
-        className="w-[90px] h-[90px] rounded-xl overflow-hidden flex-shrink-0 cursor-pointer"
+        className="w-[90px] h-[90px] rounded-xl overflow-hidden flex-shrink-0 cursor-pointer relative"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={getItemImage(item.image, item.name)}
           alt={item.name}
-          className="w-full h-full object-cover"
+          className={`w-full h-full object-cover ${isOutOfStock ? 'opacity-50' : ''}`}
         />
+        {isOutOfStock && (
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center p-1">
+            <span className="bg-red-600 text-white text-[8px] font-black uppercase px-1.5 py-0.5 rounded tracking-tighter text-center leading-none">
+              OUT OF STOCK
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Details */}
@@ -1032,7 +1048,9 @@ const MenuItemCard = React.memo(function MenuItemCard({
           )}
           <h3
             onClick={() => onOpenModal(item)}
-            className="font-bold text-sm text-text-dark leading-tight cursor-pointer hover:text-primary transition-colors line-clamp-1"
+            className={`font-bold text-sm leading-tight cursor-pointer transition-colors line-clamp-1 ${
+              isOutOfStock ? 'text-neutral-500 line-through' : 'text-text-dark hover:text-primary'
+            }`}
           >
             {item.name}
           </h3>
@@ -1042,11 +1060,15 @@ const MenuItemCard = React.memo(function MenuItemCard({
         </div>
 
         <div className="flex items-center justify-between mt-2">
-          <span className="font-black text-base text-text-dark">
+          <span className={`font-black text-base ${isOutOfStock ? 'text-neutral-400 line-through' : 'text-text-dark'}`}>
             ₹{item.price}
           </span>
 
-          {!mounted || qty === 0 ? (
+          {isOutOfStock ? (
+            <span className="bg-red-50 border border-red-200 text-red-700 text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-wider select-none">
+              OUT OF STOCK
+            </span>
+          ) : !mounted || qty === 0 ? (
             <button
               onClick={() => onAddOne(item)}
               className="bg-primary text-white text-xs font-bold px-4 py-2 rounded-lg uppercase tracking-wide active:scale-95 transition-transform"

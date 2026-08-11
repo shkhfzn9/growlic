@@ -270,3 +270,37 @@ export async function getRestaurantMenuContext(restaurantId: string) {
   }
 }
 
+/**
+ * Server action to adjust all menu item prices by a specified amount (e.g. +₹1 or -₹1).
+ * Triggers Next.js page revalidation.
+ * 
+ * @param amount The numeric amount to add or subtract from each item's price.
+ * @returns Object indicating success and updated item count.
+ */
+export async function adjustAllMenuPricesAction(amount: number) {
+  try {
+    const admin = await checkAdminAuth();
+    const isAllowed = await can('change_pricing', admin.token, admin.restaurantId);
+    if (!isAllowed) {
+      throw new Error('Forbidden: Only owners are allowed to change pricing');
+    }
+
+    const updatedCount = await menuService.adjustAllPrices(admin.restaurantId, amount);
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
+    revalidatePath(`/menu/${admin.restaurantId}`);
+    return { success: true, updatedCount };
+  } catch (error) {
+    console.error('Error adjusting menu prices action:', error);
+    const message = error instanceof Error ? error.message : 'Failed to adjust menu prices';
+    throw new Error(message);
+  }
+}
+
+export async function increaseAllMenuPricesAction(amount: number = 1) {
+  return adjustAllMenuPricesAction(amount);
+}
+
+export async function decreaseAllMenuPricesAction(amount: number = 1) {
+  return adjustAllMenuPricesAction(-Math.abs(amount));
+}
+

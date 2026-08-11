@@ -254,7 +254,15 @@ export default function OrderNotificationProvider({ children }: { children: Reac
           getPendingStaffCallsAction(auth.restaurantId || ''),
         ]);
 
-        const incomingOrders: Order[] = ordersResult.orders || [];
+        if (ordersResult?.unauthorized) {
+          if (intervalId.current) {
+            clearInterval(intervalId.current);
+            intervalId.current = null;
+          }
+          return;
+        }
+
+        const incomingOrders: Order[] = ordersResult?.orders || [];
         const incomingCalls: any[] = staffCallsResult || [];
 
         // Filter out orders/calls that have already been acknowledged

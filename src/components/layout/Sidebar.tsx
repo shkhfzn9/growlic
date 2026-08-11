@@ -17,6 +17,7 @@ import {
   Code2,
   ClipboardList,
   Wallet,
+  Percent,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -29,6 +30,7 @@ const navLinks = [
   { href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/expense', label: 'Expense Tracker', icon: Wallet },
+  { href: '/admin/discounts', label: 'Discounts & Offers', icon: Percent },
   { href: '/admin/menu', label: 'Menu', icon: UtensilsCrossed },
   { href: '/admin/customers', label: 'Customers', icon: Users },
   { href: '/admin/sop-tracker', label: 'SOP & Staff', icon: ClipboardList },
@@ -49,9 +51,9 @@ export default function Sidebar({ restaurantName, email, onLogout }: SidebarProp
         collapsed ? 'w-16' : 'w-64'
       }`}
     >
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div className="flex flex-col flex-1 min-h-0">
         {/* Brand */}
-        <div className={`flex items-center px-4 h-16 border-b border-white/10 ${collapsed ? 'justify-center' : 'justify-between'}`}>
+        <div className={`flex items-center px-4 h-16 border-b border-white/10 ${collapsed ? 'justify-center' : 'justify-between'} shrink-0`}>
           {!collapsed && (
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
@@ -72,8 +74,8 @@ export default function Sidebar({ restaurantName, email, onLogout }: SidebarProp
           </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex flex-col gap-1 p-3 mt-2">
+        {/* Navigation - Scrollable */}
+        <nav className="flex flex-col gap-1 p-3 mt-1 overflow-y-auto flex-1 min-h-0 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.2)_transparent]">
           {navLinks.map((link) => {
             const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
             const Icon = link.icon;

@@ -157,14 +157,24 @@ export async function getAdminOrders(
  * @param status The updated status state (received, accepted, preparing, ready, completed, cancelled).
  * @returns The updated, normalized IOrder document.
  */
-export async function updateOrderStatus(id: string, restaurantId: string, status: IOrder['status']): Promise<IOrder> {
+export async function updateOrderStatus(
+  id: string,
+  restaurantId: string,
+  status: IOrder['status'],
+  delayData?: {
+    actualPrepTimeMinutes?: number;
+    delayMinutes?: number;
+    isDelayed?: boolean;
+    delayReason?: string;
+  }
+): Promise<IOrder> {
   validateOrderId(id);
   const order = await orderRepo.findById(restaurantId, id);
   if (!order || order.restaurantId !== restaurantId) {
     throw new NotFoundError('Unauthorized or order not found');
   }
 
-  const updated = await orderRepo.updateStatus(restaurantId, id, status);
+  const updated = await orderRepo.updateStatus(restaurantId, id, status, delayData);
   if (!updated) {
     throw new NotFoundError('Order not found');
   }

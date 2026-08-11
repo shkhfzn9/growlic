@@ -12,13 +12,20 @@ import { ICustomer } from './types';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function normalizeCustomer(doc: any): ICustomer {
   const plain = doc.toObject ? doc.toObject() : doc;
+  const totalOrders = plain.totalOrders ?? 0;
+  const totalSpent = plain.totalSpent ?? 0;
+  const averageOrderValue = plain.averageOrderValue ?? (totalOrders > 0 ? Math.round(totalSpent / totalOrders) : 0);
+
   return {
     _id: plain._id.toString(),
     restaurantId: plain.restaurantId,
     name: plain.name,
     phone: plain.phone,
-    totalOrders: plain.totalOrders ?? 0,
-    totalSpent: plain.totalSpent ?? 0,
+    totalOrders,
+    totalSpent,
+    averageOrderValue,
+    lastOrderDate: plain.lastOrderDate ? new Date(plain.lastOrderDate).toISOString() : (plain.updatedAt ? new Date(plain.updatedAt).toISOString() : null),
+    favoriteCategory: plain.favoriteCategory || '',
     stampCount: plain.stampCount ?? 0,
     lastStampDate: plain.lastStampDate ? new Date(plain.lastStampDate).toISOString() : null,
     hasPendingDiscount: !!plain.hasPendingDiscount,
@@ -56,14 +63,22 @@ export async function create(data: {
   phone: string;
   totalOrders?: number;
   totalSpent?: number;
+  favoriteCategory?: string;
 }): Promise<ICustomer> {
   await dbConnect();
+  const totalOrders = data.totalOrders ?? 0;
+  const totalSpent = data.totalSpent ?? 0;
+  const averageOrderValue = totalOrders > 0 ? Math.round(totalSpent / totalOrders) : 0;
+
   const doc = await Customer.create({
     restaurantId: data.restaurantId,
     name: data.name.trim(),
     phone: data.phone.trim(),
-    totalOrders: data.totalOrders ?? 0,
-    totalSpent: data.totalSpent ?? 0,
+    totalOrders,
+    totalSpent,
+    averageOrderValue,
+    lastOrderDate: new Date(),
+    favoriteCategory: data.favoriteCategory || '',
   });
   return normalizeCustomer(doc);
 }
@@ -74,18 +89,31 @@ export async function create(data: {
  * @param id The database ID string of the target customer.
  * @param totalOrders The updated total number of completed orders.
  * @param totalSpent The updated total revenue spent by the customer.
+ * @param favoriteCategory Optional favorite category determined from order history.
  * @returns The updated, normalized ICustomer document, or null.
  */
 export async function updateStats(
   restaurantId: string,
   id: string,
   totalOrders: number,
-  totalSpent: number
+  totalSpent: number,
+  favoriteCategory?: string
 ): Promise<ICustomer | null> {
   await dbConnect();
+  const averageOrderValue = totalOrders > 0 ? Math.round(totalSpent / totalOrders) : 0;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updatePayload: any = {
+    totalOrders,
+    totalSpent,
+    averageOrderValue,
+    lastOrderDate: new Date(),
+  };
+  if (favoriteCategory) {
+    updatePayload.favoriteCategory = favoriteCategory;
+  }
   const doc = await Customer.findOneAndUpdate(
     { _id: id, restaurantId },
-    { totalOrders, totalSpent },
+    updatePayload,
     { new: true }
   );
   return doc ? normalizeCustomer(doc) : null;

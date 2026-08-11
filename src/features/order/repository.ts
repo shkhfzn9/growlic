@@ -36,6 +36,10 @@ export function normalizeOrder(doc: any): IOrder {
     status: plain.status,
     notes: plain.notes || '',
     estimatedTime: plain.estimatedTime ?? 0,
+    actualPrepTimeMinutes: plain.actualPrepTimeMinutes ?? 0,
+    delayMinutes: plain.delayMinutes ?? 0,
+    isDelayed: !!plain.isDelayed,
+    delayReason: plain.delayReason || '',
     createdAt: plain.createdAt ? new Date(plain.createdAt).toISOString() : '',
     updatedAt: plain.updatedAt ? new Date(plain.updatedAt).toISOString() : '',
   };
@@ -139,7 +143,11 @@ export async function findAll(
   await dbConnect();
   const query: any = { restaurantId };
   if (status && status !== 'all') {
-    query.status = status;
+    if (status === 'delayed') {
+      query.isDelayed = true;
+    } else {
+      query.status = status;
+    }
   }
   const totalCount = await Order.countDocuments(query);
   const findQuery = Order.find(query).sort({ createdAt: -1 });
@@ -164,11 +172,30 @@ export async function findAll(
  * @param status The updated status state (received, accepted, preparing, ready, completed, cancelled).
  * @returns The updated, normalized IOrder document, or null if not found.
  */
-export async function updateStatus(restaurantId: string, id: string, status: IOrder['status']): Promise<IOrder | null> {
+export async function updateStatus(
+  restaurantId: string,
+  id: string,
+  status: IOrder['status'],
+  delayData?: {
+    actualPrepTimeMinutes?: number;
+    delayMinutes?: number;
+    isDelayed?: boolean;
+    delayReason?: string;
+  }
+): Promise<IOrder | null> {
   await dbConnect();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const payload: any = { status };
+  if (delayData) {
+    if (delayData.actualPrepTimeMinutes !== undefined) payload.actualPrepTimeMinutes = delayData.actualPrepTimeMinutes;
+    if (delayData.delayMinutes !== undefined) payload.delayMinutes = delayData.delayMinutes;
+    if (delayData.isDelayed !== undefined) payload.isDelayed = delayData.isDelayed;
+    if (delayData.delayReason !== undefined) payload.delayReason = delayData.delayReason;
+  }
+
   const doc = await Order.findOneAndUpdate(
     { _id: id, restaurantId },
-    { status },
+    payload,
     { new: true }
   );
   return doc ? normalizeOrder(doc) : null;

@@ -84,40 +84,51 @@ export default function CustomersPage() {
           icon={<Users className="w-6 h-6 text-[#6B7280]" />}
         />
       ) : (
-        <div className="bg-white border border-[#E2E6EA] rounded-xl overflow-hidden">
+        <div className="bg-white border border-[#E2E6EA] rounded-xl overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[500px]">
+            <table className="w-full text-sm min-w-[700px]">
               <thead>
                 <tr className="bg-[#F4F6F9] border-b border-[#E2E6EA]">
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Customer</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Phone</th>
-                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Orders</th>
-                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Total Spent</th>
-                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Stamps</th>
-                  <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Redeemed</th>
-                  <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Reward</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Customer Name</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Phone Number</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Total Orders</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Customer LTV</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Avg Order (AOV)</th>
+                  <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Stamps / Rewards</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E2E6EA]">
-                {customers.map((cust) => (
-                  <tr key={cust._id} className="hover:bg-[#F4F6F9]/50 transition-colors">
-                    <td className="px-4 py-3.5 font-medium text-[#111827]">{cust.name}</td>
-                    <td className="px-4 py-3.5 text-[#6B7280] font-mono text-[13px]">{cust.phone}</td>
-                    <td className="px-4 py-3.5 text-right text-[#111827]">{cust.totalOrders}</td>
-                    <td className="px-4 py-3.5 text-right font-semibold text-[#111827]">₹{cust.totalSpent}</td>
-                    <td className="px-4 py-3.5 text-right text-[#111827] font-mono">{cust.stampCount ?? 0}</td>
-                    <td className="px-4 py-3.5 text-center text-[#111827] font-mono">{cust.totalRedemptions ?? 0}</td>
-                    <td className="px-4 py-3.5 text-center">
-                      {cust.hasPendingDiscount ? (
-                        <span className="bg-[#FEF3C7] text-[#D97706] text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                          Discount Active
-                        </span>
-                      ) : (
-                        <span className="text-[#9CA3AF] text-[11px] font-medium">-</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {customers.map((cust) => {
+                  const aov = cust.averageOrderValue || (cust.totalOrders > 0 ? Math.round(cust.totalSpent / cust.totalOrders) : 0);
+                  return (
+                    <tr key={cust._id} className="hover:bg-[#F4F6F9]/50 transition-colors">
+                      <td className="px-4 py-3.5 font-bold text-[#111827]">
+                        {cust.name}
+                        {cust.favoriteCategory && (
+                          <span className="block text-[10px] text-amber-700 font-semibold mt-0.5">
+                            Loves: {cust.favoriteCategory}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5 text-[#6B7280] font-mono text-[13px]">{cust.phone}</td>
+                      <td className="px-4 py-3.5 text-right font-bold text-[#111827]">{cust.totalOrders} visits</td>
+                      <td className="px-4 py-3.5 text-right font-black text-emerald-700">₹{cust.totalSpent}</td>
+                      <td className="px-4 py-3.5 text-right font-semibold text-[#111827]">₹{aov}</td>
+                      <td className="px-4 py-3.5 text-center">
+                        <div className="inline-flex items-center gap-1.5">
+                          <span className="bg-neutral-100 text-neutral-800 text-[10px] font-black px-2 py-0.5 rounded-full border border-neutral-200">
+                            {cust.stampCount ?? 0} Stamps
+                          </span>
+                          {cust.hasPendingDiscount && (
+                            <span className="bg-amber-100 text-amber-800 text-[9px] font-black px-2 py-0.5 rounded-full border border-amber-200">
+                              Reward Active
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

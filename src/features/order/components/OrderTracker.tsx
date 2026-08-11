@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { getOrderById, getCustomerLoyaltyInfo } from '@/actions/orders';
 import { getDeveloperPromo } from '@/actions/developerPromo';
 import Link from 'next/link';
-import { Check, Clock, ChefHat, UtensilsCrossed, PartyPopper, XCircle, ExternalLink, Sparkles, MessageCircle, PhoneCall } from 'lucide-react';
+import { Check, Clock, ChefHat, UtensilsCrossed, PartyPopper, XCircle, ExternalLink, Sparkles, MessageCircle, PhoneCall, CreditCard, QrCode, X, Camera, Smartphone, Image as ImageIcon } from 'lucide-react';
 import { CustomerNavbar } from '@/components/layout';
 import ConsultationModal from '@/components/ui/ConsultationModal';
 import { TRACK_NUDGES } from '../constants/trackNudges';
@@ -45,6 +45,7 @@ const STATUS_STEPS: Array<{ key: OrderData['status']; label: string; icon: React
 export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProps) {
   const [order, setOrder] = useState<OrderData>(initialOrder);
   const [now, setNow] = useState(() => Date.now());
+  const [mounted, setMounted] = useState(false);
   const [currentNudgeIdx, setCurrentNudgeIdx] = useState(0);
   const [loyaltyInfo, setLoyaltyInfo] = useState<{
     loyaltyEnabled: boolean;
@@ -54,6 +55,11 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [devPromo, setDevPromo] = useState<any>(null);
   const [consultationModalOpen, setConsultationModalOpen] = useState(false);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (order.restaurantId) {
@@ -238,8 +244,8 @@ Please confirm and prepare my order!
           {order.status !== 'cancelled' && order.status !== 'completed' && order.status !== 'ready' && order.estimatedTime && (
             <div className="bg-surface rounded-xl p-5 text-center">
               <span className="text-[0.6rem] text-text-dark/50 uppercase tracking-wider font-bold block">Estimated Time</span>
-              <span className="font-black text-4xl text-text-dark tracking-tight block mt-1">
-                {timeLeft || `${order.estimatedTime}:00`}
+              <span className="font-black text-4xl text-text-dark tracking-tight block mt-1" suppressHydrationWarning>
+                {mounted && timeLeft ? timeLeft : `${order.estimatedTime}:00`}
               </span>
               <span className="text-xs text-text-dark/50 mt-1 block">{getStatusSubtext()}</span>
             </div>
@@ -353,31 +359,30 @@ Please confirm and prepare my order!
             </div>
           )}
 
-          {/* QR Payment Block */}
+          {/* Pay Here Link Card */}
           {!['ready', 'completed', 'cancelled'].includes(order.status) && (
             <div className="border-t border-surface pt-4 flex flex-col items-center text-center">
-              <div className="bg-[#FEF2F2] border border-[#FECACA] rounded-2xl p-4 w-full flex flex-col items-center gap-3">
-                <span className="text-[10px] bg-[#C0181A] text-white px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider">
-                  Quick Pay
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-4 w-full flex flex-col items-center gap-2.5 shadow-sm">
+                <span className="text-[10px] bg-emerald-600 text-white px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider">
+                  Quick Online Payment
                 </span>
                 
-                {/* QR Code Container */}
-                <div className="relative bg-white p-2.5 rounded-xl border border-gray-100 shadow-inner">
-                  <img
-                    src="/1783337039466.png"
-                    alt="PhonePe Payment QR"
-                    className="w-64 h-64 object-contain rounded-lg"
-                  />
-                </div>
+                <p className="text-xs font-black text-gray-900 leading-snug">
+                  Pay ₹{order.total} online to confirm order & start kitchen prep
+                </p>
 
-                <div className="max-w-[280px]">
-                  <p className="text-xs font-black text-gray-900 leading-snug">
-                    Pay using PhonePe QR to begin preparation
-                  </p>
-                  <p className="text-[10px] text-gray-500 font-medium mt-1 leading-relaxed">
-                    Scan to pay now. Showing payment confirmation to the staff starts prep immediately and guarantees a seamless pickup without waiting!
-                  </p>
-                </div>
+                <button
+                  onClick={() => setPaymentModalOpen(true)}
+                  className="w-full bg-[#C0181A] hover:bg-[#A01012] text-white font-black text-xs py-3.5 rounded-xl uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 cursor-pointer mt-1"
+                >
+                  <CreditCard className="w-4 h-4 text-yellow-300" />
+                  <span>Pay Here to Confirm Order (₹{order.total})</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+
+                <p className="text-[10px] text-emerald-800 font-semibold leading-relaxed">
+                  Tap to view payment QR and step-by-step payment instructions.
+                </p>
               </div>
             </div>
           )}
@@ -559,6 +564,75 @@ Please confirm and prepare my order!
         onClose={() => setConsultationModalOpen(false)}
         restaurantId={order.restaurantId}
       />
+
+      {/* Step-by-Step Payment QR & Instructions Modal */}
+      {paymentModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-gray-100 flex flex-col items-center gap-4 text-center relative max-h-[92vh] overflow-y-auto my-auto">
+            <button
+              onClick={() => setPaymentModalOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 p-1.5 rounded-full hover:bg-gray-100 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-0.5 rounded-full font-black uppercase tracking-wider">
+              UPI Payment QR
+            </span>
+
+            <h3 className="font-black text-xl text-gray-900 leading-tight">
+              Pay ₹{order.total} to Confirm Order
+            </h3>
+
+            {/* QR Code Container */}
+            <div className="bg-white p-3 rounded-2xl border-2 border-dashed border-emerald-300 shadow-sm relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/1783337039466.png"
+                alt="UPI Payment QR Code"
+                className="w-56 h-56 object-contain rounded-xl"
+              />
+            </div>
+
+            {/* Step-by-Step Payment Instructions */}
+            <div className="bg-emerald-50/80 border border-emerald-200 rounded-2xl p-4 w-full text-left flex flex-col gap-2.5">
+              <h4 className="text-xs font-black uppercase tracking-wider text-emerald-950 flex items-center gap-1.5">
+                <Smartphone className="w-4 h-4 text-emerald-600" />
+                <span>How to Make Payment (4 Easy Steps):</span>
+              </h4>
+              <ol className="text-xs text-gray-800 font-semibold space-y-2.5 leading-relaxed">
+                <li className="flex items-start gap-2">
+                  <span className="bg-emerald-600 text-white rounded-full w-4 h-4 text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">1</span>
+                  <span><strong>Take a screenshot</strong> of this QR code on your phone.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="bg-emerald-600 text-white rounded-full w-4 h-4 text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">2</span>
+                  <span>Open <strong>PhonePe</strong>, <strong>Google Pay (GPay)</strong>, or <strong>Paytm</strong>.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="bg-emerald-600 text-white rounded-full w-4 h-4 text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">3</span>
+                  <span>Select <strong>Scan QR</strong> & tap the <strong>Gallery / Photo icon</strong> at the bottom right.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="bg-emerald-600 text-white rounded-full w-4 h-4 text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">4</span>
+                  <span>Select the screenshot from your gallery to complete payment of <strong>₹{order.total}</strong>.</span>
+                </li>
+              </ol>
+            </div>
+
+            <p className="text-[11px] text-gray-500 font-medium leading-tight">
+              💡 Showing payment confirmation screenshot to staff starts kitchen prep immediately!
+            </p>
+
+            <button
+              onClick={() => setPaymentModalOpen(false)}
+              className="w-full bg-[#111827] hover:bg-black text-white font-black text-xs py-3.5 rounded-xl uppercase tracking-wider active:scale-95 transition-all shadow-md mt-1"
+            >
+              Done / Close
+            </button>
+          </div>
+        </div>
+      )}
 
       <CustomerNavbar restaurantId={order.restaurantId} />
     </div>

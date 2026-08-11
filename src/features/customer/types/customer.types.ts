@@ -4,6 +4,9 @@ export interface Customer {
   phone: string;
   totalOrders: number;
   totalSpent: number;
+  averageOrderValue?: number;
+  lastOrderDate?: string | null;
+  favoriteCategory?: string;
   stampCount?: number;
   hasPendingDiscount?: boolean;
   totalRedemptions?: number;

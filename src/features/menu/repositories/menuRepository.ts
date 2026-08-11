@@ -215,3 +215,28 @@ export async function deleteByRestaurantId(restaurantId: string): Promise<boolea
   const result = await Menu.deleteMany({ restaurantId });
   return result.deletedCount > 0;
 }
+
+/**
+ * Adjusts all menu item prices for a restaurant by a specified amount (e.g. +1 or -1).
+ * Ensures item price does not fall below ₹1.
+ * 
+ * @param restaurantId The restaurant slug ID.
+ * @param amount The numeric adjustment amount (+1 or -1).
+ * @returns The count of updated menu items.
+ */
+export async function adjustAllPrices(restaurantId: string, amount: number): Promise<number> {
+  await dbConnect();
+  const docs = await Menu.find({ restaurantId });
+  let count = 0;
+  for (const doc of docs) {
+    const updated = Math.max(1, Number(doc.price) + amount);
+    doc.price = updated;
+    await doc.save();
+    count++;
+  }
+  return count;
+}
+
+export async function increaseAllPrices(restaurantId: string, amount: number = 1): Promise<number> {
+  return adjustAllPrices(restaurantId, amount);
+}

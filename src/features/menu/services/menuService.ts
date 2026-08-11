@@ -113,3 +113,21 @@ export async function deleteMenuItem(id: string, restaurantId: string) {
   }
   return menuRepo.deleteItem(restaurantId, id);
 }
+
+/**
+ * Adjusts all menu item prices for a restaurant by a specified amount (e.g. +1 or -1).
+ * 
+ * @param restaurantId The restaurant slug ID.
+ * @param amount The numeric adjustment amount (+1 or -1).
+ * @returns The count of updated menu items.
+ */
+export async function adjustAllPrices(restaurantId: string, amount: number): Promise<number> {
+  if (!restaurantId) {
+    throw new ValidationError('Restaurant ID is required');
+  }
+  return menuRepo.adjustAllPrices(restaurantId, amount);
+}
+
+export async function increaseAllPrices(restaurantId: string, amount: number = 1): Promise<number> {
+  return adjustAllPrices(restaurantId, amount);
+}

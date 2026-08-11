@@ -9,7 +9,7 @@ import { getUpsellConfig } from '@/actions/upsell';
 import { getRestaurantMenuContext } from '@/actions/menu';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Minus, Plus, ArrowLeft, ShoppingBag, Loader2, X, Gift, TrendingUp, Sparkles, AlertTriangle } from 'lucide-react';
+import { Minus, Plus, ArrowLeft, ShoppingBag, Loader2, X, Gift, TrendingUp, Sparkles, AlertTriangle, Ticket, CheckCircle, Pencil } from 'lucide-react';
 import { CustomerNavbar } from '@/components/layout';
 import { resolveMenuImage } from '@/lib/menu-images';
 import { getPersonalizedRecommendations, getGapUnlockingRecommendations, getBestAddOnsRecommendations, ScoredRecommendation } from '@/features/recommendations';
@@ -101,6 +101,32 @@ function CartContent() {
   const [orderType, setOrderType] = useState<'dine_in' | 'takeaway' | 'delivery'>('dine_in');
   const [paymentMode, setPaymentMode] = useState<'cash' | 'online'>('cash');
   const [deliveryWarningToast, setDeliveryWarningToast] = useState(false);
+
+  const [discountSettings, setDiscountSettings] = useState<{
+    masterEnabled: boolean;
+    couponsEnabled: boolean;
+    spendTiersEnabled: boolean;
+    comboRulesEnabled: boolean;
+    maxDiscountPerOrder: number;
+    allowStacking: boolean;
+  }>({
+    masterEnabled: true,
+    couponsEnabled: true,
+    spendTiersEnabled: true,
+    comboRulesEnabled: true,
+    maxDiscountPerOrder: 0,
+    allowStacking: true,
+  });
+
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    discountAmount: number;
+    message: string;
+  } | null>(null);
+  const [couponError, setCouponError] = useState('');
+  const [couponSuccess, setCouponSuccess] = useState('');
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
 
   const handleOrderTypeSelect = (type: 'dine_in' | 'takeaway' | 'delivery') => {
     if (type === 'delivery') {
@@ -204,21 +230,78 @@ function CartContent() {
         .finally(() => {
           setOffersLoading(false);
         });
+
+      fetch(`/api/admin/discounts?restaurantId=${resolvedRestId}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.data?.settings) {
+            setDiscountSettings(data.data.settings);
+          }
+        })
+        .catch((err) => console.error('Error fetching discount settings:', err));
     }
   }, [resolvedRestId]);
+
+  const handleApplyCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCouponError('');
+    setCouponSuccess('');
+
+    if (!couponInput.trim()) {
+      setCouponError('Please enter a coupon code.');
+      return;
+    }
+
+    setValidatingCoupon(true);
+    try {
+      const res = await fetch('/api/admin/discounts/coupons/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          restaurantId: resolvedRestId,
+          code: couponInput.trim(),
+          subtotal,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.valid) {
+        setAppliedCoupon({
+          code: data.coupon.code,
+          discountAmount: data.discountAmount,
+          message: data.message,
+        });
+        setCouponSuccess(data.message);
+        setCouponInput('');
+      } else {
+        setCouponError(data.message || 'Invalid coupon code.');
+      }
+    } catch (err) {
+      console.error(err);
+      setCouponError('Failed to validate coupon code.');
+    } finally {
+      setValidatingCoupon(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponSuccess('');
+    setCouponError('');
+  };
 
   const { subtotal, items } = cart;
 
   // Core Rules Evaluation Engine
   const evaluationResult = React.useMemo(() => {
-    if (items.length === 0) {
+    if (items.length === 0 || discountSettings.masterEnabled === false) {
       return {
         appliedCombos: [],
         comboDiscounts: 0,
         unlockedDiscountTier: null,
         tierDiscount: 0,
         totalDiscount: 0,
-        discountedTotal: 0,
+        discountedTotal: subtotal,
         potentialCombos: [],
         discountNudge: null,
       };
@@ -443,7 +526,22 @@ function CartContent() {
       };
     }
 
-    const totalDiscount = comboDiscounts + tierDiscount;
+    let couponDiscount = 0;
+    if (discountSettings.couponsEnabled !== false && appliedCoupon) {
+      couponDiscount = appliedCoupon.discountAmount;
+      appliedCombos.push({
+        name: `Coupon Code (${appliedCoupon.code})`,
+        amount: couponDiscount,
+      });
+    }
+
+    let rawTotalDiscount = comboDiscounts + tierDiscount + couponDiscount;
+    let totalDiscount = rawTotalDiscount;
+
+    if (discountSettings.maxDiscountPerOrder > 0 && totalDiscount > discountSettings.maxDiscountPerOrder) {
+      totalDiscount = discountSettings.maxDiscountPerOrder;
+    }
+
     const discountedTotal = Math.max(0, subtotal - totalDiscount);
 
     return {
@@ -456,7 +554,7 @@ function CartContent() {
       potentialCombos,
       discountNudge,
     };
-  }, [items, subtotal, comboRules, discountTiers, menuItems]);
+  }, [items, subtotal, comboRules, discountTiers, menuItems, discountSettings, appliedCoupon]);
 
   // 1. Smart Gap Unlocking Offer Suggestions Engine ("Recommended to Unlock Offer")
   const gapUnlockingSuggestions = React.useMemo(() => {
@@ -1005,6 +1103,55 @@ function CartContent() {
             </div>
           )}
 
+          {/* Promo Coupon Code Input Card */}
+          {discountSettings.masterEnabled && discountSettings.couponsEnabled && (
+            <div className="border-t border-[#E2E6EA] p-4 bg-gray-50/70 flex flex-col gap-2">
+              <span className="text-xs font-extrabold uppercase text-gray-700 tracking-wider flex items-center gap-1.5">
+                <Ticket className="w-3.5 h-3.5 text-[#C0181A]" /> Promo Coupon Code
+              </span>
+              {appliedCoupon ? (
+                <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    <span className="font-bold text-emerald-900">{appliedCoupon.code}</span>
+                    <span className="text-emerald-700 font-medium">(-₹{appliedCoupon.discountAmount})</span>
+                  </div>
+                  <button
+                    onClick={handleRemoveCoupon}
+                    className="text-xs font-bold text-red-600 hover:text-red-800 underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleApplyCoupon} className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Enter code (e.g. WELCOME10)"
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    className="flex-1 bg-white border border-gray-300 focus:border-[#C0181A] rounded-xl px-3.5 py-2 text-xs font-mono font-bold uppercase outline-none"
+                  />
+                  <button
+                    type="submit"
+                    disabled={validatingCoupon}
+                    className="bg-[#C0181A] hover:bg-[#8B0000] text-white px-4 py-2 rounded-xl font-extrabold text-xs transition-colors shrink-0"
+                  >
+                    {validatingCoupon ? 'Checking...' : 'Apply'}
+                  </button>
+                </form>
+              )}
+              {couponError && <p className="text-[11px] text-red-600 font-semibold">{couponError}</p>}
+            </div>
+          )}
+
+          {!discountSettings.masterEnabled && (
+            <div className="border-t border-[#E2E6EA] p-3 bg-red-50 text-red-700 text-xs font-bold flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+              <span>Store discounts are currently paused by store manager.</span>
+            </div>
+          )}
+
           {/* Totals */}
           <div className="border-t border-surface bg-surface/50 p-4 flex flex-col gap-2">
             <div className="flex justify-between text-sm text-text-dark/60">
@@ -1253,10 +1400,21 @@ function CartContent() {
 
             {isCachedUser && !isEditingDetails ? (
               <div className="flex flex-col gap-4">
-                <div className="bg-surface rounded-xl p-4 border border-text-dark/5">
-                  <span className="text-[0.65rem] text-text-dark/40 uppercase font-bold tracking-wider">Ordering As</span>
-                  <p className="font-bold text-base text-text-dark mt-0.5">{name}</p>
-                  <p className="text-xs text-text-dark/60 mt-0.5">{phone}</p>
+                <div className="bg-surface rounded-xl p-4 border border-text-dark/5 flex items-center justify-between gap-3 shadow-xs">
+                  <div>
+                    <span className="text-[0.65rem] text-text-dark/40 uppercase font-bold tracking-wider block">Ordering As</span>
+                    <p className="font-bold text-base text-text-dark mt-0.5">{name}</p>
+                    <p className="text-xs text-text-dark/60 mt-0.5 font-mono">{phone}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingDetails(true)}
+                    className="bg-white border border-text-dark/15 hover:border-[#C0181A] hover:bg-[#C0181A]/5 text-[#C0181A] text-xs font-extrabold px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer shrink-0"
+                    title="Edit or change your name and phone number"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    <span>Edit / Change</span>
+                  </button>
                 </div>
 
                 {/* Delivery Warning Toast / Alert */}

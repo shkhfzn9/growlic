@@ -24,6 +24,10 @@ export interface IOrderDocument extends Document {
   status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
   notes?: string;
   estimatedTime?: number; // preparation time in minutes
+  actualPrepTimeMinutes?: number;
+  delayMinutes?: number;
+  isDelayed?: boolean;
+  delayReason?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -58,6 +62,10 @@ const OrderSchema: Schema = new Schema<IOrderDocument>(
     },
     notes: { type: String, default: '' },
     estimatedTime: { type: Number, default: 0 },
+    actualPrepTimeMinutes: { type: Number, default: 0 },
+    delayMinutes: { type: Number, default: 0 },
+    isDelayed: { type: Boolean, default: false, index: true },
+    delayReason: { type: String, default: '' },
   },
   { timestamps: true }
 );
