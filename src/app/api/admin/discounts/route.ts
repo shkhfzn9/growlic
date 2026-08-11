@@ -132,13 +132,17 @@ export async function PUT(req: NextRequest) {
     if (!auth) throw new AuthenticationError('Unauthorized access');
 
     const body = await req.json();
+    console.log('[API PUT /api/admin/discounts] Body received:', JSON.stringify(body, null, 2));
+
     const updatedSettings = await discountRepo.updateDiscountSettings(auth.restaurantId, body);
+    console.log('[API PUT /api/admin/discounts] Updated settings returned:', JSON.stringify(updatedSettings, null, 2));
 
     return NextResponse.json({
       success: true,
       settings: updatedSettings,
     });
   } catch (error) {
+    console.error('[API PUT /api/admin/discounts Error]:', error);
     return handleRouteError(error);
   }
 }

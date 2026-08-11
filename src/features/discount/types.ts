@@ -21,6 +21,8 @@ export interface IDiscountSettings {
   spendTiersEnabled: boolean;
   comboRulesEnabled: boolean;
   itemDiscountsEnabled: boolean;
+  specialAddonsEnabled: boolean;
+  specialAddonDiscountPercent: number;
   maxDiscountPerOrder: number; // 0 = unlimited
   allowStacking: boolean;
   createdAt?: string;

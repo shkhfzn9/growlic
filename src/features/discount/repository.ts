@@ -32,6 +32,8 @@ function normalizeSettings(doc: any): IDiscountSettings {
     spendTiersEnabled: plain.spendTiersEnabled !== undefined ? plain.spendTiersEnabled : true,
     comboRulesEnabled: plain.comboRulesEnabled !== undefined ? plain.comboRulesEnabled : true,
     itemDiscountsEnabled: plain.itemDiscountsEnabled !== undefined ? plain.itemDiscountsEnabled : true,
+    specialAddonsEnabled: plain.specialAddonsEnabled !== undefined ? plain.specialAddonsEnabled : true,
+    specialAddonDiscountPercent: plain.specialAddonDiscountPercent ?? 30,
     maxDiscountPerOrder: plain.maxDiscountPerOrder || 0,
     allowStacking: plain.allowStacking !== undefined ? plain.allowStacking : true,
     createdAt: plain.createdAt ? new Date(plain.createdAt).toISOString() : undefined,
@@ -53,6 +55,8 @@ export async function getDiscountSettings(restaurantId: string): Promise<IDiscou
       spendTiersEnabled: true,
       comboRulesEnabled: true,
       itemDiscountsEnabled: true,
+      specialAddonsEnabled: true,
+      specialAddonDiscountPercent: 30,
       maxDiscountPerOrder: 0,
       allowStacking: true,
     });

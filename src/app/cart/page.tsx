@@ -107,6 +107,8 @@ function CartContent() {
     couponsEnabled: boolean;
     spendTiersEnabled: boolean;
     comboRulesEnabled: boolean;
+    specialAddonsEnabled?: boolean;
+    specialAddonDiscountPercent?: number;
     maxDiscountPerOrder: number;
     allowStacking: boolean;
   }>({
@@ -114,6 +116,8 @@ function CartContent() {
     couponsEnabled: true,
     spendTiersEnabled: true,
     comboRulesEnabled: true,
+    specialAddonsEnabled: true,
+    specialAddonDiscountPercent: 30,
     maxDiscountPerOrder: 0,
     allowStacking: true,
   });
@@ -990,39 +994,45 @@ function CartContent() {
                   );
                 })}
 
-                {/* 3. Render Special Add-ons */}
-                {menuItems.filter(m => m.category === 'Additional Snacks' && m.available && m.active !== false).slice(0, 2).map((item) => {
-                  const offerPrice = Math.round(item.price * 0.7); // 30% discount for special offer
-                  return (
-                    <div key={item._id} className="bg-white rounded-3xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-gray-100 flex items-center justify-between gap-4">
-                      <div className="flex-1">
-                        <span className="bg-red-50 text-[#C0181A] text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider border border-red-100">
-                          Special Add-on
-                        </span>
-                        <h3 className="font-extrabold text-base text-gray-900 mt-2.5 leading-tight">
-                          Add {item.name} for ₹{offerPrice} only
-                        </h3>
-                        <div className="flex items-center gap-2 mt-2 font-bold">
-                          <span className="text-gray-400 line-through text-xs">₹{item.price}</span>
-                          <span className="text-[#C0181A] text-sm">₹{offerPrice}</span>
-                        </div>
-                      </div>
+                {/* 3. Render Special Add-ons (Controlled via Admin Discounts settings) */}
+                {discountSettings.masterEnabled !== false &&
+                 discountSettings.specialAddonsEnabled !== false &&
+                 menuItems
+                   .filter(m => m.category === 'Additional Snacks' && m.available && m.active !== false)
+                   .slice(0, 2)
+                   .map((item) => {
+                     const discountPct = discountSettings.specialAddonDiscountPercent ?? 30;
+                     const offerPrice = Math.round(item.price * (1 - discountPct / 100));
+                     return (
+                       <div key={item._id} className="bg-white rounded-3xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-gray-100 flex items-center justify-between gap-4">
+                         <div className="flex-1">
+                           <span className="bg-red-50 text-[#C0181A] text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider border border-red-100">
+                             Special Add-on ({discountPct}% OFF)
+                           </span>
+                           <h3 className="font-extrabold text-base text-gray-900 mt-2.5 leading-tight">
+                             Add {item.name} for ₹{offerPrice} only
+                           </h3>
+                           <div className="flex items-center gap-2 mt-2 font-bold">
+                             <span className="text-gray-400 line-through text-xs">₹{item.price}</span>
+                             <span className="text-[#C0181A] text-sm">₹{offerPrice}</span>
+                           </div>
+                         </div>
 
-                      <div className="flex flex-col items-center gap-3 flex-shrink-0">
-                        <div className="w-20 h-20 rounded-2xl overflow-hidden shadow-md bg-gray-50 border border-gray-100">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={getItemImage(item.image, item.name)} alt={item.name} className="w-full h-full object-cover" />
-                        </div>
-                        <button
-                          onClick={() => handleAddSpecialAddon(item, offerPrice)}
-                          className="bg-[#C0181A] hover:bg-[#A01012] text-white text-[10px] font-black px-4 py-2 rounded-xl uppercase tracking-wider transition-all shadow active:scale-95 text-center"
-                        >
-                          + Add
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                         <div className="flex flex-col items-center gap-3 flex-shrink-0">
+                           <div className="w-20 h-20 rounded-2xl overflow-hidden shadow-md bg-gray-50 border border-gray-100">
+                             {/* eslint-disable-next-line @next/next/no-img-element */}
+                             <img src={getItemImage(item.image, item.name)} alt={item.name} className="w-full h-full object-cover" />
+                           </div>
+                           <button
+                             onClick={() => handleAddSpecialAddon(item, offerPrice)}
+                             className="bg-[#C0181A] hover:bg-[#A01012] text-white text-[10px] font-black px-4 py-2 rounded-xl uppercase tracking-wider transition-all shadow active:scale-95 text-center"
+                           >
+                             + Add
+                           </button>
+                         </div>
+                       </div>
+                     );
+                   })}
               </div>
             )}
           </div>

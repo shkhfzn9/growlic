@@ -64,7 +64,7 @@ interface MenuItem {
 export default function DiscountsManager() {
   const auth = useSelector((state: RootState) => state.auth);
 
-  const [activeTab, setActiveTab] = useState<'audit' | 'overview' | 'coupons' | 'tiers' | 'combos' | 'items'>('audit');
+  const [activeTab, setActiveTab] = useState<'audit' | 'addons' | 'overview' | 'coupons' | 'tiers' | 'combos' | 'items'>('audit');
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
@@ -77,6 +77,8 @@ export default function DiscountsManager() {
     spendTiersEnabled: true,
     comboRulesEnabled: true,
     itemDiscountsEnabled: true,
+    specialAddonsEnabled: true,
+    specialAddonDiscountPercent: 30,
     maxDiscountPerOrder: 0,
     allowStacking: true,
   });
@@ -123,6 +125,8 @@ export default function DiscountsManager() {
   const [savingCombo, setSavingCombo] = useState(false);
   const [showComboForm, setShowComboForm] = useState(false);
 
+  const [maxCapInput, setMaxCapInput] = useState<number | ''>(0);
+
   const loadDiscountData = async () => {
     setLoading(true);
     try {
@@ -130,6 +134,9 @@ export default function DiscountsManager() {
       const json = await res.json();
       if (json.success) {
         setSettings(json.data.settings);
+        if (json.data.settings && json.data.settings.maxDiscountPerOrder !== undefined) {
+          setMaxCapInput(json.data.settings.maxDiscountPerOrder);
+        }
         setCoupons(json.data.coupons || []);
         setSpendTiers(json.data.spendTiers || []);
         setComboRules(json.data.comboRules || []);
@@ -153,21 +160,55 @@ export default function DiscountsManager() {
 
   const handleUpdateSettings = async (newSettings: Partial<IDiscountSettings>) => {
     setSavingSettings(true);
+    console.log('[DiscountsManager] handleUpdateSettings called with:', newSettings);
+    console.log('[DiscountsManager] Current settings before update:', settings);
+
+    // Optimistically update local state for fast feedback
+    setSettings((prev) => {
+      const next = { ...prev, ...newSettings };
+      console.log('[DiscountsManager] Optimistic settings updated state:', next);
+      return next;
+    });
+
     try {
-      const updated = { ...settings, ...newSettings };
+      const updatedPayload = { ...settings, ...newSettings };
+      console.log('[DiscountsManager] Sending PUT payload:', updatedPayload);
+
       const res = await fetch('/api/admin/discounts', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
+        body: JSON.stringify(updatedPayload),
       });
       const json = await res.json();
-      if (json.success) {
+      console.log('[DiscountsManager] API Response:', json);
+
+      if (json.success && json.settings) {
         setSettings(json.settings);
-        setSaveSuccessMsg('Discount settings updated successfully!');
-        setTimeout(() => setSaveSuccessMsg(''), 3000);
+        if (json.settings.maxDiscountPerOrder !== undefined) {
+          setMaxCapInput(json.settings.maxDiscountPerOrder);
+        }
+
+        let msg = 'Discount settings updated successfully!';
+        if (newSettings.specialAddonsEnabled !== undefined) {
+          msg = newSettings.specialAddonsEnabled
+            ? '✅ Special Add-ons ENABLED! Customers will see cart booster offers.'
+            : '🛑 Special Add-ons STOPPED! Add-on booster items are now hidden from customer carts.';
+        } else if (newSettings.specialAddonDiscountPercent !== undefined) {
+          msg = `✅ Special Add-on Discount updated to ${newSettings.specialAddonDiscountPercent}% OFF!`;
+        } else if (newSettings.masterEnabled !== undefined) {
+          msg = newSettings.masterEnabled
+            ? '✅ All store discounts enabled!'
+            : '🛑 Master Kill Switch Active: All store discounts suspended!';
+        }
+
+        setSaveSuccessMsg(msg);
+        setTimeout(() => setSaveSuccessMsg(''), 4000);
+      } else {
+        console.error('[DiscountsManager] Server error:', json);
+        alert(json.error || 'Failed to update discount settings');
       }
     } catch (err) {
-      console.error(err);
+      console.error('[DiscountsManager] Error in handleUpdateSettings:', err);
       alert('Failed to update discount settings');
     } finally {
       setSavingSettings(false);
@@ -588,6 +629,7 @@ export default function DiscountsManager() {
       <div className="flex items-center gap-2 border-b border-neutral-200 overflow-x-auto pb-1">
         {[
           { id: 'audit', label: 'Cost & Leakage Control', icon: ShieldAlert },
+          { id: 'addons', label: '⚡ Special Add-ons (Cart Boosters)', icon: Zap },
           { id: 'overview', label: 'Master Controls & Limits', icon: Settings },
           { id: 'coupons', label: `Promo Coupons (${coupons.length})`, icon: Ticket },
           { id: 'tiers', label: `Minimum Spend Tiers (${spendTiers.length})`, icon: Percent },
@@ -907,6 +949,115 @@ export default function DiscountsManager() {
         </div>
       )}
 
+      {/* TAB 0.5: SPECIAL ADD-ONS (CART BOOSTERS) */}
+      {activeTab === 'addons' && (
+        <div className="flex flex-col gap-6">
+          {/* Big Hero Card */}
+          <div
+            className={`rounded-2xl p-6 border shadow-md transition-all ${
+              settings.specialAddonsEnabled !== false
+                ? 'bg-gradient-to-r from-amber-950 via-slate-900 to-neutral-900 text-white border-amber-800'
+                : 'bg-gradient-to-r from-red-950 via-red-900 to-neutral-900 text-white border-red-800'
+            }`}
+          >
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="flex items-start gap-4">
+                <div
+                  className={`p-3.5 rounded-2xl ${
+                    settings.specialAddonsEnabled !== false ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-400'
+                  }`}
+                >
+                  <Zap className="w-8 h-8" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-black tracking-tight">Special Add-on Cart Boosters</h2>
+                    <span
+                      className={`text-[10px] font-extrabold tracking-widest uppercase px-3 py-1 rounded-full border ${
+                        settings.specialAddonsEnabled !== false
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                          : 'bg-red-500/20 text-red-300 border-red-500/30'
+                      }`}
+                    >
+                      {settings.specialAddonsEnabled !== false ? '● ACTIVE ON CART PAGE' : '✕ STOPPED & HIDDEN'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-white/70 mt-1 max-w-xl">
+                    {settings.specialAddonsEnabled !== false
+                      ? `Special add-on snacks (Chicken Popcorn, Peri Peri Strips) are currently offered on customer checkout carts at ${settings.specialAddonDiscountPercent ?? 30}% OFF.`
+                      : 'SPECIAL ADD-ONS STOPPED: Customer checkout carts will NOT display any impulse add-on snacks.'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => handleUpdateSettings({ specialAddonsEnabled: !settings.specialAddonsEnabled })}
+                disabled={savingSettings}
+                className={`px-6 py-3.5 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2.5 transition-all shadow-lg active:scale-95 shrink-0 cursor-pointer ${
+                  savingSettings ? 'opacity-75 cursor-wait' : ''
+                } ${
+                  settings.specialAddonsEnabled !== false
+                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                    : 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                }`}
+              >
+                <RefreshCw className={`w-4 h-4 ${savingSettings ? 'animate-spin' : 'hidden'}`} />
+                {!savingSettings && (
+                  settings.specialAddonsEnabled !== false ? <Ban className="w-4 h-4" /> : <Play className="w-4 h-4" />
+                )}
+                <span>
+                  {savingSettings
+                    ? 'SAVING STATUS...'
+                    : settings.specialAddonsEnabled !== false
+                    ? 'STOP SPECIAL ADD-ONS'
+                    : 'ENABLE SPECIAL ADD-ONS'}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Discount Percentage Configurator Card */}
+          <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm flex flex-col gap-5">
+            <div>
+              <h3 className="text-base font-extrabold text-neutral-900 flex items-center gap-2">
+                <Percent className="w-5 h-5 text-[#C0181A]" /> Choose Add-on Discount Percentage
+              </h3>
+              <p className="text-xs text-neutral-500 mt-1">
+                Select the promotional discount percentage applied to impulse snacks on the customer checkout screen.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2.5">
+              {[10, 15, 20, 25, 30, 40, 50].map((pct) => {
+                const isSelected = (settings.specialAddonDiscountPercent ?? 30) === pct;
+                return (
+                  <button
+                    key={pct}
+                    type="button"
+                    disabled={savingSettings}
+                    onClick={() => handleUpdateSettings({ specialAddonDiscountPercent: pct })}
+                    className={`px-4 py-2.5 text-xs font-black rounded-xl border transition-all cursor-pointer flex items-center gap-2 ${
+                      savingSettings && isSelected ? 'opacity-70 cursor-wait' : ''
+                    } ${
+                      isSelected
+                        ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-md ring-2 ring-red-200 scale-105'
+                        : 'bg-neutral-50 text-neutral-700 border-neutral-200 hover:bg-neutral-100'
+                    }`}
+                  >
+                    {savingSettings && isSelected && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{pct}% OFF (₹140 → ₹{Math.round(140 * (1 - pct / 100))})</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs font-semibold text-amber-900">
+              💡 <strong>Live Cart Calculation:</strong> A snack item with base price ₹140 (like Chicken Popcorn or Peri Peri Strips) will be presented to customers for <strong>₹{Math.round(140 * (1 - (settings.specialAddonDiscountPercent ?? 30) / 100))}</strong> ({settings.specialAddonDiscountPercent ?? 30}% OFF).
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* TAB 1: MASTER CONTROLS & LIMITS */}
       {activeTab === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -943,6 +1094,13 @@ export default function DiscountsManager() {
                   desc: 'Bundle rewards and cross-sell discounts',
                   enabled: settings.comboRulesEnabled,
                   icon: Layers,
+                },
+                {
+                  key: 'specialAddonsEnabled',
+                  title: 'Special Add-on Cart Boosters',
+                  desc: 'Impulse snack add-on offers shown on customer cart page (e.g. Chicken Popcorn, Peri Peri Strips)',
+                  enabled: settings.specialAddonsEnabled !== false,
+                  icon: Zap,
                 },
                 {
                   key: 'itemDiscountsEnabled',
@@ -984,6 +1142,88 @@ export default function DiscountsManager() {
               })}
             </div>
 
+            {/* Special Add-on Cart Boosters Configurator Card */}
+            <div className="border-t border-neutral-200 pt-6 flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-500" /> Special Add-on Cart Boosters (Impulse Deals)
+                  </h4>
+                  <p className="text-xs text-neutral-500 mt-0.5">
+                    Turn OFF or edit discount prices for special add-ons shown on customer cart page (e.g. Chicken Popcorn & Peri Peri Strips).
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => handleUpdateSettings({ specialAddonsEnabled: !settings.specialAddonsEnabled })}
+                  disabled={savingSettings}
+                  className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer shadow-sm ${
+                    savingSettings ? 'opacity-70 cursor-wait' : ''
+                  } ${
+                    settings.specialAddonsEnabled !== false
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  }`}
+                >
+                  <RefreshCw className={`w-4 h-4 ${savingSettings ? 'animate-spin' : 'hidden'}`} />
+                  {!savingSettings && (
+                    settings.specialAddonsEnabled !== false ? (
+                      <Ban className="w-4 h-4 text-white" />
+                    ) : (
+                      <Play className="w-4 h-4 text-white" />
+                    )
+                  )}
+                  <span>
+                    {savingSettings
+                      ? 'SAVING STATUS...'
+                      : settings.specialAddonsEnabled !== false
+                      ? 'STOP SPECIAL ADD-ONS'
+                      : 'ENABLE SPECIAL ADD-ONS'}
+                  </span>
+                </button>
+              </div>
+
+              <div className="bg-amber-50/60 border border-amber-200/80 rounded-2xl p-4 flex flex-col gap-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-xs font-extrabold text-amber-950 uppercase tracking-wider">
+                    Add-on Discount Percentage
+                  </span>
+                  <span className="text-xs font-bold text-amber-900 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-200">
+                    Current: {settings.specialAddonDiscountPercent ?? 30}% OFF
+                  </span>
+                </div>
+
+                {/* Preset Percentage Buttons */}
+                <div className="flex flex-wrap gap-2">
+                  {[10, 15, 20, 25, 30, 40, 50].map((pct) => {
+                    const isSelected = (settings.specialAddonDiscountPercent ?? 30) === pct;
+                    return (
+                      <button
+                        key={pct}
+                        type="button"
+                        disabled={savingSettings}
+                        onClick={() => handleUpdateSettings({ specialAddonDiscountPercent: pct })}
+                        className={`px-3.5 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${
+                          savingSettings && isSelected ? 'opacity-70 cursor-wait' : ''
+                        } ${
+                          isSelected
+                            ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-md ring-2 ring-red-200'
+                            : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        {savingSettings && isSelected && <RefreshCw className="w-3 h-3 animate-spin" />}
+                        <span>{pct}% OFF (₹140 → ₹{Math.round(140 * (1 - pct / 100))})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p className="text-[11px] text-amber-900 font-semibold leading-relaxed">
+                  💡 A ₹140 snack item will be offered for <strong>₹{Math.round(140 * (1 - (settings.specialAddonDiscountPercent ?? 30) / 100))}</strong> on the cart page at {settings.specialAddonDiscountPercent ?? 30}% OFF.
+                </p>
+              </div>
+            </div>
+
             {/* Max Discount Cap per Order */}
             <div className="border-t border-neutral-200 pt-6 flex flex-col gap-4">
               <div>
@@ -1002,19 +1242,21 @@ export default function DiscountsManager() {
                     type="number"
                     min="0"
                     placeholder="e.g. 500 (0 = Unlimited)"
-                    value={settings.maxDiscountPerOrder}
-                    onChange={(e) =>
-                      setSettings({ ...settings, maxDiscountPerOrder: Math.max(0, Number(e.target.value)) })
-                    }
+                    value={maxCapInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setMaxCapInput(val === '' ? '' : Math.max(0, Number(val)));
+                    }}
                     className="w-full bg-neutral-50 border border-neutral-300 focus:border-[#C0181A] rounded-xl pl-8 pr-4 py-2.5 text-sm font-semibold outline-none transition-colors"
                   />
                 </div>
                 <button
-                  onClick={() => handleUpdateSettings({ maxDiscountPerOrder: settings.maxDiscountPerOrder })}
+                  onClick={() => handleUpdateSettings({ maxDiscountPerOrder: Number(maxCapInput || 0) })}
                   disabled={savingSettings}
-                  className="bg-[#C0181A] hover:bg-[#8B0000] text-white px-5 py-2.5 rounded-xl font-bold text-xs transition-colors shadow-sm"
+                  className="bg-[#C0181A] hover:bg-[#8B0000] text-white px-5 py-2.5 rounded-xl font-bold text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
-                  Save Max Cap
+                  <RefreshCw className={`w-3.5 h-3.5 ${savingSettings ? 'animate-spin' : 'hidden'}`} />
+                  <span>{savingSettings ? 'Saving...' : 'Save Max Cap'}</span>
                 </button>
               </div>
             </div>

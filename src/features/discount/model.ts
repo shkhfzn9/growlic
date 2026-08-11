@@ -41,6 +41,8 @@ export interface IDiscountSettingsDoc extends Document {
   spendTiersEnabled: boolean;
   comboRulesEnabled: boolean;
   itemDiscountsEnabled: boolean;
+  specialAddonsEnabled: boolean;
+  specialAddonDiscountPercent: number;
   maxDiscountPerOrder: number;
   allowStacking: boolean;
 }
@@ -53,12 +55,17 @@ const DiscountSettingsSchema: Schema = new Schema<IDiscountSettingsDoc>(
     spendTiersEnabled: { type: Boolean, default: true },
     comboRulesEnabled: { type: Boolean, default: true },
     itemDiscountsEnabled: { type: Boolean, default: true },
+    specialAddonsEnabled: { type: Boolean, default: true },
+    specialAddonDiscountPercent: { type: Number, default: 30 },
     maxDiscountPerOrder: { type: Number, default: 0 }, // 0 = unlimited cap
     allowStacking: { type: Boolean, default: true },
   },
   { timestamps: true }
 );
 
+if (mongoose.models && mongoose.models.DiscountSettings) {
+  delete (mongoose.models as any).DiscountSettings;
+}
+
 export const DiscountSettings: Model<IDiscountSettingsDoc> =
-  mongoose.models.DiscountSettings ||
   mongoose.model<IDiscountSettingsDoc>('DiscountSettings', DiscountSettingsSchema);
