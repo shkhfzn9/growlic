@@ -27,6 +27,8 @@ export interface IOrder {
   delayMinutes?: number;
   isDelayed?: boolean;
   delayReason?: string;
+  rejectionReason?: string;
+  rejectedAt?: string;
   createdAt?: string;
   updatedAt?: string;
 }

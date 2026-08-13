@@ -39,6 +39,12 @@ export default function SettingsPage() {
   const [loyaltySaving, setLoyaltySaving] = useState(false);
   const [loyaltySaveSuccess, setLoyaltySaveSuccess] = useState(false);
 
+  const [maintenanceModeEnabled, setMaintenanceModeEnabled] = useState(false);
+  const [maintenanceMessage, setMaintenanceMessage] = useState('Kitchen is currently under maintenance. Ordering will resume shortly.');
+  const [maintenanceEstimatedRestore, setMaintenanceEstimatedRestore] = useState('');
+  const [maintenanceSaving, setMaintenanceSaving] = useState(false);
+  const [maintenanceSaveSuccess, setMaintenanceSaveSuccess] = useState(false);
+
   const [tables, setTables] = useState<string[]>(['1', '2', '3', '4', '5']);
   const [newTableLabel, setNewTableLabel] = useState('');
   const [qrUrls, setQrUrls] = useState<Record<string, string>>({});
@@ -56,6 +62,9 @@ export default function SettingsPage() {
           setCallStaffEnabled(details.callStaffEnabled !== false);
           setStampsRequired(details.stampsRequired ?? 8);
           setDiscountPercentage(details.discountPercentage ?? 20);
+          setMaintenanceModeEnabled(!!details.maintenanceModeEnabled);
+          setMaintenanceMessage(details.maintenanceMessage || 'Kitchen is currently under maintenance. Ordering will resume shortly.');
+          setMaintenanceEstimatedRestore(details.maintenanceEstimatedRestore || '');
         }
       } catch (err) {
         console.error('Failed to load branding settings:', err);
@@ -125,7 +134,10 @@ export default function SettingsPage() {
         loyaltyEnabled,
         callStaffEnabled,
         stampsRequired,
-        discountPercentage
+        discountPercentage,
+        maintenanceModeEnabled,
+        maintenanceMessage,
+        maintenanceEstimatedRestore,
       });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -160,7 +172,10 @@ export default function SettingsPage() {
         loyaltyEnabled,
         callStaffEnabled,
         stampsRequired,
-        discountPercentage
+        discountPercentage,
+        maintenanceModeEnabled,
+        maintenanceMessage,
+        maintenanceEstimatedRestore,
       });
       setLoyaltySaveSuccess(true);
       setTimeout(() => setLoyaltySaveSuccess(false), 3000);
@@ -169,6 +184,34 @@ export default function SettingsPage() {
       alert('Failed to save settings: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setLoyaltySaving(false);
+    }
+  };
+
+  const handleSaveMaintenance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMaintenanceSaving(true);
+    setMaintenanceSaveSuccess(false);
+    try {
+      await saveRestaurantBranding({
+        logoUrl,
+        primaryColor,
+        welcomeMessage,
+        whatsappNumber,
+        loyaltyEnabled,
+        callStaffEnabled,
+        stampsRequired,
+        discountPercentage,
+        maintenanceModeEnabled,
+        maintenanceMessage,
+        maintenanceEstimatedRestore,
+      });
+      setMaintenanceSaveSuccess(true);
+      setTimeout(() => setMaintenanceSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save maintenance settings: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setMaintenanceSaving(false);
     }
   };
 
@@ -363,6 +406,88 @@ export default function SettingsPage() {
 
         <AdminButton type="submit" loading={loyaltySaving} className="w-full">
           Save Loyalty Settings
+        </AdminButton>
+      </form>
+
+      {/* Store Maintenance & Ordering Pause */}
+      <form onSubmit={handleSaveMaintenance} className="bg-white border border-[#E2E6EA] rounded-xl p-6 flex flex-col gap-5">
+        <div>
+          <h2 className="text-[15px] font-semibold text-[#111827] flex items-center gap-2">
+            <span>🛠️ Kitchen Maintenance & Pause Ordering</span>
+          </h2>
+          <p className="text-[13px] text-[#6B7280] mt-0.5">
+            Temporarily pause customer ordering while keeping your QR code menu fully viewable as a digital menu.
+          </p>
+        </div>
+
+        {maintenanceSaveSuccess && (
+          <div className="flex items-center gap-2 bg-[#F0FDF4] border border-[#16A34A]/20 rounded-lg p-3 text-sm text-[#16A34A] font-medium">
+            <CheckCircle className="w-4 h-4" /> Maintenance settings saved successfully
+          </div>
+        )}
+
+        <div className="flex items-center justify-between p-4 bg-[#F4F6F9] rounded-xl border border-[#E2E6EA]">
+          <div>
+            <span className="text-sm font-bold text-[#111827] block">
+              {maintenanceModeEnabled ? '🔴 Maintenance Mode ACTIVE (Ordering Paused)' : '🟢 Ordering Active (Normal Operations)'}
+            </span>
+            <span className="text-xs text-[#6B7280]">
+              {maintenanceModeEnabled
+                ? 'QR scans will open the digital menu. Cart ordering is paused.'
+                : 'Customers can add items to cart and place orders normally.'}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMaintenanceModeEnabled(!maintenanceModeEnabled)}
+            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none ${
+              maintenanceModeEnabled ? 'bg-[#C0181A]' : 'bg-gray-300'
+            }`}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform shadow-md ${
+                maintenanceModeEnabled ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+
+        {maintenanceModeEnabled && (
+          <div className="flex flex-col gap-4 bg-amber-50/60 border border-amber-200/60 rounded-xl p-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-900">
+                Maintenance Notice Message (Shown to Customers)
+              </label>
+              <textarea
+                rows={2}
+                placeholder="e.g. Kitchen is refilling supplies. Ordering will resume shortly."
+                value={maintenanceMessage}
+                onChange={(e) => setMaintenanceMessage(e.target.value)}
+                className="px-3 py-2.5 text-sm border border-amber-300/80 rounded-lg bg-white outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors"
+                required
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-900">
+                Expected Restoration Date & Time (Optional)
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Today by 4:30 PM (or 2026-08-12 16:30)"
+                value={maintenanceEstimatedRestore}
+                onChange={(e) => setMaintenanceEstimatedRestore(e.target.value)}
+                className="px-3 py-2.5 text-sm border border-amber-300/80 rounded-lg bg-white outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors"
+              />
+              <span className="text-[11px] text-amber-800/80">
+                This note will be shown on the customer cart screen to inform guests when ordering resumes.
+              </span>
+            </div>
+          </div>
+        )}
+
+        <AdminButton type="submit" loading={maintenanceSaving} className="w-full">
+          Save Maintenance Settings
         </AdminButton>
       </form>
 

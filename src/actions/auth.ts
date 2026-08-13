@@ -44,6 +44,9 @@ export async function saveRestaurantBranding(data: {
   callStaffEnabled?: boolean;
   stampsRequired?: number;
   discountPercentage?: number;
+  maintenanceModeEnabled?: boolean;
+  maintenanceMessage?: string;
+  maintenanceEstimatedRestore?: string;
   whatsappNumber?: string;
   phone?: string;
 }) {
@@ -59,6 +62,7 @@ export async function saveRestaurantBranding(data: {
     
     revalidatePath(`/admin/settings`);
     revalidatePath(`/menu/${admin.restaurantId}`);
+    revalidatePath(`/cart`);
     revalidateTag(`menu-${admin.restaurantId}`, 'max');
     return JSON.parse(JSON.stringify(updated));
   } catch (error) {
@@ -84,6 +88,28 @@ export async function getRestaurantDetails() {
     console.error('Error fetching restaurant details:', error);
     const message = error instanceof Error ? error.message : 'Failed to retrieve settings details';
     throw new Error(message);
+  }
+}
+
+/**
+ * Public Server Action to retrieve restaurant maintenance & public configuration settings.
+ */
+export async function getPublicRestaurantSettings(restaurantId: string) {
+  try {
+    if (!restaurantId) return null;
+    const cleanId = restaurantId.toLowerCase().trim();
+    const admin = await getAdminByRestaurantId(cleanId);
+    if (!admin) return null;
+    return {
+      restaurantName: admin.restaurantName,
+      logoUrl: admin.logoUrl || '',
+      maintenanceModeEnabled: !!admin.maintenanceModeEnabled,
+      maintenanceMessage: admin.maintenanceMessage || 'Kitchen is currently under maintenance. Ordering will resume shortly.',
+      maintenanceEstimatedRestore: admin.maintenanceEstimatedRestore || '',
+    };
+  } catch (error) {
+    console.error('Error fetching public restaurant settings:', error);
+    return null;
   }
 }
 

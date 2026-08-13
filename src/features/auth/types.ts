@@ -14,6 +14,9 @@ export interface IAdmin {
   callStaffEnabled?: boolean;
   stampsRequired?: number;
   discountPercentage?: number;
+  maintenanceModeEnabled?: boolean;
+  maintenanceMessage?: string;
+  maintenanceEstimatedRestore?: string;
   createdAt?: string;
   updatedAt?: string;
   active?: boolean;

@@ -19,6 +19,15 @@ const PRESET_DELAY_REASONS = [
   'Other / Custom Note',
 ];
 
+const PRESET_REJECTION_REASONS = [
+  'Item Out of Stock / Unavailable',
+  'Kitchen Rush & Capacity Full',
+  'Special Request Unfulfillable',
+  'Restaurant Closing Soon',
+  'Invalid / Incorrect Contact Info',
+  'Other Reason (Write below)',
+];
+
 function getStatusVariant(status: Order['status']) {
   switch (status) {
     case 'received': return 'info' as const;
@@ -55,6 +64,12 @@ function OrdersContent() {
   } | null>(null);
   const [selectedDelayReason, setSelectedDelayReason] = useState(PRESET_DELAY_REASONS[0]);
   const [customDelayReason, setCustomDelayReason] = useState('');
+
+  // Order Rejection Audit Modal states
+  const [rejectionModalOpen, setRejectionModalOpen] = useState(false);
+  const [pendingRejectionOrder, setPendingRejectionOrder] = useState<Order | null>(null);
+  const [selectedRejectionReason, setSelectedRejectionReason] = useState(PRESET_REJECTION_REASONS[0]);
+  const [customRejectionReason, setCustomRejectionReason] = useState('');
 
   const handleOrderSelect = useCallback((order: Order) => {
     setSelectedOrder(order);
@@ -178,7 +193,7 @@ function OrdersContent() {
     return () => clearInterval(interval);
   }, []);
 
-  // Execution helper for status updates with delay metadata
+  // Execution helper for status updates with delay metadata and rejection reason
   const executeStatusUpdate = async (
     orderId: string,
     nextStatus: Order['status'],
@@ -187,16 +202,19 @@ function OrdersContent() {
       delayMinutes?: number;
       isDelayed?: boolean;
       delayReason?: string;
-    }
+    },
+    rejectionReason?: string
   ) => {
     setActionLoading((prev) => ({ ...prev, [orderId]: true }));
     try {
-      const updated = await updateOrderStatus(orderId, nextStatus, delayData);
+      const updated = await updateOrderStatus(orderId, nextStatus, delayData, rejectionReason);
       setOrders((prev) => prev.map((o) => (o._id === orderId ? updated : o)));
       setSelectedOrder(updated);
       acknowledgeOrder(orderId);
       setDelayModalOpen(false);
       setPendingDelayOrder(null);
+      setRejectionModalOpen(false);
+      setPendingRejectionOrder(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update order status';
       alert(message);
@@ -205,10 +223,19 @@ function OrdersContent() {
     }
   };
 
-  // Smart status change interceptor that checks for delays
+  // Smart status change interceptor that checks for delays & cancellation reasons
   const handleStatusChange = async (orderId: string, nextStatus: Order['status']) => {
     const targetOrder = orders.find((o) => o._id === orderId) || selectedOrder;
     if (!targetOrder) return;
+
+    // Check if rejecting / cancelling order
+    if (nextStatus === 'cancelled') {
+      setPendingRejectionOrder(targetOrder);
+      setSelectedRejectionReason(PRESET_REJECTION_REASONS[0]);
+      setCustomRejectionReason('');
+      setRejectionModalOpen(true);
+      return;
+    }
 
     // Check if moving to 'completed' or 'ready' and has estimatedTime set
     if (['ready', 'completed'].includes(nextStatus) && targetOrder.estimatedTime && targetOrder.estimatedTime > 0) {
@@ -241,6 +268,16 @@ function OrdersContent() {
 
     // Default status change
     executeStatusUpdate(orderId, nextStatus);
+  };
+
+  const handleConfirmRejection = () => {
+    if (!pendingRejectionOrder) return;
+    const isCustom = selectedRejectionReason.includes('Other');
+    const finalReason = isCustom
+      ? (customRejectionReason.trim() || 'Unspecified Rejection Reason')
+      : (selectedRejectionReason + (customRejectionReason.trim() ? `: ${customRejectionReason.trim()}` : ''));
+
+    executeStatusUpdate(pendingRejectionOrder._id, 'cancelled', undefined, finalReason);
   };
 
   const handleConfirmDelayAndComplete = () => {
@@ -468,16 +505,54 @@ function OrdersContent() {
                   </div>
                 )}
 
-                {/* Customer */}
+                {/* Rejection Audit Warning Badge in Detail View */}
+                {selectedOrder.status === 'cancelled' && (
+                  <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black uppercase tracking-wider text-red-700 flex items-center gap-1.5">
+                        <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
+                        Order Rejected / Cancelled
+                      </span>
+                      {selectedOrder.rejectedAt && (
+                        <span className="text-[10px] bg-red-100 text-red-800 font-extrabold px-2.5 py-0.5 rounded-full">
+                          {new Date(selectedOrder.rejectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-red-900 font-semibold bg-white/70 border border-red-200/60 p-2.5 rounded-xl">
+                      <span className="font-extrabold uppercase text-[9px] text-red-700 block mb-0.5">Internal Audit Rejection Reason:</span>
+                      <p className="italic font-bold">"{selectedOrder.rejectionReason || 'No specific reason logged'}"</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Customer, Order Type & Payment Method */}
                 <div>
-                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] mb-2">Customer</h3>
-                  <p className="text-sm font-medium text-[#111827]">{selectedOrder.customerName}</p>
-                  <p className="text-sm text-[#6B7280]">{selectedOrder.customerPhone}</p>
-                  {selectedOrder.tableId && (
-                    <span className="inline-flex mt-1.5 text-xs font-medium bg-[#FFFBEB] text-[#D97706] px-2 py-0.5 rounded border border-[#D97706]/20">
-                      Table {selectedOrder.tableId}
+                  <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6B7280] mb-2">Customer & Order Details</h3>
+                  <p className="text-sm font-black text-[#111827]">{selectedOrder.customerName}</p>
+                  <p className="text-xs font-semibold text-[#6B7280]">{selectedOrder.customerPhone}</p>
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <span className={`text-xs font-extrabold px-3 py-1 rounded-full border ${
+                      selectedOrder.orderType === 'dine_in' || (selectedOrder.tableId && !selectedOrder.tableId.toLowerCase().includes('takeaway'))
+                        ? 'bg-blue-100 text-blue-800 border-blue-200'
+                        : selectedOrder.orderType === 'delivery'
+                        ? 'bg-purple-100 text-purple-800 border-purple-200'
+                        : 'bg-amber-100 text-amber-800 border-amber-200'
+                    }`}>
+                      {selectedOrder.orderType === 'dine_in' || (selectedOrder.tableId && !selectedOrder.tableId.toLowerCase().includes('takeaway'))
+                        ? `🍽️ Dine In ${selectedOrder.tableId ? `(Table ${selectedOrder.tableId})` : '(At table)'}`
+                        : selectedOrder.orderType === 'delivery'
+                        ? '🛵 Delivery (Home delivery)'
+                        : '🥡 Takeaway (Self pickup)'}
                     </span>
-                  )}
+                    <span className={`text-xs font-extrabold px-3 py-1 rounded-full border ${
+                      selectedOrder.paymentMode === 'online'
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                        : 'bg-green-100 text-green-800 border-green-200'
+                    }`}>
+                      {selectedOrder.paymentMode === 'online' ? '💳 Online Payment' : '💵 Cash'}
+                    </span>
+                  </div>
                   {selectedOrder.notes && (
                     <div className="mt-3 p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-[#C0181A]">
                       <span className="font-extrabold uppercase tracking-wide block mb-1">Note to Chef:</span>
@@ -724,6 +799,86 @@ function OrdersContent() {
           </div>
         </div>
       )}
+      {/* Order Rejection Audit Modal */}
+      {rejectionModalOpen && pendingRejectionOrder && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2 text-red-600">
+                <ShieldAlert className="w-5 h-5" />
+                <h3 className="font-extrabold text-base text-gray-900">
+                  Reject Order #{pendingRejectionOrder._id.slice(-6).toUpperCase()}
+                </h3>
+              </div>
+              <button
+                onClick={() => setRejectionModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-red-50 border border-red-100 rounded-2xl p-3.5 text-xs text-red-900 font-semibold">
+              🔒 <strong>Internal Rejection Audit:</strong> Select reason why this order is rejected. Saved internally for management analysis.
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-black uppercase text-gray-400 tracking-wider">Select Rejection Reason *</label>
+              <div className="flex flex-col gap-1.5">
+                {PRESET_REJECTION_REASONS.map((reason) => {
+                  const isSelected = selectedRejectionReason === reason;
+                  return (
+                    <button
+                      key={reason}
+                      type="button"
+                      onClick={() => setSelectedRejectionReason(reason)}
+                      className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-between cursor-pointer ${
+                        isSelected
+                          ? 'bg-red-600 text-white border-red-600 shadow-sm'
+                          : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                      }`}
+                    >
+                      <span>{reason}</span>
+                      {isSelected && <CheckCircle2 className="w-4 h-4 text-white shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {selectedRejectionReason.includes('Other') && (
+              <div className="flex flex-col gap-1.5 animate-in fade-in duration-150">
+                <label className="text-xs font-black uppercase text-gray-400 tracking-wider">Specify Internal Reason *</label>
+                <textarea
+                  rows={2}
+                  value={customRejectionReason}
+                  onChange={(e) => setCustomRejectionReason(e.target.value)}
+                  placeholder="e.g. Out of gas / Chef unavailable..."
+                  className="w-full bg-gray-50 border border-gray-300 rounded-xl p-3 text-xs font-medium focus:border-red-600 outline-none"
+                />
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setRejectionModalOpen(false)}
+                className="px-4 py-2.5 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={actionLoading[pendingRejectionOrder._id]}
+                onClick={handleConfirmRejection}
+                className="px-5 py-2.5 text-xs font-black bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                {actionLoading[pendingRejectionOrder._id] ? 'Rejecting...' : 'Confirm Rejection'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -752,6 +907,10 @@ const OrderListItem = React.memo(function OrderListItem({ order, isSelected, onC
   const itemNames = order.items.map((i) => i.name).join(', ');
   const dateStr = new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+  const isDineIn = order.orderType === 'dine_in' || (order.tableId && !order.tableId.toLowerCase().includes('takeaway'));
+  const isDelivery = order.orderType === 'delivery';
+  const isOnlinePay = order.paymentMode === 'online';
+
   return (
     <div
       onClick={() => onClick(order)}
@@ -764,16 +923,40 @@ const OrderListItem = React.memo(function OrderListItem({ order, isSelected, onC
         <span className="text-[11px] text-[#6B7280]">{dateStr}</span>
       </div>
       <div className="flex justify-between items-center text-sm">
-        <span className="text-[#111827]">{order.customerName} {order.tableId ? `· Table ${order.tableId}` : ''}</span>
-        <span className="font-semibold text-[#111827]">₹{order.total}</span>
+        <span className="text-[#111827] font-semibold">
+          {order.customerName}
+        </span>
+        <span className="font-extrabold text-[#111827]">₹{order.total}</span>
       </div>
       <div className="text-[12px] text-[#6B7280] truncate">{itemNames}</div>
-      <div className="mt-1 flex items-center gap-2 flex-wrap">
+      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
         <StatusBadge label={order.status} variant={getStatusVariant(order.status)} />
+        <span className={`inline-flex items-center text-[10px] font-black px-2 py-0.5 rounded-full border ${
+          isDineIn
+            ? 'bg-blue-50 text-blue-800 border-blue-200'
+            : isDelivery
+            ? 'bg-purple-50 text-purple-800 border-purple-200'
+            : 'bg-amber-50 text-amber-800 border-amber-200'
+        }`}>
+          {isDineIn ? `🍽️ Table ${order.tableId || 'Dine In'}` : isDelivery ? '🛵 Delivery' : '🥡 Takeaway'}
+        </span>
+        <span className={`inline-flex items-center text-[10px] font-black px-2 py-0.5 rounded-full border ${
+          isOnlinePay
+            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+            : 'bg-green-50 text-green-800 border-green-200'
+        }`}>
+          {isOnlinePay ? '💳 Online' : '💵 Cash'}
+        </span>
         {order.isDelayed && (
           <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
             <AlertTriangle className="w-3 h-3 text-red-600" />
             <span>Delayed +{order.delayMinutes}m</span>
+          </span>
+        )}
+        {order.status === 'cancelled' && order.rejectionReason && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+            <ShieldAlert className="w-3 h-3 text-red-600 shrink-0" />
+            <span className="truncate max-w-[180px]">Audit: {order.rejectionReason}</span>
           </span>
         )}
       </div>

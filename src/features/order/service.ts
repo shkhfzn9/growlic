@@ -38,6 +38,11 @@ export async function createOrder(data: {
   validateCreateOrderPayload(data);
   const { restaurantId, customerName, customerPhone, customerOldPhone, tableId, orderType, paymentMode, items, subtotal, total, notes } = data;
 
+  const admin = await getAdminByRestaurantId(restaurantId);
+  if (admin && admin.maintenanceModeEnabled) {
+    throw new Error(admin.maintenanceMessage || 'Kitchen is currently under maintenance. Ordering is temporarily paused.');
+  }
+
   const trimmedPhone = customerPhone.trim();
   const trimmedName = customerName.trim();
   const trimmedOldPhone = customerOldPhone?.trim();
@@ -166,7 +171,8 @@ export async function updateOrderStatus(
     delayMinutes?: number;
     isDelayed?: boolean;
     delayReason?: string;
-  }
+  },
+  rejectionReason?: string
 ): Promise<IOrder> {
   validateOrderId(id);
   const order = await orderRepo.findById(restaurantId, id);
@@ -174,7 +180,7 @@ export async function updateOrderStatus(
     throw new NotFoundError('Unauthorized or order not found');
   }
 
-  const updated = await orderRepo.updateStatus(restaurantId, id, status, delayData);
+  const updated = await orderRepo.updateStatus(restaurantId, id, status, delayData, rejectionReason);
   if (!updated) {
     throw new NotFoundError('Order not found');
   }
@@ -271,5 +277,13 @@ export async function getPendingStaffCalls(restaurantId: string) {
 
 export async function updateStaffCallStatus(callId: string, restaurantId: string, status: 'accepted' | 'rejected') {
   return orderRepo.updateStaffCallStatus(callId, restaurantId, status);
+}
+
+export async function getNotificationAlerts(
+  restaurantId: string,
+  acknowledgedOrderIds: string[] = [],
+  acknowledgedCallIds: string[] = []
+) {
+  return orderRepo.getNotificationAlerts(restaurantId, acknowledgedOrderIds, acknowledgedCallIds);
 }
 

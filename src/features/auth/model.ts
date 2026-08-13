@@ -18,6 +18,9 @@ export interface IAdminDocument extends Document {
   callStaffEnabled?: boolean;
   stampsRequired?: number;
   discountPercentage?: number;
+  maintenanceModeEnabled?: boolean;
+  maintenanceMessage?: string;
+  maintenanceEstimatedRestore?: string;
   expoPushToken?: string | null;
   fcmToken?: string | null;
 }
@@ -41,12 +44,18 @@ const AdminSchema: Schema = new Schema<IAdminDocument>(
     callStaffEnabled: { type: Boolean, default: true },
     stampsRequired: { type: Number, default: 8 },
     discountPercentage: { type: Number, default: 20 },
+    maintenanceModeEnabled: { type: Boolean, default: false },
+    maintenanceMessage: { type: String, default: 'Kitchen is currently under maintenance. Ordering will resume shortly.' },
+    maintenanceEstimatedRestore: { type: String, default: '' },
     expoPushToken: { type: String, default: null },
     fcmToken: { type: String, default: null },
   },
   { timestamps: true }
 );
 
+if (process.env.NODE_ENV !== 'production') {
+  delete (mongoose.models as any).Admin;
+}
 
 const Admin: Model<IAdminDocument> =
   mongoose.models.Admin || mongoose.model<IAdminDocument>('Admin', AdminSchema);

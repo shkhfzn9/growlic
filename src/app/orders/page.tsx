@@ -39,6 +39,7 @@ interface OrderData {
   subtotal: number;
   total: number;
   status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+  rejectionReason?: string;
   createdAt: string;
 }
 
@@ -437,6 +438,13 @@ function OrdersHistoryContent() {
                             </div>
                           ))}
                         </div>
+
+                        {order.status === 'cancelled' && order.rejectionReason && (
+                          <div className="mt-1 p-2.5 bg-red-50/70 border border-red-100 rounded-xl text-xs text-red-800">
+                            <span className="font-extrabold uppercase text-[9px] block text-red-700 tracking-wider">Reason for Cancellation:</span>
+                            <p className="italic font-semibold">{order.rejectionReason}</p>
+                          </div>
+                        )}
 
                         {/* Total Footer */}
                         <div className="border-t border-neutral-100 pt-3 mt-1 flex justify-between items-center">

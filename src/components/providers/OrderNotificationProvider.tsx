@@ -3,8 +3,8 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
-import { getAdminOrders, updateOrderStatus, updateOrderEstimatedTime, getPendingStaffCallsAction, resolveStaffCallAction } from '@/actions/orders';
-import { BellRing, VolumeX, Volume2, AlertCircle } from 'lucide-react';
+import { getAdminNotificationAlertsAction, updateOrderStatus, updateOrderEstimatedTime, resolveStaffCallAction } from '@/actions/orders';
+import { BellRing, VolumeX, Volume2, AlertCircle, X, CheckCircle2 } from 'lucide-react';
 import { AdminButton } from '../ui';
 import { usePathname, useRouter } from 'next/navigation';
 
@@ -12,6 +12,8 @@ interface Order {
   _id: string;
   restaurantId: string;
   tableId?: string;
+  orderType?: 'dine_in' | 'takeaway' | 'delivery';
+  paymentMode?: 'cash' | 'online';
   customerName?: string;
   customerPhone?: string;
   items: Array<{ name: string; quantity: number }>;
@@ -237,86 +239,67 @@ export default function OrderNotificationProvider({ children }: { children: Reac
     }
 
     const checkIncomingOrdersAndCalls = async () => {
-      const timestamp = Date.now();
-      // Throttle manual trigger checks to at most once per 5 seconds
-      if (!intervalId.current && timestamp - lastCheckedAt.current < 5000) {
-        return;
-      }
-      lastCheckedAt.current = timestamp;
-
       if (typeof document !== 'undefined' && document.hidden) {
         return;
       }
       try {
-        // Fetch received orders and pending staff calls in parallel
-        const [ordersResult, staffCallsResult] = await Promise.all([
-          getAdminOrders(50, 0, 'received'),
-          getPendingStaffCallsAction(auth.restaurantId || ''),
-        ]);
+        // Highly optimized combined count-check & projection fetcher
+        const result = await getAdminNotificationAlertsAction(
+          auth.restaurantId || '',
+          acknowledgedIds,
+          acknowledgedCallIds
+        );
 
-        if (ordersResult?.unauthorized) {
-          if (intervalId.current) {
-            clearInterval(intervalId.current);
-            intervalId.current = null;
-          }
+        if (result?.unauthorized) {
           return;
         }
 
-        const incomingOrders: Order[] = ordersResult?.orders || [];
-        const incomingCalls: any[] = staffCallsResult || [];
-
-        // Filter out orders/calls that have already been acknowledged
-        const unacknowledged = incomingOrders.filter(
-          (order) => order.status === 'received' && !acknowledgedIds.includes(order._id)
-        );
-        const unacknowledgedCalls = incomingCalls.filter(
-          (call) => call.status === 'pending' && !acknowledgedCallIds.includes(call._id)
-        );
-
-        setActiveAlertOrders(unacknowledged);
-        setActiveStaffCalls(unacknowledgedCalls);
-
-        const totalUnacknowledged = unacknowledged.length + unacknowledgedCalls.length;
-
-        // Dynamic polling interval:
-        // - If we have active alerts, poll fast (5s) to keep alerts responsive.
-        // - If there are zero received alerts, clear interval entirely (0 background requests).
-        if (totalUnacknowledged > 0) {
-          if (!intervalId.current) {
-            intervalId.current = setInterval(checkIncomingOrdersAndCalls, 5000);
-          }
-        } else {
-          if (intervalId.current) {
-            clearInterval(intervalId.current);
-            intervalId.current = null;
-          }
+        if (result?.success) {
+          setActiveAlertOrders(result.orders || []);
+          setActiveStaffCalls(result.staffCalls || []);
         }
       } catch (err) {
         console.error('[Alert] Error polling new orders and staff calls:', err);
       }
     };
 
-    // Run first check immediately
+    // Run first check immediately on mount
     checkIncomingOrdersAndCalls();
 
-    // Trigger single check on window focus/click to wake up interval
+    // Polling interval every 5 seconds (active whenever admin is logged in)
+    const pollerInterval = setInterval(checkIncomingOrdersAndCalls, 5000);
+
+    // Setup BroadcastChannel for instant < 10ms real-time triggers across tabs
+    let broadcastChannel: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        broadcastChannel = new BroadcastChannel('growlic_order_channel');
+        broadcastChannel.onmessage = (event) => {
+          if (event.data?.type === 'NEW_ORDER_PLACED') {
+            checkIncomingOrdersAndCalls();
+          }
+        };
+      } catch (e) {
+        console.error('[Alert] BroadcastChannel init error:', e);
+      }
+    }
+
+    // Trigger check on window focus
     const handleActivity = () => {
       checkIncomingOrdersAndCalls();
     };
 
     if (typeof window !== 'undefined') {
       window.addEventListener('focus', handleActivity);
-      window.addEventListener('click', handleActivity);
     }
 
     return () => {
-      if (intervalId.current) {
-        clearInterval(intervalId.current);
-        intervalId.current = null;
+      clearInterval(pollerInterval);
+      if (broadcastChannel) {
+        broadcastChannel.close();
       }
       if (typeof window !== 'undefined') {
         window.removeEventListener('focus', handleActivity);
-        window.removeEventListener('click', handleActivity);
       }
     };
   }, [auth.isLoggedIn, auth.restaurantId, acknowledgedIds, acknowledgedCallIds, isAdminRoute]);
@@ -355,18 +338,85 @@ export default function OrderNotificationProvider({ children }: { children: Reac
     }
   };
 
-  const handleReject = async (orderId: string) => {
-    if (confirm('Are you sure you want to reject this order?')) {
-      setActionLoading((prev) => ({ ...prev, [orderId]: true }));
-      try {
-        await updateOrderStatus(orderId, 'cancelled');
-        acknowledgeOrder(orderId);
-      } catch (err) {
-        console.error('Failed to reject order:', err);
-        alert('Failed to reject order');
-      } finally {
-        setActionLoading((prev) => ({ ...prev, [orderId]: false }));
-      }
+  const PRESET_REJECTION_REASONS = [
+    'Item Out of Stock / Unavailable',
+    'Kitchen Rush & Capacity Full',
+    'Special Request Unfulfillable',
+    'Restaurant Closing Soon',
+    'Invalid / Incorrect Contact Info',
+    'Other Reason (Write below)',
+  ];
+
+  const [rejectionModalOpen, setRejectionModalOpen] = useState(false);
+  const [rejectingOrder, setRejectingOrder] = useState<Order | null>(null);
+  const [selectedRejectionReason, setSelectedRejectionReason] = useState(PRESET_REJECTION_REASONS[0]);
+  const [customRejectionReason, setCustomRejectionReason] = useState('');
+
+  const formatOrderTypeInfo = (order: Order) => {
+    const isDineIn = order.orderType === 'dine_in' || (order.tableId && !order.tableId.toLowerCase().includes('takeaway'));
+    const isDelivery = order.orderType === 'delivery';
+
+    if (isDineIn) {
+      return {
+        title: '🍽️ Dine In',
+        label: order.tableId ? `🍽️ Dine In (Table ${order.tableId})` : '🍽️ Dine In (At table)',
+        badgeBg: 'bg-blue-100 text-blue-800 border-blue-200',
+      };
+    } else if (isDelivery) {
+      return {
+        title: '🛵 Delivery',
+        label: '🛵 Delivery (Home delivery)',
+        badgeBg: 'bg-purple-100 text-purple-800 border-purple-200',
+      };
+    } else {
+      return {
+        title: '🥡 Takeaway',
+        label: '🥡 Takeaway (Self pickup)',
+        badgeBg: 'bg-amber-100 text-amber-800 border-amber-200',
+      };
+    }
+  };
+
+  const formatPaymentModeInfo = (paymentMode?: string) => {
+    if (paymentMode === 'online') {
+      return {
+        label: '💳 Online Payment',
+        badgeBg: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      };
+    } else {
+      return {
+        label: '💵 Cash',
+        badgeBg: 'bg-green-100 text-green-800 border-green-200',
+      };
+    }
+  };
+
+  const handleRejectClick = (order: Order) => {
+    setRejectingOrder(order);
+    setSelectedRejectionReason(PRESET_REJECTION_REASONS[0]);
+    setCustomRejectionReason('');
+    setRejectionModalOpen(true);
+  };
+
+  const handleConfirmRejection = async () => {
+    if (!rejectingOrder) return;
+    const isOther = selectedRejectionReason.includes('Other');
+    const finalReason = isOther
+      ? (customRejectionReason.trim() || 'Unspecified Rejection Reason')
+      : (selectedRejectionReason + (customRejectionReason.trim() ? `: ${customRejectionReason.trim()}` : ''));
+
+    const orderId = rejectingOrder._id;
+    setActionLoading((prev) => ({ ...prev, [orderId]: true }));
+    try {
+      await updateOrderStatus(orderId, 'cancelled', undefined, finalReason);
+      acknowledgeOrder(orderId);
+      setRejectionModalOpen(false);
+      setRejectingOrder(null);
+    } catch (err) {
+      console.error('Failed to reject order:', err);
+      alert('Failed to reject order');
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [orderId]: false }));
     }
   };
 
@@ -424,7 +474,7 @@ export default function OrderNotificationProvider({ children }: { children: Reac
               </h3>
               <p className="text-xs text-[#374151] mt-1 font-medium">
                 {activeAlertOrders.length === 1
-                  ? `New order from Table ${activeAlertOrders[0].tableId || 'Takeaway'} - Total: ₹${activeAlertOrders[0].total}`
+                  ? `New order: ${formatOrderTypeInfo(activeAlertOrders[0]).title} - Total: ₹${activeAlertOrders[0].total}`
                   : `You have ${activeAlertOrders.length} unacknowledged new orders.`}
               </p>
 
@@ -433,14 +483,26 @@ export default function OrderNotificationProvider({ children }: { children: Reac
                 {activeAlertOrders.map((order) => {
                   const itemsSummary = order.items.map((i) => `${i.name} (${i.quantity}x)`).join(', ');
                   const isLoading = actionLoading[order._id];
+                  const typeInfo = formatOrderTypeInfo(order);
+                  const payInfo = formatPaymentModeInfo(order.paymentMode);
                   return (
-                    <div key={order._id} className="bg-white border border-[#C0181A]/20 rounded-lg p-3 flex flex-col justify-between gap-3 shadow-sm">
+                    <div key={order._id} className="bg-white border border-[#C0181A]/20 rounded-xl p-3 flex flex-col justify-between gap-3 shadow-sm">
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between border-b border-gray-100 pb-1.5 mb-1.5">
-                          <span className="text-xs font-bold text-[#111827]">
-                            Table {order.tableId || 'Takeaway'} ({order.customerName || 'Guest'})
-                          </span>
-                          <span className="text-xs font-black text-[#C0181A]">₹{order.total}</span>
+                        <div className="flex items-center justify-between border-b border-gray-100 pb-2 mb-2 flex-wrap gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${typeInfo.badgeBg}`}>
+                              {typeInfo.label}
+                            </span>
+                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${payInfo.badgeBg}`}>
+                              {payInfo.label}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-[#111827]">
+                              ({order.customerName || 'Guest'})
+                            </span>
+                            <span className="text-xs font-black text-[#C0181A]">₹{order.total}</span>
+                          </div>
                         </div>
                         <span className="text-[11px] text-[#4B5563] block font-medium mb-1.5" title={itemsSummary}>
                           {itemsSummary}
@@ -467,14 +529,14 @@ export default function OrderNotificationProvider({ children }: { children: Reac
                         <button
                           disabled={isLoading}
                           onClick={() => handleAccept(order._id)}
-                          className="px-3 py-1 text-[10px] font-bold bg-green-600 hover:bg-green-700 text-white rounded disabled:opacity-50 transition-all flex-1 sm:flex-none"
+                          className="px-3 py-1 text-[10px] font-bold bg-green-600 hover:bg-green-700 text-white rounded disabled:opacity-50 transition-all flex-1 sm:flex-none cursor-pointer"
                         >
                           {isLoading ? '...' : 'Accept'}
                         </button>
                         <button
                           disabled={isLoading}
-                          onClick={() => handleReject(order._id)}
-                          className="px-3 py-1 text-[10px] font-bold bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50 transition-all flex-1 sm:flex-none"
+                          onClick={() => handleRejectClick(order)}
+                          className="px-3 py-1 text-[10px] font-bold bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50 transition-all flex-1 sm:flex-none cursor-pointer"
                         >
                           {isLoading ? '...' : 'Reject'}
                         </button>
@@ -570,6 +632,91 @@ export default function OrderNotificationProvider({ children }: { children: Reac
                   );
                 })}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Order Rejection Audit Modal */}
+      {mounted && rejectionModalOpen && rejectingOrder && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2 text-red-600">
+                <AlertCircle className="w-5 h-5" />
+                <h3 className="font-extrabold text-base text-gray-900">
+                  Reject Order #{rejectingOrder._id.slice(-4)}
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setRejectionModalOpen(false);
+                  setRejectingOrder(null);
+                }}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-red-50 border border-red-100 rounded-2xl p-3.5 text-xs text-red-900 font-semibold">
+              🔒 <strong>Internal Audit:</strong> Select the reason for rejecting this order. Saved for internal management reporting.
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-black uppercase text-gray-400 tracking-wider">Select Rejection Reason</label>
+              {PRESET_REJECTION_REASONS.map((reason) => {
+                const isSelected = selectedRejectionReason === reason;
+                return (
+                  <button
+                    key={reason}
+                    type="button"
+                    onClick={() => setSelectedRejectionReason(reason)}
+                    className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-between cursor-pointer ${
+                      isSelected
+                        ? 'bg-red-600 text-white border-red-600 shadow-sm'
+                        : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span>{reason}</span>
+                    {isSelected && <CheckCircle2 className="w-4 h-4 text-white shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+
+            {selectedRejectionReason.includes('Other') && (
+              <div className="flex flex-col gap-1.5 animate-in fade-in duration-150">
+                <label className="text-xs font-black uppercase text-gray-400 tracking-wider">Specify Internal Reason</label>
+                <textarea
+                  rows={2}
+                  value={customRejectionReason}
+                  onChange={(e) => setCustomRejectionReason(e.target.value)}
+                  placeholder="e.g. Out of propane gas / Kitchen power outage..."
+                  className="w-full bg-gray-50 border border-gray-300 rounded-xl p-3 text-xs font-medium focus:border-red-600 outline-none"
+                />
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setRejectionModalOpen(false);
+                  setRejectingOrder(null);
+                }}
+                className="px-4 py-2.5 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={actionLoading[rejectingOrder._id]}
+                onClick={handleConfirmRejection}
+                className="px-5 py-2.5 text-xs font-black bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                {actionLoading[rejectingOrder._id] ? 'Rejecting...' : 'Confirm Rejection'}
+              </button>
             </div>
           </div>
         </div>

@@ -28,6 +28,8 @@ export interface IOrderDocument extends Document {
   delayMinutes?: number;
   isDelayed?: boolean;
   delayReason?: string;
+  rejectionReason?: string;
+  rejectedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -66,6 +68,8 @@ const OrderSchema: Schema = new Schema<IOrderDocument>(
     delayMinutes: { type: Number, default: 0 },
     isDelayed: { type: Boolean, default: false, index: true },
     delayReason: { type: String, default: '' },
+    rejectionReason: { type: String, default: '' },
+    rejectedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

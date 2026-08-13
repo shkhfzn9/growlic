@@ -145,7 +145,8 @@ export async function updateOrderStatus(
     delayMinutes?: number;
     isDelayed?: boolean;
     delayReason?: string;
-  }
+  },
+  rejectionReason?: string
 ) {
   try {
     const admin = await checkAdminAuth();
@@ -155,7 +156,7 @@ export async function updateOrderStatus(
     }
 
     const existing = await orderService.getOrderById(id, admin.restaurantId);
-    const order = await orderService.updateOrderStatus(id, admin.restaurantId, status, delayData);
+    const order = await orderService.updateOrderStatus(id, admin.restaurantId, status, delayData, rejectionReason);
 
     // Audit log order status change
     await logAction(admin.restaurantId, admin.userId, 'ORDER_STATUS_CHANGED', existing, order);
@@ -405,6 +406,43 @@ export async function resolveStaffCallAction(callId: string, status: 'accepted' 
   } catch (error) {
     console.error('Error resolving staff call:', error);
     throw new Error(error instanceof Error ? error.message : 'Failed to resolve staff call');
+  }
+}
+
+/**
+ * Highly optimized notification polling Server Action:
+ * 1. Count-check: runs fast Order.countDocuments() and StaffCall.countDocuments() first.
+ *    If count === 0, returns immediately without running full find queries or document mapping.
+ * 2. Field Projection: Projects ONLY necessary alert card fields (.select(...)).
+ */
+export async function getAdminNotificationAlertsAction(
+  restaurantId: string,
+  acknowledgedOrderIds: string[] = [],
+  acknowledgedCallIds: string[] = []
+) {
+  try {
+    const admin = await checkAdminAuth();
+    if (admin.restaurantId.toLowerCase() !== restaurantId.toLowerCase()) {
+      return { unauthorized: true, orders: [], staffCalls: [] };
+    }
+
+    const result = await orderService.getNotificationAlerts(
+      restaurantId,
+      acknowledgedOrderIds,
+      acknowledgedCallIds
+    );
+
+    return {
+      success: true,
+      orders: JSON.parse(JSON.stringify(result.orders)),
+      staffCalls: JSON.parse(JSON.stringify(result.staffCalls)),
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('Unauthorized')) {
+      return { unauthorized: true, orders: [], staffCalls: [] };
+    }
+    console.error('Error getting admin notification alerts:', error);
+    return { success: false, orders: [], staffCalls: [] };
   }
 }
 

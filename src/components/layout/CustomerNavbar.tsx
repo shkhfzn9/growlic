@@ -113,7 +113,7 @@ export default function CustomerNavbar({ restaurantId, menuContext }: CustomerNa
 
         {/* Cart Link */}
         <Link
-          href="/cart"
+          href={`/cart${currentRestaurantId ? `?restaurantId=${currentRestaurantId}` : ''}`}
           className={`flex flex-col items-center gap-0.5 transition-all duration-200 active:scale-95 relative ${
             isCartActive ? 'text-[#F5C518]' : 'text-white/60 hover:text-white'
           }`}

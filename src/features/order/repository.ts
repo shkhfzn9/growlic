@@ -40,6 +40,8 @@ export function normalizeOrder(doc: any): IOrder {
     delayMinutes: plain.delayMinutes ?? 0,
     isDelayed: !!plain.isDelayed,
     delayReason: plain.delayReason || '',
+    rejectionReason: plain.rejectionReason || '',
+    rejectedAt: plain.rejectedAt ? new Date(plain.rejectedAt).toISOString() : '',
     createdAt: plain.createdAt ? new Date(plain.createdAt).toISOString() : '',
     updatedAt: plain.updatedAt ? new Date(plain.updatedAt).toISOString() : '',
   };
@@ -70,23 +72,11 @@ export async function create(data: {
   }>;
   subtotal: number;
   total: number;
-  status?: IOrder['status'];
+  status: IOrder['status'];
   notes?: string;
 }): Promise<IOrder> {
   await dbConnect();
-  const doc = await Order.create({
-    restaurantId: data.restaurantId,
-    customerName: data.customerName,
-    customerPhone: data.customerPhone,
-    tableId: data.tableId || undefined,
-    orderType: data.orderType || 'takeaway',
-    paymentMode: data.paymentMode || 'cash',
-    items: data.items,
-    subtotal: data.subtotal,
-    total: data.total,
-    status: data.status || 'received',
-    notes: data.notes || '',
-  });
+  const doc = await Order.create(data);
   return normalizeOrder(doc);
 }
 
@@ -107,20 +97,17 @@ export async function findRecentCompleted(restaurantId: string, limitCount = 100
 }
 
 /**
- * Retrieves a single order by its database identifier ID within a specific restaurant scope.
+ * Retrieves a single order by database ID within a specific restaurant scope.
  * 
- * @param restaurantId Scope parameter enforcing multi-tenant isolation.
- * @param id The order ID string.
- * @returns The normalized IOrder record if found, or null otherwise.
+ * @param restaurantId Optional scope enforcing multi-tenant isolation.
+ * @param id Database string ID.
+ * @returns The normalized order or null if not found.
  */
-export async function findById(restaurantId: string | undefined, id: string): Promise<IOrder | null> {
+export async function findById(restaurantId?: string, id?: string): Promise<IOrder | null> {
   await dbConnect();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const query: any = { _id: id };
-  if (restaurantId) {
-    query.restaurantId = restaurantId.toLowerCase();
-  } else {
-    query.restaurantId = { $exists: true };
-  }
+  if (restaurantId) query.restaurantId = restaurantId;
   const doc = await Order.findOne(query);
   return doc ? normalizeOrder(doc) : null;
 }
@@ -181,7 +168,8 @@ export async function updateStatus(
     delayMinutes?: number;
     isDelayed?: boolean;
     delayReason?: string;
-  }
+  },
+  rejectionReason?: string
 ): Promise<IOrder | null> {
   await dbConnect();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -191,6 +179,10 @@ export async function updateStatus(
     if (delayData.delayMinutes !== undefined) payload.delayMinutes = delayData.delayMinutes;
     if (delayData.isDelayed !== undefined) payload.isDelayed = delayData.isDelayed;
     if (delayData.delayReason !== undefined) payload.delayReason = delayData.delayReason;
+  }
+  if (rejectionReason !== undefined) {
+    payload.rejectionReason = rejectionReason;
+    payload.rejectedAt = new Date();
   }
 
   const doc = await Order.findOneAndUpdate(
@@ -374,5 +366,64 @@ export async function updateStaffCallStatus(callId: string, restaurantId: string
     { new: true }
   );
   return doc ? normalizeStaffCall(doc) : null;
+}
+
+/**
+ * Highly optimized query for notification polling:
+ * 1. Count-check: runs fast Order.countDocuments() and StaffCall.countDocuments() first.
+ *    If count === 0, returns immediately without running full find queries or document mapping.
+ * 2. Field Projection: Projects ONLY necessary alert card fields (.select(...)).
+ */
+export async function getNotificationAlerts(
+  restaurantId: string,
+  acknowledgedOrderIds: string[] = [],
+  acknowledgedCallIds: string[] = []
+): Promise<{ orders: IOrder[]; staffCalls: any[] }> {
+  await dbConnect();
+  const cleanRestId = restaurantId.toLowerCase().trim();
+
+  // 1. Fast count check first
+  const [receivedOrderCount, pendingCallCount] = await Promise.all([
+    Order.countDocuments({
+      restaurantId: cleanRestId,
+      status: 'received',
+      _id: { $nin: acknowledgedOrderIds },
+    }),
+    StaffCall.countDocuments({
+      restaurantId: cleanRestId,
+      status: 'pending',
+      _id: { $nin: acknowledgedCallIds },
+    }),
+  ]);
+
+  if (receivedOrderCount === 0 && pendingCallCount === 0) {
+    return { orders: [], staffCalls: [] };
+  }
+
+  // 2. Field projection: fetch ONLY fields required by notification cards
+  const [orderDocs, callDocs] = await Promise.all([
+    receivedOrderCount > 0
+      ? Order.find({
+          restaurantId: cleanRestId,
+          status: 'received',
+          _id: { $nin: acknowledgedOrderIds },
+        })
+          .select('_id restaurantId customerName customerPhone tableId orderType paymentMode total items createdAt')
+          .sort({ createdAt: -1 })
+          .limit(20)
+      : Promise.resolve([]),
+    pendingCallCount > 0
+      ? StaffCall.find({
+          restaurantId: cleanRestId,
+          status: 'pending',
+          _id: { $nin: acknowledgedCallIds },
+        }).sort({ createdAt: 1 })
+      : Promise.resolve([]),
+  ]);
+
+  return {
+    orders: orderDocs.map(normalizeOrder),
+    staffCalls: callDocs.map(normalizeStaffCall),
+  };
 }
 

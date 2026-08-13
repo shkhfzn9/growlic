@@ -32,6 +32,9 @@ export function normalizeAdmin(doc: any): IAdmin {
     callStaffEnabled: plain.callStaffEnabled !== false,
     stampsRequired: plain.stampsRequired ?? 8,
     discountPercentage: plain.discountPercentage ?? 20,
+    maintenanceModeEnabled: plain.maintenanceModeEnabled !== undefined ? !!plain.maintenanceModeEnabled : false,
+    maintenanceMessage: plain.maintenanceMessage || 'Kitchen is currently under maintenance. Ordering will resume shortly.',
+    maintenanceEstimatedRestore: plain.maintenanceEstimatedRestore || '',
     expoPushToken: plain.expoPushToken || null,
     fcmToken: plain.fcmToken || null,
   };
@@ -251,26 +254,32 @@ export async function updateBranding(
     callStaffEnabled?: boolean;
     stampsRequired?: number;
     discountPercentage?: number;
+    maintenanceModeEnabled?: boolean;
+    maintenanceMessage?: string;
+    maintenanceEstimatedRestore?: string;
     whatsappNumber?: string;
     phone?: string;
   }
 ): Promise<IAdmin | null> {
   await dbConnect();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updateFields: any = {};
+  if (data.logoUrl !== undefined) updateFields.logoUrl = data.logoUrl;
+  if (data.primaryColor !== undefined) updateFields.primaryColor = data.primaryColor;
+  if (data.welcomeMessage !== undefined) updateFields.welcomeMessage = data.welcomeMessage;
+  if (data.loyaltyEnabled !== undefined) updateFields.loyaltyEnabled = data.loyaltyEnabled;
+  if (data.callStaffEnabled !== undefined) updateFields.callStaffEnabled = data.callStaffEnabled;
+  if (data.stampsRequired !== undefined) updateFields.stampsRequired = data.stampsRequired;
+  if (data.discountPercentage !== undefined) updateFields.discountPercentage = data.discountPercentage;
+  if (data.maintenanceModeEnabled !== undefined) updateFields.maintenanceModeEnabled = data.maintenanceModeEnabled;
+  if (data.maintenanceMessage !== undefined) updateFields.maintenanceMessage = data.maintenanceMessage;
+  if (data.maintenanceEstimatedRestore !== undefined) updateFields.maintenanceEstimatedRestore = data.maintenanceEstimatedRestore;
+  if (data.whatsappNumber !== undefined) updateFields.whatsappNumber = data.whatsappNumber;
+  if (data.phone !== undefined) updateFields.phone = data.phone;
+
   const doc = await Admin.findOneAndUpdate(
     { restaurantId: restaurantId.toLowerCase() },
-    {
-      $set: {
-        logoUrl: data.logoUrl,
-        primaryColor: data.primaryColor,
-        welcomeMessage: data.welcomeMessage,
-        loyaltyEnabled: data.loyaltyEnabled,
-        callStaffEnabled: data.callStaffEnabled,
-        stampsRequired: data.stampsRequired,
-        discountPercentage: data.discountPercentage,
-        whatsappNumber: data.whatsappNumber,
-        phone: data.phone,
-      }
-    },
+    { $set: updateFields },
     { new: true }
   );
   return doc ? normalizeAdmin(doc) : null;

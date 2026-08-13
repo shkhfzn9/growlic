@@ -28,6 +28,7 @@ interface OrderData {
   status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
   estimatedTime?: number;
   notes?: string;
+  rejectionReason?: string;
   createdAt: string;
 }
 
@@ -228,9 +229,20 @@ Please confirm and prepare my order!
 
           {/* Status Banners */}
           {order.status === 'cancelled' && (
-            <div className="bg-primary/10 rounded-xl p-4 text-center flex items-center justify-center gap-2">
-              <XCircle className="w-5 h-5 text-primary" />
-              <span className="font-bold text-sm text-primary uppercase">Order Cancelled</span>
+            <div className="bg-red-50 border border-red-200/80 rounded-xl p-4 text-center flex flex-col items-center justify-center gap-1.5 shadow-xs">
+              <div className="flex items-center justify-center gap-2">
+                <XCircle className="w-5 h-5 text-red-600 shrink-0" />
+                <span className="font-black text-sm text-red-600 uppercase tracking-wide">Order Cancelled</span>
+              </div>
+              {order.rejectionReason ? (
+                <p className="text-xs text-red-800 font-semibold italic mt-0.5 max-w-xs">
+                  Reason: {order.rejectionReason}
+                </p>
+              ) : (
+                <p className="text-[11px] text-red-600/80 font-medium mt-0.5">
+                  This order was cancelled by the restaurant.
+                </p>
+              )}
             </div>
           )}
 

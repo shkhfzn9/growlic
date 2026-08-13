@@ -101,6 +101,15 @@ function CartContent() {
   const [orderType, setOrderType] = useState<'dine_in' | 'takeaway' | 'delivery'>('dine_in');
   const [paymentMode, setPaymentMode] = useState<'cash' | 'online'>('cash');
   const [deliveryWarningToast, setDeliveryWarningToast] = useState(false);
+  const [maintenanceInfo, setMaintenanceInfo] = useState<{
+    enabled: boolean;
+    message: string;
+    restoreTime: string;
+  }>({
+    enabled: false,
+    message: '',
+    restoreTime: '',
+  });
 
   const [discountSettings, setDiscountSettings] = useState<{
     masterEnabled: boolean;
@@ -219,6 +228,15 @@ function CartContent() {
           if (context.admin) {
             setRestaurantName(context.admin.restaurantName || '');
             setWelcomeMessage(context.admin.welcomeMessage || 'Welcome to our restaurant!');
+            if (context.admin.maintenanceModeEnabled) {
+              setMaintenanceInfo({
+                enabled: true,
+                message: context.admin.maintenanceMessage || 'Kitchen is currently under maintenance. Ordering will resume shortly.',
+                restoreTime: context.admin.maintenanceEstimatedRestore || '',
+              });
+            } else {
+              setMaintenanceInfo({ enabled: false, message: '', restoreTime: '' });
+            }
           }
           const config = context.upsellConfig || {};
           setMenuItems(config.menuItems || []);
@@ -783,6 +801,11 @@ function CartContent() {
     e.preventDefault();
     setFormError('');
 
+    if (maintenanceInfo.enabled) {
+      setFormError('Ordering is currently paused due to kitchen maintenance. Please try again later.');
+      return;
+    }
+
     if (!name.trim()) {
       setFormError('Name is required.');
       return;
@@ -832,6 +855,16 @@ function CartContent() {
         setOriginalCachedPhone(phone.trim());
         setIsCachedUser(true);
         setIsEditingDetails(false);
+
+        if ('BroadcastChannel' in window) {
+          try {
+            const bc = new BroadcastChannel('growlic_order_channel');
+            bc.postMessage({ type: 'NEW_ORDER_PLACED', orderId: createdOrder._id });
+            bc.close();
+          } catch (e) {
+            console.error('Error broadcasting order event:', e);
+          }
+        }
       }
 
       dispatch(clearCart());
@@ -1066,6 +1099,28 @@ function CartContent() {
       </header>
 
       <div className="flex-1 max-w-2xl mx-auto w-full px-4 pt-5 pb-28 flex flex-col gap-5">
+        {/* Kitchen Maintenance Alert Banner */}
+        {maintenanceInfo.enabled && (
+          <div className="bg-gradient-to-r from-amber-500/15 via-red-500/10 to-amber-500/15 border-2 border-amber-500/40 rounded-2xl p-5 shadow-sm text-center flex flex-col items-center gap-2">
+            <div className="flex items-center gap-2 text-amber-900 font-black text-sm uppercase tracking-wide">
+              <span className="text-xl">🛠️</span>
+              <span>Kitchen Under Maintenance</span>
+            </div>
+            <p className="text-xs text-amber-950 font-bold max-w-md leading-relaxed">
+              {maintenanceInfo.message || 'Ordering is temporarily paused while our kitchen is refilling supplies.'}
+            </p>
+            {maintenanceInfo.restoreTime && (
+              <div className="inline-flex items-center gap-1.5 bg-amber-500/20 border border-amber-600/30 text-amber-900 font-extrabold text-xs px-3.5 py-1 rounded-full mt-1 shadow-xs">
+                <span>⏰ Expected to Resume:</span>
+                <span className="underline font-black">{maintenanceInfo.restoreTime}</span>
+              </div>
+            )}
+            <p className="text-[11px] text-gray-500 font-medium mt-1">
+              You can browse dishes and view prices as a Digital Menu. Ordering will unlock once kitchen reopens.
+            </p>
+          </div>
+        )}
+
         {/* Cart Items */}
         <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)] overflow-hidden">
           {cart.items.map((item, idx) => (
@@ -1543,11 +1598,19 @@ function CartContent() {
                     onClick={(e) => {
                       handleSubmit(e);
                     }}
-                    disabled={loading}
-                    className="w-full bg-cta text-text-dark font-bold text-sm py-4 rounded-xl uppercase tracking-wide active:scale-[0.97] transition-transform disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
+                    disabled={loading || maintenanceInfo.enabled}
+                    className={`w-full text-text-dark font-bold text-sm py-4 rounded-xl uppercase tracking-wide transition-transform flex items-center justify-center gap-2 shadow-md ${
+                      maintenanceInfo.enabled
+                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed border border-gray-300 shadow-none'
+                        : 'bg-cta hover:bg-[#e0b410] active:scale-[0.97]'
+                    }`}
                   >
                     {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {loading ? 'Placing Order...' : 'Confirm & Place Order'}
+                    {maintenanceInfo.enabled
+                      ? '🚫 Ordering Disabled (Under Maintenance)'
+                      : loading
+                      ? 'Placing Order...'
+                      : 'Confirm & Place Order'}
                   </button>
 
                   <button
@@ -1698,11 +1761,19 @@ function CartContent() {
 
                 <button
                   type="submit"
-                  disabled={loading}
-                  className="w-full bg-cta text-text-dark font-bold text-sm py-4 rounded-xl uppercase tracking-wide mt-2 active:scale-[0.97] transition-transform disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
+                  disabled={loading || maintenanceInfo.enabled}
+                  className={`w-full text-text-dark font-bold text-sm py-4 rounded-xl uppercase tracking-wide mt-2 transition-transform flex items-center justify-center gap-2 shadow-md ${
+                    maintenanceInfo.enabled
+                      ? 'bg-gray-200 text-gray-500 cursor-not-allowed border border-gray-300 shadow-none'
+                      : 'bg-cta hover:bg-[#e0b410] active:scale-[0.97]'
+                  }`}
                 >
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {loading ? 'Placing Order...' : 'Confirm & Place Order'}
+                  {maintenanceInfo.enabled
+                    ? '🚫 Ordering Disabled (Under Maintenance)'
+                    : loading
+                    ? 'Placing Order...'
+                    : 'Confirm & Place Order'}
                 </button>
 
                 {isCachedUser && (
