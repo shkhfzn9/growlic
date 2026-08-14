@@ -37,6 +37,8 @@ export function normalizeAdmin(doc: any): IAdmin {
     maintenanceEstimatedRestore: plain.maintenanceEstimatedRestore || '',
     expoPushToken: plain.expoPushToken || null,
     fcmToken: plain.fcmToken || null,
+    expoPushTokens: Array.isArray(plain.expoPushTokens) ? plain.expoPushTokens : (plain.expoPushToken ? [plain.expoPushToken] : []),
+    fcmTokens: Array.isArray(plain.fcmTokens) ? plain.fcmTokens : (plain.fcmToken ? [plain.fcmToken] : []),
   };
 }
 
@@ -294,16 +296,40 @@ export async function updatePushTokens(
   fcmToken: string | null
 ): Promise<IAdmin | null> {
   await dbConnect();
+
+  const updateOps: any = {
+    $set: {
+      expoPushToken: expoPushToken,
+      fcmToken: fcmToken,
+    },
+  };
+
+  const addElements: any = {};
+  if (expoPushToken) addElements.expoPushTokens = expoPushToken;
+  if (fcmToken) addElements.fcmTokens = fcmToken;
+
+  if (Object.keys(addElements).length > 0) {
+    updateOps.$addToSet = addElements;
+  }
+
   const doc = await Admin.findOneAndUpdate(
     { restaurantId: restaurantId.toLowerCase() },
-    {
-      $set: {
-        expoPushToken: expoPushToken,
-        fcmToken: fcmToken,
-      }
-    },
+    updateOps,
     { new: true }
   );
   return doc ? normalizeAdmin(doc) : null;
+}
+
+export async function removeStaleFcmToken(
+  restaurantId: string,
+  staleFcmToken: string
+): Promise<void> {
+  await dbConnect();
+  await Admin.updateOne(
+    { restaurantId: restaurantId.toLowerCase() },
+    {
+      $pull: { fcmTokens: staleFcmToken },
+    }
+  );
 }
 

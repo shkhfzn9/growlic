@@ -1,5 +1,5 @@
 import { fcm } from './firebase-admin';
-import { updatePushTokens } from '@/features/auth/repository';
+import { removeStaleFcmToken } from '@/features/auth/repository';
 
 /** Firebase error codes that mean the token is permanently invalid and must be cleared. */
 const STALE_TOKEN_CODES = new Set([
@@ -9,13 +9,13 @@ const STALE_TOKEN_CODES = new Set([
 ]);
 
 /**
- * Clears a dead FCM token from the database so future pushes are skipped cleanly
+ * Removes a dead FCM token from the database so future pushes skip it cleanly
  * instead of repeatedly failing with NotRegistered errors.
  */
-async function clearStaleToken(restaurantId: string): Promise<void> {
+async function clearStaleToken(restaurantId: string, staleToken: string): Promise<void> {
   try {
-    await updatePushTokens(restaurantId, null, null);
-    console.log(`[FCM-SEND] Stale token cleared for restaurant "${restaurantId}". App must re-login to re-register.`);
+    await removeStaleFcmToken(restaurantId, staleToken);
+    console.log(`[FCM-SEND] Stale token "${staleToken.substring(0, 15)}..." removed for restaurant "${restaurantId}".`);
   } catch (err) {
     console.error('[FCM-SEND] Failed to clear stale token from DB:', err);
   }
@@ -31,92 +31,126 @@ function isStaleTokenError(error: any): boolean {
 
 /**
  * Sends a high-priority FCM v1 notification to kitchen staff for a new customer order.
- * Wakes up the app, sounds the 'alarm' audio channel, and triggers fast polling.
+ * Wakes up all active devices, sounds the 'alarm' audio channel, and triggers fast polling.
  *
- * If FCM responds with NotRegistered, the dead token is automatically removed from the DB.
- *
- * @param fcmToken      The registration token of the target device.
+ * @param fcmTokenInput Single token string or array of tokens registered for the restaurant.
  * @param orderDetails  Order information containing table ID, total amount, and ID.
  * @param restaurantId  The restaurant slug — used to clear stale tokens from DB.
  */
-export async function sendNewOrderPush(fcmToken: string, orderDetails: any, restaurantId?: string) {
-  if (!fcmToken) {
-    console.warn('[FCM-SEND] sendNewOrderPush aborted: Empty FCM token.');
+export async function sendNewOrderPush(
+  fcmTokenInput: string | string[],
+  orderDetails: any,
+  restaurantId?: string
+) {
+  const rawTokens = Array.isArray(fcmTokenInput) ? fcmTokenInput : [fcmTokenInput];
+  const tokens = Array.from(new Set(rawTokens.filter((t): t is string => typeof t === 'string' && t.trim().length > 0)));
+
+  if (tokens.length === 0) {
+    console.warn('[FCM-SEND] sendNewOrderPush aborted: No valid FCM tokens provided.');
     return null;
   }
 
-  const message = {
-    token: fcmToken,
-    android: {
-      priority: 'high' as const,
-      ttl: 0, // Deliver immediately, do not cache stale order alerts
-    },
-    data: {
-      channelId: 'orders',
-      type: 'new_order',
-      orderId: String(orderDetails._id || ''),
-      title: 'New Order Received! 🍽️',
-      body: `Table ${orderDetails.tableId || 'N/A'} placed an order for ₹${orderDetails.total || 0}`,
-    },
-  };
+  const results = await Promise.allSettled(
+    tokens.map(async (token) => {
+      const message = {
+        token,
+        notification: {
+          title: 'New Order Received! 🍽️',
+          body: `Table ${orderDetails.tableId || 'N/A'} placed an order for ₹${orderDetails.total || 0}`,
+        },
+        android: {
+          priority: 'high' as const,
+          ttl: 0, // Deliver immediately, do not cache stale order alerts
+          notification: {
+            channelId: 'orders',
+            sound: 'alarm',
+          },
+        },
+        data: {
+          channelId: 'orders',
+          type: 'new_order',
+          orderId: String(orderDetails._id || ''),
+        },
+      };
 
-  try {
-    const response = await fcm.send(message);
-    console.log('[FCM-SEND] Successfully sent new order push:', response);
-    return response;
-  } catch (error) {
-    if (isStaleTokenError(error)) {
-      console.warn('[FCM-SEND] NotRegistered — token is stale. Clearing from DB.');
-      if (restaurantId) await clearStaleToken(restaurantId);
-      return null; // Silently handled — not a system error
-    }
-    console.error('[FCM-SEND] Error dispatching new order push:', error);
-    throw error;
-  }
+      try {
+        const response = await fcm.send(message);
+        console.log(`[FCM-SEND] Successfully sent new order push to token (${token.substring(0, 15)}...):`, response);
+        return response;
+      } catch (error) {
+        if (isStaleTokenError(error)) {
+          console.warn(`[FCM-SEND] NotRegistered — token (${token.substring(0, 15)}...) is stale. Clearing from DB.`);
+          if (restaurantId) await clearStaleToken(restaurantId, token);
+          return null;
+        }
+        console.error(`[FCM-SEND] Error dispatching new order push to token (${token.substring(0, 15)}...):`, error);
+        throw error;
+      }
+    })
+  );
+
+  return results;
 }
 
 /**
  * Sends a high-priority FCM v1 notification to kitchen staff when a table calls for assistance.
- * Wakes up the app and triggers the 'staff-calls' notification channel.
+ * Wakes up all active devices and triggers the 'staff-calls' notification channel.
  *
- * If FCM responds with NotRegistered, the dead token is automatically removed from the DB.
- *
- * @param fcmToken      The registration token of the target device.
+ * @param fcmTokenInput Single token string or array of tokens registered for the restaurant.
  * @param tableDetails  Table information containing table ID.
  * @param restaurantId  The restaurant slug — used to clear stale tokens from DB.
  */
-export async function sendStaffCallPush(fcmToken: string, tableDetails: any, restaurantId?: string) {
-  if (!fcmToken) {
-    console.warn('[FCM-SEND] sendStaffCallPush aborted: Empty FCM token.');
+export async function sendStaffCallPush(
+  fcmTokenInput: string | string[],
+  tableDetails: any,
+  restaurantId?: string
+) {
+  const rawTokens = Array.isArray(fcmTokenInput) ? fcmTokenInput : [fcmTokenInput];
+  const tokens = Array.from(new Set(rawTokens.filter((t): t is string => typeof t === 'string' && t.trim().length > 0)));
+
+  if (tokens.length === 0) {
+    console.warn('[FCM-SEND] sendStaffCallPush aborted: No valid FCM tokens provided.');
     return null;
   }
 
-  const message = {
-    token: fcmToken,
-    android: {
-      priority: 'high' as const,
-      ttl: 0,
-    },
-    data: {
-      channelId: 'staff-calls',
-      type: 'staff_call',
-      tableId: String(tableDetails.tableId || ''),
-      title: 'Staff Call Requested! 🔔',
-      body: `Table ${tableDetails.tableId || 'N/A'} needs assistance`,
-    },
-  };
+  const results = await Promise.allSettled(
+    tokens.map(async (token) => {
+      const message = {
+        token,
+        notification: {
+          title: 'Staff Call Requested! 🔔',
+          body: `Table ${tableDetails.tableId || 'N/A'} needs assistance`,
+        },
+        android: {
+          priority: 'high' as const,
+          ttl: 0,
+          notification: {
+            channelId: 'staff-calls',
+            sound: 'default',
+          },
+        },
+        data: {
+          channelId: 'staff-calls',
+          type: 'staff_call',
+          tableId: String(tableDetails.tableId || ''),
+        },
+      };
 
-  try {
-    const response = await fcm.send(message);
-    console.log('[FCM-SEND] Successfully sent staff call push:', response);
-    return response;
-  } catch (error) {
-    if (isStaleTokenError(error)) {
-      console.warn('[FCM-SEND] NotRegistered — token is stale. Clearing from DB.');
-      if (restaurantId) await clearStaleToken(restaurantId);
-      return null; // Silently handled — not a system error
-    }
-    console.error('[FCM-SEND] Error dispatching staff call push:', error);
-    throw error;
-  }
+      try {
+        const response = await fcm.send(message);
+        console.log(`[FCM-SEND] Successfully sent staff call push to token (${token.substring(0, 15)}...):`, response);
+        return response;
+      } catch (error) {
+        if (isStaleTokenError(error)) {
+          console.warn(`[FCM-SEND] NotRegistered — token (${token.substring(0, 15)}...) is stale. Clearing from DB.`);
+          if (restaurantId) await clearStaleToken(restaurantId, token);
+          return null;
+        }
+        console.error(`[FCM-SEND] Error dispatching staff call push to token (${token.substring(0, 15)}...):`, error);
+        throw error;
+      }
+    })
+  );
+
+  return results;
 }

@@ -105,11 +105,15 @@ export async function createOrder(data: {
     });
   }
 
-  // Trigger FCM Push Notification asynchronously (non-blocking)
+  // Trigger FCM Push Notification asynchronously (non-blocking) to all registered restaurant devices
   try {
     const admin = await getAdminByRestaurantId(restaurantId);
-    if (admin && admin.fcmToken) {
-      sendNewOrderPush(admin.fcmToken, order, restaurantId).catch((err) => {
+    const targetTokens = (admin?.fcmTokens && admin.fcmTokens.length > 0)
+      ? admin.fcmTokens
+      : (admin?.fcmToken ? [admin.fcmToken] : []);
+
+    if (targetTokens.length > 0) {
+      sendNewOrderPush(targetTokens, order, restaurantId).catch((err) => {
         console.error('[ORDER_SERVICE_PUSH_ERROR] Background FCM dispatch failed:', err);
       });
     }
@@ -256,11 +260,15 @@ export async function getOrdersByCustomerPhone(phone: string, restaurantId?: str
 export async function createStaffCall(restaurantId: string, tableId: string) {
   const result = await orderRepo.createStaffCall(restaurantId, tableId);
 
-  // Trigger FCM Push Notification asynchronously (non-blocking)
+  // Trigger FCM Push Notification asynchronously (non-blocking) to all registered restaurant devices
   try {
     const admin = await getAdminByRestaurantId(restaurantId);
-    if (admin && admin.fcmToken) {
-      sendStaffCallPush(admin.fcmToken, { tableId }, restaurantId).catch((err) => {
+    const targetTokens = (admin?.fcmTokens && admin.fcmTokens.length > 0)
+      ? admin.fcmTokens
+      : (admin?.fcmToken ? [admin.fcmToken] : []);
+
+    if (targetTokens.length > 0) {
+      sendStaffCallPush(targetTokens, { tableId }, restaurantId).catch((err) => {
         console.error('[STAFF_CALL_SERVICE_PUSH_ERROR] Background FCM dispatch failed:', err);
       });
     }

@@ -401,4 +401,9 @@ export async function updatePushTokens(
   return adminRepo.updatePushTokens(restaurantId, expoPushToken, fcmToken);
 }
 
+export async function removeStaleFcmToken(restaurantId: string, staleFcmToken: string) {
+  if (!restaurantId || !staleFcmToken) return;
+  return adminRepo.removeStaleFcmToken(restaurantId, staleFcmToken);
+}
+
 

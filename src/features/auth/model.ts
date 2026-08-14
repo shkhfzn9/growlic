@@ -23,6 +23,8 @@ export interface IAdminDocument extends Document {
   maintenanceEstimatedRestore?: string;
   expoPushToken?: string | null;
   fcmToken?: string | null;
+  expoPushTokens?: string[];
+  fcmTokens?: string[];
 }
 
 const AdminSchema: Schema = new Schema<IAdminDocument>(
@@ -49,6 +51,8 @@ const AdminSchema: Schema = new Schema<IAdminDocument>(
     maintenanceEstimatedRestore: { type: String, default: '' },
     expoPushToken: { type: String, default: null },
     fcmToken: { type: String, default: null },
+    expoPushTokens: { type: [String], default: [] },
+    fcmTokens: { type: [String], default: [] },
   },
   { timestamps: true }
 );

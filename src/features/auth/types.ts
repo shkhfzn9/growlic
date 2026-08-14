@@ -23,6 +23,8 @@ export interface IAdmin {
   location?: string;
   expoPushToken?: string | null;
   fcmToken?: string | null;
+  expoPushTokens?: string[] | null;
+  fcmTokens?: string[] | null;
 }
 
 export interface ISession {
