@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #C0181A;
-  --color-bg-dark: #8B0000;
-  --color-bg-darker: #6B0000;
+  --color-primary: var(--theme-primary, #C0181A);
+  --color-bg-dark: var(--theme-bg-dark, #8B0000);
+  --color-bg-darker: var(--theme-bg-darker, #6B0000);
   --color-surface: #F5F5F5;
-  --color-cta: #F5C518;
+  --color-cta: var(--theme-accent, #F5C518);
   --color-text-dark: #1A1A1A;
   --color-white: #FFFFFF;
 
@@ -24,7 +24,7 @@
   }
 
   body {
-    background: linear-gradient(135deg, #8B0000 0%, #6B0000 100%);
+    background: linear-gradient(135deg, var(--color-bg-dark, #8B0000) 0%, var(--color-bg-darker, #6B0000) 100%);
     color: var(--color-text-dark);
     min-height: 100dvh;
     margin: 0;
@@ -34,7 +34,7 @@
 
 @layer components {
   .growlic-page-bg {
-    background: linear-gradient(135deg, #8B0000 0%, #6B0000 100%);
+    background: linear-gradient(135deg, var(--color-bg-dark, #8B0000) 0%, var(--color-bg-darker, #6B0000) 100%);
     min-height: 100dvh;
     position: relative;
   }

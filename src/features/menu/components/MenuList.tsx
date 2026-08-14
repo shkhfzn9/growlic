@@ -12,6 +12,7 @@ import { CustomerNavbar } from '@/components/layout';
 import { getActiveBanners } from '@/actions/banners';
 import { getDeveloperPromo } from '@/actions/developerPromo';
 import ConsultationModal from '@/components/ui/ConsultationModal';
+import { getActiveTheme, saveActiveTheme } from '@/config/themes';
 
 
 
@@ -175,6 +176,7 @@ export default function MenuList({
   restaurantId,
   table,
   logoUrl,
+  primaryColor,
   welcomeMessage,
   upsellData,
   menuContext,
@@ -556,10 +558,39 @@ export default function MenuList({
     ? [getItemImage(selectedDetailedItem.image, selectedDetailedItem.name), ...(selectedDetailedItem.images || []).map(img => getItemImage(img, selectedDetailedItem!.name))].filter(Boolean)
     : [];
 
+  const adminTheme = menuContext?.admin;
+  const initialTheme = getActiveTheme(restaurantId);
+  const themeGradientDark = adminTheme?.themeGradientDark || initialTheme.themeGradientDark;
+  const themeGradientDarker = adminTheme?.themeGradientDarker || initialTheme.themeGradientDarker;
+  const activePrimaryColor = adminTheme?.primaryColor || primaryColor || initialTheme.primaryColor;
+  const themeAccentColor = adminTheme?.themeAccentColor || initialTheme.themeAccentColor;
+
+  React.useEffect(() => {
+    saveActiveTheme({
+      primaryColor: activePrimaryColor,
+      themeGradientDark,
+      themeGradientDarker,
+      themeAccentColor,
+    }, restaurantId);
+  }, [activePrimaryColor, themeGradientDark, themeGradientDarker, themeAccentColor, restaurantId]);
+
   return (
-    <div className="flex flex-col min-h-screen bg-white pb-32">
+    <div
+      className="flex flex-col min-h-screen bg-white pb-32"
+      style={
+        {
+          '--theme-primary': activePrimaryColor,
+          '--theme-bg-dark': themeGradientDark,
+          '--theme-bg-darker': themeGradientDarker,
+          '--theme-accent': themeAccentColor,
+        } as React.CSSProperties
+      }
+    >
       {/* Hero Header */}
-      <header className="bg-gradient-to-br from-bg-dark to-bg-darker relative overflow-hidden">
+      <header
+        className="relative overflow-hidden transition-all duration-300"
+        style={{ background: `linear-gradient(135deg, ${themeGradientDark} 0%, ${themeGradientDarker} 100%)` }}
+      >
         {/* Wave decoration */}
         <svg
           className="absolute bottom-0 left-0 w-full h-16 opacity-100"
@@ -569,7 +600,7 @@ export default function MenuList({
         >
           <path
             d="M0,60L60,52C120,44,240,28,360,32C480,36,600,60,720,68C840,76,960,68,1080,56C1200,44,1320,28,1380,20L1440,12L1440,120L0,120Z"
-            fill="#C0181A"
+            fill={activePrimaryColor}
             fillOpacity="0.15"
           />
         </svg>
@@ -727,7 +758,10 @@ export default function MenuList({
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-gradient-to-r from-bg-dark via-bg-dark to-primary w-full flex items-stretch">
+                  <div
+                    className="w-full flex items-stretch"
+                    style={{ background: `linear-gradient(135deg, ${themeGradientDark} 0%, ${themeGradientDarker} 60%, ${activePrimaryColor} 100%)` }}
+                  >
                     <div className="w-[60%] sm:w-[65%] p-3.5 sm:p-4 pb-6 flex flex-col justify-between relative z-10">
                       <div>
                         <h2 className="font-black text-sm sm:text-lg text-white leading-tight tracking-tight whitespace-pre-line line-clamp-2">
@@ -745,7 +779,8 @@ export default function MenuList({
                               e.preventDefault();
                             }
                           }}
-                          className="mt-1 bg-cta text-text-dark text-[0.65rem] sm:text-[0.7rem] font-bold uppercase px-3.5 py-1.5 rounded-full w-fit active:scale-95 transition-transform shadow-[0_4px_12px_rgba(245,197,24,0.3)] text-center block shrink-0"
+                          className="mt-1 bg-cta text-text-dark text-[0.65rem] sm:text-[0.7rem] font-bold uppercase px-3.5 py-1.5 rounded-full w-fit active:scale-95 transition-transform shadow-[0_4px_12px_rgba(0,0,0,0.3)] text-center block shrink-0"
+                          style={{ backgroundColor: themeAccentColor }}
                         >
                           {banner.buttonText || 'Order now'}
                         </Link>
@@ -766,7 +801,7 @@ export default function MenuList({
                         preserveAspectRatio="none"
                         fill="none"
                       >
-                        <path d="M24,0 C0,25 0,75 24,100 L0,100 L0,0 Z" fill="#8B0000" />
+                        <path d="M24,0 C0,25 0,75 24,100 L0,100 L0,0 Z" fill={themeGradientDark} />
                       </svg>
                     </div>
                   </div>
@@ -840,8 +875,9 @@ export default function MenuList({
               {/* Connecting Line Track */}
               <div className="absolute left-4 right-4 h-0.5 bg-gray-200 top-1/2 -translate-y-1/2" />
               <div 
-                className="absolute left-4 h-0.5 bg-[#C0181A] top-1/2 -translate-y-1/2 transition-all duration-500"
+                className="absolute left-4 h-0.5 top-1/2 -translate-y-1/2 transition-all duration-500"
                 style={{ 
+                  backgroundColor: activePrimaryColor,
                   width: `${Math.min(100, Math.max(0, ((loyaltyInfo.stampCount - 1) / (loyaltyInfo.stampsRequired - 1)) * 100))}%` 
                 }}
               />
@@ -857,9 +893,10 @@ export default function MenuList({
                     <div
                       className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-[9px] transition-all duration-300 ${
                         isCollected
-                          ? 'bg-[#C0181A] text-white shadow-md scale-110'
+                          ? 'text-white shadow-md scale-110'
                           : 'bg-white border-2 border-gray-200 text-gray-400'
-                      } ${isCurrent ? 'ring-2 ring-[#C0181A]/40' : ''}`}
+                      }`}
+                      style={isCollected ? { backgroundColor: activePrimaryColor } : undefined}
                     >
                       {stampNumber}
                     </div>
@@ -867,10 +904,13 @@ export default function MenuList({
                     {/* Pointer Indicator */}
                     {isCurrent && (
                       <div className="absolute -bottom-4 animate-bounce flex flex-col items-center">
-                        <span className="text-[7px] bg-[#C0181A] text-white px-1.5 py-0.2 rounded font-black uppercase tracking-tighter whitespace-nowrap shadow-sm">
+                        <span 
+                          className="text-[7px] text-white px-1.5 py-0.2 rounded font-black uppercase tracking-tighter whitespace-nowrap shadow-sm"
+                          style={{ backgroundColor: activePrimaryColor }}
+                        >
                           You
                         </span>
-                        <div className="w-1 h-1 bg-[#C0181A] rotate-45 -mt-0.5" />
+                        <div className="w-1 h-1 rotate-45 -mt-0.5" style={{ backgroundColor: activePrimaryColor }} />
                       </div>
                     )}
                   </div>
@@ -932,13 +972,15 @@ export default function MenuList({
                 onRemoveOne={handleRemoveOne}
                 onAddMore={handleAddMore}
                 onOpenModal={openDetailedModal}
+                activePrimaryColor={activePrimaryColor}
               />
             ))}
 
             {showPagination && (
               <button
                 onClick={() => setItemsToShow((prev) => prev + 20)}
-                className="w-full mt-4 bg-white border border-[#C0181A] hover:bg-[#C0181A]/5 text-[#C0181A] font-bold text-xs py-3.5 rounded-xl uppercase tracking-wider transition-colors active:scale-[0.98] shadow-sm flex items-center justify-center gap-1.5"
+                className="w-full mt-4 bg-white font-bold text-xs py-3.5 rounded-xl uppercase tracking-wider transition-colors active:scale-[0.98] shadow-sm flex items-center justify-center gap-1.5 border"
+                style={{ borderColor: activePrimaryColor, color: activePrimaryColor }}
               >
                 Load More Items ({filteredItems.length - itemsToShow} remaining)
               </button>
@@ -969,6 +1011,8 @@ export default function MenuList({
           onRemoveOne={handleRemoveOne}
           onAddMore={handleAddMore}
           pairedData={getPairedItem(selectedDetailedItem)}
+          activePrimaryColor={activePrimaryColor}
+          themeAccentColor={themeAccentColor}
         />
       )}
 
@@ -988,6 +1032,7 @@ interface MenuItemCardProps {
   onRemoveOne: (itemId: string, currentQty: number) => void;
   onAddMore: (itemId: string, currentQty: number) => void;
   onOpenModal: (item: MenuItem) => void;
+  activePrimaryColor?: string;
 }
 
 const MenuItemCard = React.memo(function MenuItemCard({
@@ -996,6 +1041,7 @@ const MenuItemCard = React.memo(function MenuItemCard({
   onRemoveOne,
   onAddMore,
   onOpenModal,
+  activePrimaryColor = '#C0181A',
 }: MenuItemCardProps) {
   const [mounted, setMounted] = useState(false);
 
@@ -1071,22 +1117,23 @@ const MenuItemCard = React.memo(function MenuItemCard({
           ) : !mounted || qty === 0 ? (
             <button
               onClick={() => onAddOne(item)}
-              className="bg-primary text-white text-xs font-bold px-4 py-2 rounded-lg uppercase tracking-wide active:scale-95 transition-transform"
+              className="text-white text-xs font-bold px-4 py-2 rounded-lg uppercase tracking-wide active:scale-95 transition-transform cursor-pointer shadow-xs"
+              style={{ backgroundColor: activePrimaryColor }}
             >
               Add
             </button>
           ) : (
-            <div className="flex items-center gap-0 bg-primary rounded-lg overflow-hidden">
+            <div className="flex items-center gap-0 rounded-lg overflow-hidden" style={{ backgroundColor: activePrimaryColor }}>
               <button
                 onClick={() => onRemoveOne(item._id, qty)}
-                className="text-white px-2.5 py-2 active:bg-bg-dark transition-colors"
+                className="text-white px-2.5 py-2 hover:bg-black/10 transition-colors"
               >
                 <Minus className="w-3.5 h-3.5" />
               </button>
               <span className="text-white font-bold text-sm px-2 min-w-[24px] text-center">{qty}</span>
               <button
                 onClick={() => onAddMore(item._id, qty)}
-                className="text-white px-2.5 py-2 active:bg-bg-dark transition-colors"
+                className="text-white px-2.5 py-2 hover:bg-black/10 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
@@ -1109,7 +1156,9 @@ interface ProductDetailsModalProps {
   onAddOne: (item: MenuItem, originatedFromNudge?: boolean, nudgeType?: any, nudgeRuleId?: string) => void;
   onRemoveOne: (itemId: string, currentQty: number) => void;
   onAddMore: (itemId: string, currentQty: number) => void;
-  pairedData: any;
+  pairedData?: { item: MenuItem; showSocialProof?: boolean } | null;
+  activePrimaryColor?: string;
+  themeAccentColor?: string;
 }
 
 const ProductDetailsModal = React.memo(function ProductDetailsModal({
@@ -1124,6 +1173,8 @@ const ProductDetailsModal = React.memo(function ProductDetailsModal({
   onRemoveOne,
   onAddMore,
   pairedData,
+  activePrimaryColor = '#C0181A',
+  themeAccentColor = '#F5C518',
 }: ProductDetailsModalProps) {
   const qty = useSelector((state: RootState) =>
     state.cart.items.find((i) => i.id === item._id)?.quantity || 0
@@ -1311,12 +1362,13 @@ const ProductDetailsModal = React.memo(function ProductDetailsModal({
                     {pairedQty === 0 ? (
                       <button
                         onClick={() => onAddOne(pairedItem, true, 'cross_sell', pairedItem._id)}
-                        className="bg-primary text-white text-[0.65rem] font-bold px-3 py-1.5 rounded-lg uppercase active:scale-95 transition-transform"
+                        className="text-white text-[0.65rem] font-bold px-3 py-1.5 rounded-lg uppercase active:scale-95 transition-transform"
+                        style={{ backgroundColor: activePrimaryColor }}
                       >
                         + Add
                       </button>
                     ) : (
-                      <div className="flex items-center gap-0 bg-primary rounded-lg overflow-hidden">
+                      <div className="flex items-center gap-0 rounded-lg overflow-hidden" style={{ backgroundColor: activePrimaryColor }}>
                         <button
                           onClick={() => onRemoveOne(pairedItem._id, pairedQty)}
                           className="text-white px-2 py-1.5"
@@ -1350,12 +1402,13 @@ const ProductDetailsModal = React.memo(function ProductDetailsModal({
             {qty === 0 ? (
               <button
                 onClick={() => onAddOne(item)}
-                className="bg-cta text-text-dark font-bold text-sm px-6 py-3 rounded-xl uppercase tracking-wide active:scale-95 transition-transform"
+                className="text-text-dark font-bold text-sm px-6 py-3 rounded-xl uppercase tracking-wide active:scale-95 transition-transform shadow-md"
+                style={{ backgroundColor: themeAccentColor }}
               >
                 Add to Cart
               </button>
             ) : (
-              <div className="flex items-center gap-0 bg-primary rounded-xl overflow-hidden">
+              <div className="flex items-center gap-0 rounded-xl overflow-hidden" style={{ backgroundColor: activePrimaryColor }}>
                 <button
                   onClick={() => onRemoveOne(item._id, qty)}
                   className="text-white px-3.5 py-3"

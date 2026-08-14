@@ -24,6 +24,10 @@ export function normalizeAdmin(doc: any): IAdmin {
     logoUrl: plain.logoUrl || '',
     primaryColor: plain.primaryColor || '#000000',
     welcomeMessage: plain.welcomeMessage || 'Welcome to our restaurant!',
+    themePreset: plain.themePreset || 'burgundy',
+    themeGradientDark: plain.themeGradientDark || '#8B0000',
+    themeGradientDarker: plain.themeGradientDarker || '#6B0000',
+    themeAccentColor: plain.themeAccentColor || '#F5C518',
     createdAt: plain.createdAt ? new Date(plain.createdAt).toISOString() : undefined,
     updatedAt: plain.updatedAt ? new Date(plain.updatedAt).toISOString() : undefined,
     active: plain.active !== undefined ? plain.active : true,
@@ -261,6 +265,10 @@ export async function updateBranding(
     maintenanceEstimatedRestore?: string;
     whatsappNumber?: string;
     phone?: string;
+    themePreset?: string;
+    themeGradientDark?: string;
+    themeGradientDarker?: string;
+    themeAccentColor?: string;
   }
 ): Promise<IAdmin | null> {
   await dbConnect();
@@ -269,6 +277,10 @@ export async function updateBranding(
   if (data.logoUrl !== undefined) updateFields.logoUrl = data.logoUrl;
   if (data.primaryColor !== undefined) updateFields.primaryColor = data.primaryColor;
   if (data.welcomeMessage !== undefined) updateFields.welcomeMessage = data.welcomeMessage;
+  if (data.themePreset !== undefined) updateFields.themePreset = data.themePreset;
+  if (data.themeGradientDark !== undefined) updateFields.themeGradientDark = data.themeGradientDark;
+  if (data.themeGradientDarker !== undefined) updateFields.themeGradientDarker = data.themeGradientDarker;
+  if (data.themeAccentColor !== undefined) updateFields.themeAccentColor = data.themeAccentColor;
   if (data.loyaltyEnabled !== undefined) updateFields.loyaltyEnabled = data.loyaltyEnabled;
   if (data.callStaffEnabled !== undefined) updateFields.callStaffEnabled = data.callStaffEnabled;
   if (data.stampsRequired !== undefined) updateFields.stampsRequired = data.stampsRequired;

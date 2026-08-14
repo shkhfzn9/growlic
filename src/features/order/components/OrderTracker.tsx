@@ -8,6 +8,8 @@ import { Check, Clock, ChefHat, UtensilsCrossed, PartyPopper, XCircle, ExternalL
 import { CustomerNavbar } from '@/components/layout';
 import ConsultationModal from '@/components/ui/ConsultationModal';
 import { TRACK_NUDGES } from '../constants/trackNudges';
+import { getRestaurantMenuContext } from '@/actions/menu';
+import { getActiveTheme, saveActiveTheme } from '@/config/themes';
 
 interface OrderItem {
   menuItemId: string;
@@ -48,6 +50,12 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
   const [now, setNow] = useState(() => Date.now());
   const [mounted, setMounted] = useState(false);
   const [currentNudgeIdx, setCurrentNudgeIdx] = useState(0);
+
+  const initialTheme = getActiveTheme(initialOrder.restaurantId);
+  const [themeGradientDark, setThemeGradientDark] = useState(initialTheme.themeGradientDark);
+  const [themeGradientDarker, setThemeGradientDarker] = useState(initialTheme.themeGradientDarker);
+  const [themeAccentColor, setThemeAccentColor] = useState(initialTheme.themeAccentColor);
+  const [primaryColor, setPrimaryColor] = useState(initialTheme.primaryColor);
   const [loyaltyInfo, setLoyaltyInfo] = useState<{
     loyaltyEnabled: boolean;
     stampsRequired: number;
@@ -71,6 +79,31 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
         .catch((err) => console.error('Error fetching dev promo on tracker:', err));
     }
   }, [order.restaurantId]);
+
+  useEffect(() => {
+    if (order?.restaurantId) {
+      getRestaurantMenuContext(order.restaurantId)
+        .then((context) => {
+          if (context?.admin) {
+            const gDark = context.admin.themeGradientDark || '#8B0000';
+            const gDarker = context.admin.themeGradientDarker || '#6B0000';
+            const accent = context.admin.themeAccentColor || '#F5C518';
+            const primary = context.admin.primaryColor || '#C0181A';
+            setThemeGradientDark(gDark);
+            setThemeGradientDarker(gDarker);
+            setThemeAccentColor(accent);
+            setPrimaryColor(primary);
+            saveActiveTheme({
+              primaryColor: primary,
+              themeGradientDark: gDark,
+              themeGradientDarker: gDarker,
+              themeAccentColor: accent,
+            }, order.restaurantId);
+          }
+        })
+        .catch((err) => console.error('Error fetching theme for tracker:', err));
+    }
+  }, [order?.restaurantId]);
 
   useEffect(() => {
     if (order.customerPhone && order.restaurantId) {
@@ -210,17 +243,29 @@ Please confirm and prepare my order!
   const whatsappUrl = `https://wa.me/${formattedWaPhone}?text=${encodeURIComponent(whatsappMessageText)}`;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-bg-dark to-bg-darker flex flex-col relative overflow-hidden pb-28">
+    <div
+      suppressHydrationWarning
+      className="min-h-screen flex flex-col relative overflow-hidden pb-28"
+      style={
+        {
+          background: `linear-gradient(135deg, ${themeGradientDark} 0%, ${themeGradientDarker} 100%)`,
+          '--theme-primary': primaryColor,
+          '--theme-bg-dark': themeGradientDark,
+          '--theme-bg-darker': themeGradientDarker,
+          '--theme-accent': themeAccentColor,
+        } as React.CSSProperties
+      }
+    >
       {/* Wave decoration */}
       <svg className="absolute bottom-0 left-0 w-full h-[40%]" viewBox="0 0 1440 320" preserveAspectRatio="none">
-        <path d="M0,160L48,170.7C96,181,192,203,288,197.3C384,192,480,160,576,154.7C672,149,768,171,864,186.7C960,203,1056,213,1152,197.3C1248,181,1344,139,1392,117.3L1440,96L1440,320L0,320Z" fill="#C0181A" fillOpacity="0.15" />
+        <path d="M0,160L48,170.7C96,181,192,203,288,197.3C384,192,480,160,576,154.7C672,149,768,171,864,186.7C960,203,1056,213,1152,197.3C1248,181,1344,139,1392,117.3L1440,96L1440,320L0,320Z" fill={primaryColor} fillOpacity="0.15" />
       </svg>
 
       <div className="flex-1 flex flex-col items-center justify-center p-4 relative z-10">
         <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.10)] p-6 w-full max-w-md flex flex-col gap-5">
           {/* Header */}
           <div className="text-center">
-            <span className="text-[0.65rem] text-primary font-bold uppercase tracking-wider">Live Status Tracker</span>
+            <span className="text-[0.65rem] font-bold uppercase tracking-wider" style={{ color: primaryColor }}>Live Status Tracker</span>
             <h1 className="font-black text-2xl text-text-dark uppercase tracking-tight mt-1">
               Order #{displayId}
             </h1>
@@ -280,8 +325,9 @@ Please confirm and prepare my order!
                 {/* Connecting Line Track */}
                 <div className="absolute left-4 right-4 h-0.5 bg-gray-200 top-1/2 -translate-y-1/2" />
                 <div 
-                  className="absolute left-4 h-0.5 bg-[#C0181A] top-1/2 -translate-y-1/2 transition-all duration-500"
+                  className="absolute left-4 h-0.5 top-1/2 -translate-y-1/2 transition-all duration-500"
                   style={{ 
+                    backgroundColor: primaryColor,
                     width: `${Math.min(100, Math.max(0, ((loyaltyInfo.stampCount - 1) / (loyaltyInfo.stampsRequired - 1)) * 100))}%` 
                   }}
                 />
@@ -297,9 +343,10 @@ Please confirm and prepare my order!
                       <div
                         className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-[9px] transition-all duration-300 ${
                           isCollected
-                            ? 'bg-[#C0181A] text-white shadow-md scale-110'
+                            ? 'text-white shadow-md scale-110'
                             : 'bg-white border-2 border-gray-200 text-gray-400'
-                        } ${isCurrent ? 'ring-2 ring-[#C0181A]/40' : ''}`}
+                        }`}
+                        style={isCollected ? { backgroundColor: primaryColor } : undefined}
                       >
                         {stampNumber}
                       </div>
@@ -307,10 +354,13 @@ Please confirm and prepare my order!
                       {/* Pointer Indicator */}
                       {isCurrent && (
                         <div className="absolute -bottom-4 animate-bounce flex flex-col items-center">
-                          <span className="text-[7px] bg-[#C0181A] text-white px-1.5 py-0.2 rounded font-black uppercase tracking-tighter whitespace-nowrap shadow-sm">
+                          <span 
+                            className="text-[7px] text-white px-1.5 py-0.2 rounded font-black uppercase tracking-tighter whitespace-nowrap shadow-sm"
+                            style={{ backgroundColor: primaryColor }}
+                          >
                             You
                           </span>
-                          <div className="w-1 h-1 bg-[#C0181A] rotate-45 -mt-0.5" />
+                          <div className="w-1 h-1 rotate-45 -mt-0.5" style={{ backgroundColor: primaryColor }} />
                         </div>
                       )}
                     </div>
@@ -385,7 +435,8 @@ Please confirm and prepare my order!
 
                 <button
                   onClick={() => setPaymentModalOpen(true)}
-                  className="w-full bg-[#C0181A] hover:bg-[#A01012] text-white font-black text-xs py-3.5 rounded-xl uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 cursor-pointer mt-1"
+                  className="w-full text-white font-black text-xs py-3.5 rounded-xl uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 cursor-pointer mt-1"
+                  style={{ backgroundColor: primaryColor }}
                 >
                   <CreditCard className="w-4 h-4 text-yellow-300" />
                   <span>Pay Here to Confirm Order (₹{order.total})</span>
@@ -427,7 +478,7 @@ Please confirm and prepare my order!
             </div>
             <div className="border-t border-surface pt-2 mt-3 flex justify-between">
               <span className="font-black text-text-dark">Total</span>
-              <span className="font-black text-lg text-primary">₹{order.total}</span>
+              <span className="font-black text-lg" style={{ color: primaryColor }}>₹{order.total}</span>
             </div>
           </div>
 

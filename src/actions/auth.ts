@@ -49,6 +49,10 @@ export async function saveRestaurantBranding(data: {
   maintenanceEstimatedRestore?: string;
   whatsappNumber?: string;
   phone?: string;
+  themePreset?: string;
+  themeGradientDark?: string;
+  themeGradientDarker?: string;
+  themeAccentColor?: string;
 }) {
   try {
     const admin = await checkAdminAuth();

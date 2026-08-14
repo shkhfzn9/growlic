@@ -13,6 +13,7 @@ import { Minus, Plus, ArrowLeft, ShoppingBag, Loader2, X, Gift, TrendingUp, Spar
 import { CustomerNavbar } from '@/components/layout';
 import { resolveMenuImage } from '@/lib/menu-images';
 import { getPersonalizedRecommendations, getGapUnlockingRecommendations, getBestAddOnsRecommendations, ScoredRecommendation } from '@/features/recommendations';
+import { getActiveTheme, saveActiveTheme } from '@/config/themes';
 
 const DISH_PLACEHOLDER = '/dish_placeholder.jpg';
 
@@ -86,6 +87,12 @@ function CartContent() {
 
   const [restaurantName, setRestaurantName] = useState('');
   const [welcomeMessage, setWelcomeMessage] = useState('Welcome to our restaurant!');
+
+  const initialTheme = getActiveTheme();
+  const [themeGradientDark, setThemeGradientDark] = useState(initialTheme.themeGradientDark);
+  const [themeGradientDarker, setThemeGradientDarker] = useState(initialTheme.themeGradientDarker);
+  const [themeAccentColor, setThemeAccentColor] = useState(initialTheme.themeAccentColor);
+  const [primaryColor, setPrimaryColor] = useState(initialTheme.primaryColor);
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -227,7 +234,22 @@ function CartContent() {
         .then((context) => {
           if (context.admin) {
             setRestaurantName(context.admin.restaurantName || '');
-            setWelcomeMessage(context.admin.welcomeMessage || 'Welcome to our restaurant!');
+            const gDark = context.admin.themeGradientDark || '#8B0000';
+            const gDarker = context.admin.themeGradientDarker || '#6B0000';
+            const accent = context.admin.themeAccentColor || '#F5C518';
+            const primary = context.admin.primaryColor || '#C0181A';
+
+            setThemeGradientDark(gDark);
+            setThemeGradientDarker(gDarker);
+            setThemeAccentColor(accent);
+            setPrimaryColor(primary);
+
+            saveActiveTheme({
+              primaryColor: primary,
+              themeGradientDark: gDark,
+              themeGradientDarker: gDarker,
+              themeAccentColor: accent,
+            }, resolvedRestId);
             if (context.admin.maintenanceModeEnabled) {
               setMaintenanceInfo({
                 enabled: true,
@@ -884,7 +906,11 @@ function CartContent() {
 
   if (!mounted) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-bg-dark to-bg-darker flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      <div
+        suppressHydrationWarning
+        className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden"
+        style={{ background: `linear-gradient(135deg, ${themeGradientDark} 0%, ${themeGradientDarker} 100%)` }}
+      >
         <Loader2 className="w-8 h-8 text-white/50 animate-spin" />
       </div>
     );
@@ -892,9 +918,13 @@ function CartContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#8B0000] to-[#5A0000] flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      <div
+        suppressHydrationWarning
+        className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden"
+        style={{ background: `linear-gradient(135deg, ${themeGradientDark} 0%, ${themeGradientDarker} 100%)` }}
+      >
         <div className="bg-white rounded-3xl p-8 max-w-xs w-full text-center shadow-2xl border border-gray-100 flex flex-col items-center justify-center gap-4 animate-in fade-in duration-200">
-          <Loader2 className="w-10 h-10 text-[#C0181A] animate-spin" />
+          <Loader2 className="w-10 h-10 animate-spin" style={{ color: primaryColor }} />
           <h2 className="font-extrabold text-lg text-gray-900 uppercase tracking-tight">Placing Order...</h2>
           <p className="text-xs text-gray-500">Preparing your live status tracker...</p>
         </div>
@@ -904,11 +934,26 @@ function CartContent() {
 
   if (cart.items.length === 0) {
     return (
-      <div className="min-h-screen bg-[#F9FAFB] flex flex-col pb-28">
+      <div
+        suppressHydrationWarning
+        className="min-h-screen bg-[#F9FAFB] flex flex-col pb-28"
+        style={
+          {
+            '--theme-primary': primaryColor,
+            '--theme-bg-dark': themeGradientDark,
+            '--theme-bg-darker': themeGradientDarker,
+            '--theme-accent': themeAccentColor,
+          } as React.CSSProperties
+        }
+      >
         {/* Header */}
-        <header className="bg-gradient-to-br from-[#8B0000] to-[#5A0000] px-4 pt-6 pb-8 relative overflow-hidden rounded-b-[2rem] shadow-lg">
+        <header
+          suppressHydrationWarning
+          className="px-4 pt-6 pb-8 relative overflow-hidden rounded-b-[2rem] shadow-lg"
+          style={{ background: `linear-gradient(135deg, ${themeGradientDark} 0%, ${themeGradientDarker} 100%)` }}
+        >
           <svg className="absolute bottom-0 left-0 w-full h-12" viewBox="0 0 1440 120" preserveAspectRatio="none">
-            <path d="M0,60L60,52C120,44,240,28,360,32C480,36,600,60,720,68C840,76,960,68,1080,56C1200,44,1320,28,1380,20L1440,12L1440,120L0,120Z" fill="#C0181A" fillOpacity="0.15" />
+            <path d="M0,60L60,52C120,44,240,28,360,32C480,36,600,60,720,68C840,76,960,68,1080,56C1200,44,1320,28,1380,20L1440,12L1440,120L0,120Z" fill={primaryColor} fillOpacity="0.15" />
           </svg>
           <div className="max-w-md mx-auto text-center relative z-10">
             <h1 className="text-3xl font-black text-white uppercase tracking-tight">{restaurantName || cart.restaurantName || 'TOKYO MOMOS'}</h1>
@@ -919,8 +964,8 @@ function CartContent() {
         <div className="flex-1 max-w-md mx-auto w-full px-4 -mt-4 relative z-10 flex flex-col gap-6">
           {/* Your Cart is Empty Card */}
           <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-8 text-center border border-gray-100">
-            <div className="bg-red-50 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-5 shadow-inner">
-              <ShoppingBag className="w-9 h-9 text-[#C0181A]" />
+            <div className="bg-red-50/50 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-5 shadow-inner">
+              <ShoppingBag className="w-9 h-9" style={{ color: primaryColor }} />
             </div>
             <h2 className="font-extrabold text-2xl text-gray-900 uppercase tracking-tight mb-2">Your Cart is Empty</h2>
             <p className="text-sm text-gray-500 mb-6 leading-relaxed">
@@ -984,7 +1029,8 @@ function CartContent() {
                         </div>
                         <Link
                           href={menuUrl}
-                          className="bg-[#C0181A] hover:bg-[#A01012] text-white text-[10px] font-black px-4 py-2 rounded-xl uppercase tracking-wider transition-all shadow active:scale-95 text-center"
+                          className="text-white text-[10px] font-black px-4 py-2 rounded-xl uppercase tracking-wider transition-all shadow active:scale-95 text-center"
+                          style={{ backgroundColor: primaryColor }}
                         >
                           + Add Items
                         </Link>
@@ -998,9 +1044,13 @@ function CartContent() {
                   const sampleItem = menuItems.find(m => rule.conditionCategory.includes(m.category));
                   const imageSrc = sampleItem ? getItemImage(sampleItem.image, sampleItem.name) : DISH_PLACEHOLDER;
                   return (
-                    <div key={rule._id} className="bg-gradient-to-br from-[#8B0000] to-[#5A0000] rounded-3xl p-5 shadow-lg text-white flex items-center justify-between gap-4">
+                    <div
+                      key={rule._id}
+                      className="rounded-3xl p-5 shadow-lg text-white flex items-center justify-between gap-4"
+                      style={{ background: `linear-gradient(135deg, ${themeGradientDark} 0%, ${themeGradientDarker} 100%)` }}
+                    >
                       <div className="flex-1">
-                        <span className="bg-[#F5C518] text-[#1A1A1A] text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        <span className="text-[#1A1A1A] text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider" style={{ backgroundColor: themeAccentColor }}>
                           Combo Offer
                         </span>
                         <h3 className="font-extrabold text-base mt-3 leading-snug">
@@ -1018,7 +1068,8 @@ function CartContent() {
                         </div>
                         <button
                           onClick={() => handleAddCombo(rule)}
-                          className="bg-[#F5C518] hover:bg-[#E0B310] text-[#1A1A1A] text-[10px] font-black px-4 py-2 rounded-xl uppercase tracking-wider transition-all shadow active:scale-95 text-center"
+                          className="text-[#1A1A1A] text-[10px] font-black px-4 py-2 rounded-xl uppercase tracking-wider transition-all shadow active:scale-95 text-center"
+                          style={{ backgroundColor: themeAccentColor }}
                         >
                           + Add Combo
                         </button>
@@ -1039,7 +1090,7 @@ function CartContent() {
                      return (
                        <div key={item._id} className="bg-white rounded-3xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-gray-100 flex items-center justify-between gap-4">
                          <div className="flex-1">
-                           <span className="bg-red-50 text-[#C0181A] text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider border border-red-100">
+                           <span className="text-red-700 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider bg-red-50 border border-red-100">
                              Special Add-on ({discountPct}% OFF)
                            </span>
                            <h3 className="font-extrabold text-base text-gray-900 mt-2.5 leading-tight">
@@ -1047,7 +1098,7 @@ function CartContent() {
                            </h3>
                            <div className="flex items-center gap-2 mt-2 font-bold">
                              <span className="text-gray-400 line-through text-xs">₹{item.price}</span>
-                             <span className="text-[#C0181A] text-sm">₹{offerPrice}</span>
+                             <span className="text-sm font-extrabold" style={{ color: primaryColor }}>₹{offerPrice}</span>
                            </div>
                          </div>
 
@@ -1058,7 +1109,8 @@ function CartContent() {
                            </div>
                            <button
                              onClick={() => handleAddSpecialAddon(item, offerPrice)}
-                             className="bg-[#C0181A] hover:bg-[#A01012] text-white text-[10px] font-black px-4 py-2 rounded-xl uppercase tracking-wider transition-all shadow active:scale-95 text-center"
+                             className="text-white text-[10px] font-black px-4 py-2 rounded-xl uppercase tracking-wider transition-all shadow active:scale-95 text-center"
+                             style={{ backgroundColor: primaryColor }}
                            >
                              + Add
                            </button>
@@ -1078,11 +1130,26 @@ function CartContent() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div
+      suppressHydrationWarning
+      className="min-h-screen bg-white flex flex-col"
+      style={
+        {
+          '--theme-primary': primaryColor,
+          '--theme-bg-dark': themeGradientDark,
+          '--theme-bg-darker': themeGradientDarker,
+          '--theme-accent': themeAccentColor,
+        } as React.CSSProperties
+      }
+    >
       {/* Header */}
-      <header className="bg-gradient-to-br from-bg-dark to-bg-darker px-4 pt-5 pb-6 relative overflow-hidden">
+      <header
+        suppressHydrationWarning
+        className="px-4 pt-5 pb-6 relative overflow-hidden"
+        style={{ background: `linear-gradient(135deg, ${themeGradientDark} 0%, ${themeGradientDarker} 100%)` }}
+      >
         <svg className="absolute bottom-0 left-0 w-full h-12" viewBox="0 0 1440 120" preserveAspectRatio="none">
-          <path d="M0,60L60,52C120,44,240,28,360,32C480,36,600,60,720,68C840,76,960,68,1080,56C1200,44,1320,28,1380,20L1440,12L1440,120L0,120Z" fill="#C0181A" fillOpacity="0.15" />
+          <path d="M0,60L60,52C120,44,240,28,360,32C480,36,600,60,720,68C840,76,960,68,1080,56C1200,44,1320,28,1380,20L1440,12L1440,120L0,120Z" fill={primaryColor} fillOpacity="0.15" />
         </svg>
         <div className="max-w-2xl mx-auto relative z-10">
           <Link href={menuUrl} className="inline-flex items-center gap-1.5 text-white/80 text-sm mb-3 active:opacity-70">
@@ -1253,17 +1320,20 @@ function CartContent() {
         {/* Nudges & Offers Section */}
         {offersLoading ? (
           <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)] p-5 flex items-center justify-center gap-3 border border-gray-100">
-            <Loader2 className="w-5 h-5 text-[#C0181A] animate-spin" />
+            <Loader2 className="w-5 h-5 animate-spin" style={{ color: primaryColor }} />
             <span className="text-sm text-gray-500 font-medium animate-pulse">Personalizing your offers...</span>
           </div>
         ) : (
           <div className="flex flex-col gap-5">
             {/* 1. Discount Booster */}
             {evaluationResult.discountNudge && (
-              <div className="bg-gradient-to-br from-[#8B0000] to-[#5A0000] rounded-3xl p-5 text-white shadow-lg relative overflow-hidden">
-                <div className="flex items-start justify-between gap-2 mb-3.5 relative z-10">
+              <div
+                className="rounded-3xl p-5 text-white shadow-lg relative overflow-hidden"
+                style={{ background: `linear-gradient(135deg, ${themeGradientDark} 0%, ${themeGradientDarker} 100%)` }}
+              >
+                <div className="flex items-center justify-between gap-2 mb-2 relative z-10">
                   <div className="flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-[#F5C518]" />
+                    <TrendingUp className="w-4 h-4" style={{ color: themeAccentColor }} />
                     <span className="font-bold text-xs uppercase tracking-wider">Discount Booster</span>
                   </div>
                   <span className="bg-[#FFF8E7] text-[#D97706] text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-[#F5C518]/30">
@@ -1273,22 +1343,26 @@ function CartContent() {
                 <p className="text-sm font-extrabold mb-3.5 relative z-10">{evaluationResult.discountNudge.message}</p>
                 <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden relative z-10">
                   <div
-                    className="bg-[#F5C518] h-full rounded-full transition-all duration-700"
-                    style={{ width: `${evaluationResult.discountNudge.progress}%` }}
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{ backgroundColor: themeAccentColor, width: `${evaluationResult.discountNudge.progress}%` }}
                   />
                 </div>
                 <div className="flex justify-between text-[10px] mt-2 font-bold opacity-90 relative z-10">
                   <span>{Math.round(evaluationResult.discountNudge.progress || 0)}% there</span>
-                  <span className="text-[#F5C518] font-black">Save ₹{evaluationResult.discountNudge.savings}</span>
+                  <span className="font-black" style={{ color: themeAccentColor }}>Save ₹{evaluationResult.discountNudge.savings}</span>
                 </div>
               </div>
             )}
 
             {/* 2. Combo Deals */}
             {evaluationResult.potentialCombos.map((ruleNudge) => (
-              <div key={ruleNudge.id} className="bg-gradient-to-br from-[#8B0000] to-[#5A0000] rounded-3xl p-5 text-white shadow-lg flex items-center justify-between gap-4">
+              <div
+                key={ruleNudge.id}
+                className="rounded-3xl p-5 text-white shadow-lg flex items-center justify-between gap-4"
+                style={{ background: `linear-gradient(135deg, ${themeGradientDark} 0%, ${themeGradientDarker} 100%)` }}
+              >
                 <div className="flex-1">
-                  <span className="bg-[#F5C518] text-[#1A1A1A] text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                  <span className="text-[#1A1A1A] text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider" style={{ backgroundColor: themeAccentColor }}>
                     Combo Deal
                   </span>
                   <h3 className="font-extrabold text-sm mt-3 leading-snug">
@@ -1306,7 +1380,8 @@ function CartContent() {
                     </div>
                     <button
                       onClick={() => handleAddUpsell(ruleNudge.suggestedItems![0], 'combo_freebie', ruleNudge.id)}
-                      className="bg-[#F5C518] hover:bg-[#E0B310] text-[#1A1A1A] text-[9px] font-black px-3.5 py-1.5 rounded-lg uppercase tracking-wider transition-all active:scale-95 text-center"
+                      className="text-[#1A1A1A] text-[9px] font-black px-3.5 py-1.5 rounded-lg uppercase tracking-wider transition-all active:scale-95 text-center"
+                      style={{ backgroundColor: themeAccentColor }}
                     >
                       + Add
                     </button>
@@ -1349,7 +1424,8 @@ function CartContent() {
                         <span className="text-xs font-black text-gray-900">₹{item.price}</span>
                         <button
                           onClick={() => handleAddUpsell(item, 'threshold_discount', evaluationResult.discountNudge?.id)}
-                          className="bg-[#C0181A] hover:bg-[#A01012] text-white text-[10px] font-black px-3 py-1.5 rounded-lg uppercase active:scale-95 transition-transform"
+                          className="text-white text-[10px] font-black px-3 py-1.5 rounded-lg uppercase active:scale-95 transition-transform"
+                          style={{ backgroundColor: primaryColor }}
                         >
                           + Add
                         </button>
@@ -1364,7 +1440,7 @@ function CartContent() {
             {crossSellSuggestions.length > 0 && (
               <div className="bg-white rounded-3xl shadow-[0_4px_25px_rgba(0,0,0,0.03)] border border-gray-100 p-5">
                 <div className="flex items-center gap-2 mb-3.5">
-                  <Sparkles className="w-4.5 h-4.5 text-[#C0181A]" />
+                  <Sparkles className="w-4.5 h-4.5" style={{ color: primaryColor }} />
                   <span className="font-black text-xs text-gray-900 uppercase tracking-wider">
                     Recommended For You
                   </span>
@@ -1378,7 +1454,7 @@ function CartContent() {
                       </div>
                       <span className="text-[11px] font-extrabold text-gray-800 truncate leading-tight">{item.name}</span>
                       {(item.socialProof || item.recommendationReason) && (
-                        <p className="text-[8.5px] text-[#C0181A] font-bold line-clamp-1 leading-none">
+                        <p className="text-[8.5px] font-bold line-clamp-1 leading-none" style={{ color: primaryColor }}>
                           {item.socialProof || item.recommendationReason}
                         </p>
                       )}
@@ -1386,7 +1462,8 @@ function CartContent() {
                         <span className="text-xs font-black text-gray-900">₹{item.price}</span>
                         <button
                           onClick={() => handleAddUpsell(item, 'cross_sell')}
-                          className="bg-[#C0181A] hover:bg-[#A01012] text-white text-[10px] font-black px-3 py-1.5 rounded-lg uppercase active:scale-95 transition-transform"
+                          className="text-white text-[10px] font-black px-3 py-1.5 rounded-lg uppercase active:scale-95 transition-transform"
+                          style={{ backgroundColor: primaryColor }}
                         >
                           + Add
                         </button>
@@ -1401,7 +1478,7 @@ function CartContent() {
             {bestAddOns.length > 0 && (
               <div className="bg-white rounded-3xl shadow-[0_4px_25px_rgba(0,0,0,0.03)] border border-gray-100 p-5">
                 <div className="flex items-center gap-2 mb-3.5">
-                  <Sparkles className="w-4.5 h-4.5 text-[#C0181A]" />
+                  <Sparkles className="w-4.5 h-4.5" style={{ color: primaryColor }} />
                   <span className="font-black text-xs text-gray-900 uppercase tracking-wider">Best Add-ons For You</span>
                 </div>
                 <div className="flex flex-col gap-3">
@@ -1416,7 +1493,7 @@ function CartContent() {
                           <span className="text-[10px] font-black text-[#D97706] uppercase tracking-wider block">{item.category}</span>
                           <h4 className="font-extrabold text-sm text-gray-800 truncate leading-tight mt-0.5">{item.name}</h4>
                           {(item.recommendationReason || item.socialProof) && (
-                            <p className="text-[9px] text-[#C0181A] font-bold line-clamp-1 mt-0.5">
+                            <p className="text-[9px] font-bold line-clamp-1 mt-0.5" style={{ color: primaryColor }}>
                               {item.recommendationReason || item.socialProof}
                             </p>
                           )}
@@ -1425,7 +1502,8 @@ function CartContent() {
                       </div>
                       <button
                         onClick={() => handleAddUpsell(item, 'cross_sell')}
-                        className="bg-[#C0181A] hover:bg-[#A01012] text-white text-xs font-black px-4 py-2 rounded-xl uppercase tracking-wider active:scale-95 transition-all shadow-sm"
+                        className="text-white text-xs font-black px-4 py-2 rounded-xl uppercase tracking-wider active:scale-95 transition-all shadow-sm"
+                        style={{ backgroundColor: primaryColor }}
                       >
                         + Add
                       </button>
@@ -1677,9 +1755,10 @@ function CartContent() {
                       onClick={() => handleOrderTypeSelect('dine_in')}
                       className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${
                         orderType === 'dine_in'
-                          ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-sm font-bold ring-2 ring-[#C0181A]/20'
-                          : 'bg-surface text-text-dark border-text-dark/10 hover:border-[#C0181A]/50 font-medium'
+                          ? 'text-white shadow-sm font-bold ring-2 ring-black/10'
+                          : 'bg-surface text-text-dark border-text-dark/10 font-medium'
                       }`}
+                      style={orderType === 'dine_in' ? { backgroundColor: primaryColor, borderColor: primaryColor } : undefined}
                     >
                       <span className="text-sm mb-0.5">🍽️</span>
                       <span className="text-xs font-black">Dine In</span>
@@ -1691,9 +1770,10 @@ function CartContent() {
                       onClick={() => handleOrderTypeSelect('takeaway')}
                       className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${
                         orderType === 'takeaway'
-                          ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-sm font-bold ring-2 ring-[#C0181A]/20'
-                          : 'bg-surface text-text-dark border-text-dark/10 hover:border-[#C0181A]/50 font-medium'
+                          ? 'text-white shadow-sm font-bold ring-2 ring-black/10'
+                          : 'bg-surface text-text-dark border-text-dark/10 font-medium'
                       }`}
+                      style={orderType === 'takeaway' ? { backgroundColor: primaryColor, borderColor: primaryColor } : undefined}
                     >
                       <span className="text-sm mb-0.5">🥡</span>
                       <span className="text-xs font-black">Takeaway</span>
@@ -1724,9 +1804,10 @@ function CartContent() {
                       onClick={() => setPaymentMode('cash')}
                       className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border transition-all cursor-pointer ${
                         paymentMode === 'cash'
-                          ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-sm font-bold ring-2 ring-[#C0181A]/20'
-                          : 'bg-surface text-text-dark border-text-dark/10 hover:border-[#C0181A]/50 font-medium'
+                          ? 'text-white shadow-sm font-bold ring-2 ring-black/10'
+                          : 'bg-surface text-text-dark border-text-dark/10 font-medium'
                       }`}
+                      style={paymentMode === 'cash' ? { backgroundColor: primaryColor, borderColor: primaryColor } : undefined}
                     >
                       <span className="text-sm">💵</span>
                       <span className="text-xs font-black">Cash</span>
@@ -1737,9 +1818,10 @@ function CartContent() {
                       onClick={() => setPaymentMode('online')}
                       className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border transition-all cursor-pointer ${
                         paymentMode === 'online'
-                          ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-sm font-bold ring-2 ring-[#C0181A]/20'
-                          : 'bg-surface text-text-dark border-text-dark/10 hover:border-[#C0181A]/50 font-medium'
+                          ? 'text-white shadow-sm font-bold ring-2 ring-black/10'
+                          : 'bg-surface text-text-dark border-text-dark/10 font-medium'
                       }`}
+                      style={paymentMode === 'online' ? { backgroundColor: primaryColor, borderColor: primaryColor } : undefined}
                     >
                       <span className="text-sm">💳</span>
                       <span className="text-xs font-black">Online Payment</span>
@@ -1765,8 +1847,9 @@ function CartContent() {
                   className={`w-full text-text-dark font-bold text-sm py-4 rounded-xl uppercase tracking-wide mt-2 transition-transform flex items-center justify-center gap-2 shadow-md ${
                     maintenanceInfo.enabled
                       ? 'bg-gray-200 text-gray-500 cursor-not-allowed border border-gray-300 shadow-none'
-                      : 'bg-cta hover:bg-[#e0b410] active:scale-[0.97]'
+                      : 'active:scale-[0.97]'
                   }`}
+                  style={!maintenanceInfo.enabled ? { backgroundColor: themeAccentColor } : undefined}
                 >
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                   {maintenanceInfo.enabled
@@ -1804,8 +1887,11 @@ function CartContent() {
 export default function CartPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-br from-[#8B0000] to-[#5A0000] flex flex-col items-center justify-center p-6 relative overflow-hidden">
-        <Loader2 className="w-8 h-8 text-[#F5C518] animate-spin" />
+      <div
+        className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden"
+        style={{ background: 'var(--theme-bg-dark, #1A1A1A)' }}
+      >
+        <Loader2 className="w-8 h-8 animate-spin" style={{ color: 'var(--theme-accent, #F5C518)' }} />
       </div>
     }>
       <CartContent />

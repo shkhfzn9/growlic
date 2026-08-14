@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { CustomerNavbar } from '@/components/layout';
 import { getCustomerLoyaltySummary, redeemLoyaltyReward } from '@/actions/orders';
+import { getRestaurantMenuContext } from '@/actions/menu';
+import { getActiveTheme, saveActiveTheme } from '@/config/themes';
 
 interface LoyaltySummary {
   restaurantId: string;
@@ -43,6 +45,12 @@ function StampsDashboardContent() {
   const [actionLoading, setActionLoading] = useState(false);
   const [redeemLoading, setRedeemLoading] = useState<Record<string, boolean>>({});
 
+  const initialTheme = getActiveTheme();
+  const [themeGradientDark, setThemeGradientDark] = useState(initialTheme.themeGradientDark);
+  const [themeGradientDarker, setThemeGradientDarker] = useState(initialTheme.themeGradientDarker);
+  const [themeAccentColor, setThemeAccentColor] = useState(initialTheme.themeAccentColor);
+  const [primaryColor, setPrimaryColor] = useState(initialTheme.primaryColor);
+
   // Form inputs for unauthenticated state
   const [inputName, setInputName] = useState('');
   const [inputPhone, setInputPhone] = useState('');
@@ -63,6 +71,26 @@ function StampsDashboardContent() {
           try {
             const data = await getCustomerLoyaltySummary(cachedPhone);
             setSummaries(data);
+            if (data && data.length > 0) {
+              getRestaurantMenuContext(data[0].restaurantId).then((context) => {
+                if (context?.admin) {
+                  const gDark = context.admin.themeGradientDark || '#8B0000';
+                  const gDarker = context.admin.themeGradientDarker || '#6B0000';
+                  const accent = context.admin.themeAccentColor || '#F5C518';
+                  const primary = context.admin.primaryColor || '#C0181A';
+                  setThemeGradientDark(gDark);
+                  setThemeGradientDarker(gDarker);
+                  setThemeAccentColor(accent);
+                  setPrimaryColor(primary);
+                  saveActiveTheme({
+                    primaryColor: primary,
+                    themeGradientDark: gDark,
+                    themeGradientDarker: gDarker,
+                    themeAccentColor: accent,
+                  }, data[0].restaurantId);
+                }
+              }).catch((err) => console.error(err));
+            }
           } catch (err) {
             console.error('Error fetching loyalty summaries:', err);
           }
@@ -137,15 +165,31 @@ function StampsDashboardContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#8B0000] to-[#6B0000] flex flex-col items-center justify-center p-4">
-        <Loader2 className="w-8 h-8 text-[#F5C518] animate-spin" />
+      <div
+        suppressHydrationWarning
+        className="min-h-screen flex flex-col items-center justify-center p-4"
+        style={{ background: `linear-gradient(135deg, ${themeGradientDark} 0%, ${themeGradientDarker} 100%)` }}
+      >
+        <Loader2 suppressHydrationWarning className="w-8 h-8 animate-spin" style={{ color: themeAccentColor }} />
         <span className="text-white/60 text-xs mt-3 uppercase tracking-wider font-bold">Loading Stamps...</span>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#8B0000] to-[#6B0000] pb-28">
+    <div
+      suppressHydrationWarning
+      className="min-h-screen pb-28"
+      style={
+        {
+          background: `linear-gradient(135deg, ${themeGradientDark} 0%, ${themeGradientDarker} 100%)`,
+          '--theme-primary': primaryColor,
+          '--theme-bg-dark': themeGradientDark,
+          '--theme-bg-darker': themeGradientDarker,
+          '--theme-accent': themeAccentColor,
+        } as React.CSSProperties
+      }
+    >
       {/* Top Header */}
       <header className="flex items-center justify-between px-4 py-5 max-w-md mx-auto">
         <button 
@@ -155,7 +199,7 @@ function StampsDashboardContent() {
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="text-lg font-black text-white uppercase tracking-tight flex items-center gap-1.5">
-          <Award className="w-5 h-5 text-[#F5C518]" /> Loyalty Stamps
+          <Award className="w-5 h-5" style={{ color: themeAccentColor }} /> Loyalty Stamps
         </h1>
         <div className="w-10" /> {/* Spacer */}
       </header>
@@ -165,7 +209,10 @@ function StampsDashboardContent() {
           <>
             {/* Customer Profile Banner */}
             <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#F5C518]/20 flex items-center justify-center text-[#F5C518]">
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center"
+                style={{ backgroundColor: `${themeAccentColor}33`, color: themeAccentColor }}
+              >
                 <User className="w-5 h-5" />
               </div>
               <div>
@@ -189,7 +236,8 @@ function StampsDashboardContent() {
                   </div>
                   <Link
                     href="/"
-                    className="bg-[#F5C518] text-[#1A1A1A] font-extrabold text-xs py-3 px-6 rounded-xl uppercase tracking-wider active:scale-95 transition-transform mt-2 shadow-[0_4px_12px_rgba(245,197,24,0.25)]"
+                    className="text-[#1A1A1A] font-extrabold text-xs py-3 px-6 rounded-xl uppercase tracking-wider active:scale-95 transition-transform mt-2 shadow-md"
+                    style={{ backgroundColor: themeAccentColor }}
                   >
                     Browse Menu
                   </Link>
@@ -215,7 +263,8 @@ function StampsDashboardContent() {
                         </div>
                         <Link
                           href={`/menu/${summary.restaurantId}`}
-                          className="flex items-center gap-1 text-[11px] font-extrabold text-[#8B0000] hover:underline"
+                          className="flex items-center gap-1 text-[11px] font-extrabold hover:underline"
+                          style={{ color: primaryColor }}
                         >
                           Menu <ArrowRight className="w-3 h-3" />
                         </Link>
@@ -226,8 +275,9 @@ function StampsDashboardContent() {
                         {/* Connecting Line Track */}
                         <div className="absolute left-4 right-4 h-0.5 bg-gray-200 top-1/2 -translate-y-1/2" />
                         <div 
-                          className="absolute left-4 h-0.5 bg-[#C0181A] top-1/2 -translate-y-1/2 transition-all duration-500"
+                          className="absolute left-4 h-0.5 top-1/2 -translate-y-1/2 transition-all duration-500"
                           style={{ 
+                            backgroundColor: primaryColor,
                             width: `${Math.min(100, Math.max(0, ((stampCount - 1) / (stampsRequired - 1)) * 100))}%` 
                           }}
                         />
@@ -243,9 +293,10 @@ function StampsDashboardContent() {
                               <div
                                 className={`w-6 h-6 rounded-full flex items-center justify-center font-black text-[9px] transition-all duration-300 ${
                                   isCollected
-                                    ? 'bg-[#C0181A] text-white shadow-md scale-110'
+                                    ? 'text-white shadow-md scale-110'
                                     : 'bg-white border-2 border-gray-200 text-gray-400'
-                                } ${isCurrent ? 'ring-2 ring-[#C0181A]/40' : ''}`}
+                                }`}
+                                style={isCollected ? { backgroundColor: primaryColor } : undefined}
                               >
                                 {stampNumber}
                               </div>
@@ -253,10 +304,10 @@ function StampsDashboardContent() {
                               {/* Pointer Indicator */}
                               {isCurrent && (
                                 <div className="absolute -bottom-4 animate-bounce flex flex-col items-center">
-                                  <span className="text-[7px] bg-[#C0181A] text-white px-1.5 py-0.2 rounded font-black uppercase tracking-tighter whitespace-nowrap shadow-sm">
+                                  <span className="text-[7px] text-white px-1.5 py-0.2 rounded font-black uppercase tracking-tighter whitespace-nowrap shadow-sm" style={{ backgroundColor: primaryColor }}>
                                     You
                                   </span>
-                                  <div className="w-1 h-1 bg-[#C0181A] rotate-45 -mt-0.5" />
+                                  <div className="w-1 h-1 rotate-45 -mt-0.5" style={{ backgroundColor: primaryColor }} />
                                 </div>
                               )}
                             </div>
@@ -286,7 +337,7 @@ function StampsDashboardContent() {
                       {summary.hasPendingDiscount ? (
                         <div className="bg-green-50/70 border border-green-200/50 rounded-xl p-3 text-center flex flex-col gap-0.5">
                           <div className="flex items-center justify-center gap-1 text-green-700 font-extrabold text-xs uppercase tracking-wider">
-                            <Sparkles className="w-3.5 h-3.5 text-[#F5C518] fill-current animate-pulse" />
+                            <Sparkles className="w-3.5 h-3.5 fill-current animate-pulse" style={{ color: themeAccentColor }} />
                             <span>Reward Unlocked!</span>
                           </div>
                           <p className="text-[10px] text-green-600 font-semibold">
@@ -297,7 +348,8 @@ function StampsDashboardContent() {
                         <button
                           onClick={() => handleRedeem(summary.restaurantId, summary.restaurantName)}
                           disabled={redeemLoading[summary.restaurantId]}
-                          className="w-full bg-[#F5C518] hover:bg-[#e0b410] text-[#1A1A1A] font-black text-xs py-3 rounded-xl uppercase tracking-wider active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(245,197,24,0.25)]"
+                          className="w-full text-[#1A1A1A] font-black text-xs py-3 rounded-xl uppercase tracking-wider active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
+                          style={{ backgroundColor: themeAccentColor }}
                         >
                           {redeemLoading[summary.restaurantId] && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                           Claim {summary.discountPercentage}% Off Reward
@@ -313,7 +365,10 @@ function StampsDashboardContent() {
           /* Check-In Card */
           <div className="bg-white rounded-3xl shadow-[0_12px_40px_rgba(0,0,0,0.15)] p-6 border border-black/5 mt-4">
             <div className="text-center mb-6">
-              <div className="w-12 h-12 rounded-full bg-[#8B0000]/10 flex items-center justify-center mx-auto text-[#8B0000] mb-3">
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3"
+                style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}
+              >
                 <TrendingUp className="w-6 h-6" />
               </div>
               <h2 className="text-lg font-black text-[#1A1A1A] uppercase tracking-tight">Loyalty Stamps</h2>
@@ -337,7 +392,7 @@ function StampsDashboardContent() {
                   placeholder="e.g. John Doe"
                   value={inputName}
                   onChange={(e) => setInputName(e.target.value)}
-                  className="px-3.5 py-3 text-sm border border-[#E2E6EA] rounded-xl bg-[#F8FAFC] outline-none focus:ring-2 focus:ring-[#8B0000]/20 focus:border-[#8B0000] transition-all"
+                  className="px-3.5 py-3 text-sm border border-[#E2E6EA] rounded-xl bg-[#F8FAFC] outline-none focus:ring-2 focus:ring-black/10 transition-all"
                   required
                 />
               </div>
@@ -352,7 +407,7 @@ function StampsDashboardContent() {
                     maxLength={10}
                     value={inputPhone}
                     onChange={(e) => setInputPhone(e.target.value.replace(/\D/g, ''))}
-                    className="w-full pl-12 pr-3.5 py-3 text-sm border border-[#E2E6EA] rounded-xl bg-[#F8FAFC] outline-none focus:ring-2 focus:ring-[#8B0000]/20 focus:border-[#8B0000] transition-all"
+                    className="w-full pl-12 pr-3.5 py-3 text-sm border border-[#E2E6EA] rounded-xl bg-[#F8FAFC] outline-none focus:ring-2 focus:ring-black/10 transition-all"
                     required
                   />
                 </div>
@@ -361,7 +416,8 @@ function StampsDashboardContent() {
               <button
                 type="submit"
                 disabled={actionLoading}
-                className="w-full bg-[#F5C518] text-[#1A1A1A] font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider mt-2 active:scale-[0.98] transition-transform disabled:opacity-50 flex items-center justify-center gap-2 shadow-[0_4px_12px_rgba(245,197,24,0.25)]"
+                className="w-full text-[#1A1A1A] font-extrabold text-sm py-3.5 rounded-xl uppercase tracking-wider mt-2 active:scale-[0.98] transition-transform disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
+                style={{ backgroundColor: themeAccentColor }}
               >
                 {actionLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                 {actionLoading ? 'Retrieving...' : 'Check Stamps'}

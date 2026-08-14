@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { CustomerNavbar } from '@/components/layout';
 import { getOrdersByCustomerPhone, getCustomerLoyaltyInfo, redeemLoyaltyReward } from '@/actions/orders';
+import { getRestaurantMenuContext } from '@/actions/menu';
 
 interface OrderItem {
   menuItemId: string;
@@ -55,6 +56,70 @@ function OrdersHistoryContent() {
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+
+  const [themeGradientDark, setThemeGradientDark] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const restId = new URLSearchParams(window.location.search).get('restaurantId') || localStorage.getItem('last_order_restaurant_id') || 'tokyo-momos';
+        const cached = localStorage.getItem(`theme_${restId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed?.themeGradientDark) return parsed.themeGradientDark;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return '#8B0000';
+  });
+
+  const [themeGradientDarker, setThemeGradientDarker] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const restId = new URLSearchParams(window.location.search).get('restaurantId') || localStorage.getItem('last_order_restaurant_id') || 'tokyo-momos';
+        const cached = localStorage.getItem(`theme_${restId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed?.themeGradientDarker) return parsed.themeGradientDarker;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return '#6B0000';
+  });
+
+  const [themeAccentColor, setThemeAccentColor] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const restId = new URLSearchParams(window.location.search).get('restaurantId') || localStorage.getItem('last_order_restaurant_id') || 'tokyo-momos';
+        const cached = localStorage.getItem(`theme_${restId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed?.themeAccentColor) return parsed.themeAccentColor;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return '#F5C518';
+  });
+
+  const [primaryColor, setPrimaryColor] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const restId = new URLSearchParams(window.location.search).get('restaurantId') || localStorage.getItem('last_order_restaurant_id') || 'tokyo-momos';
+        const cached = localStorage.getItem(`theme_${restId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed?.primaryColor) return parsed.primaryColor;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return '#C0181A';
+  });
 
   const [loyaltyInfo, setLoyaltyInfo] = useState<{
     customer: {
@@ -118,6 +183,21 @@ function OrdersHistoryContent() {
     }
     setResolvedRestaurantId(restId);
   }, [urlRestaurantId]);
+
+  useEffect(() => {
+    if (resolvedRestaurantId) {
+      getRestaurantMenuContext(resolvedRestaurantId)
+        .then((context) => {
+          if (context?.admin) {
+            if (context.admin.themeGradientDark) setThemeGradientDark(context.admin.themeGradientDark);
+            if (context.admin.themeGradientDarker) setThemeGradientDarker(context.admin.themeGradientDarker);
+            if (context.admin.themeAccentColor) setThemeAccentColor(context.admin.themeAccentColor);
+            if (context.admin.primaryColor) setPrimaryColor(context.admin.primaryColor);
+          }
+        })
+        .catch((err) => console.error('Error fetching theme for orders page:', err));
+    }
+  }, [resolvedRestaurantId]);
 
   // Load cache on load
   useEffect(() => {
@@ -241,9 +321,12 @@ function OrdersHistoryContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#8B0000] to-[#6B0000] flex items-center justify-center">
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: `linear-gradient(135deg, ${themeGradientDark} 0%, ${themeGradientDarker} 100%)` }}
+      >
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 text-[#F5C518] animate-spin" />
+          <Loader2 className="w-8 h-8 animate-spin" style={{ color: themeAccentColor }} />
           <span className="text-white/80 font-bold text-sm uppercase tracking-wider">Loading Orders...</span>
         </div>
       </div>
@@ -251,11 +334,24 @@ function OrdersHistoryContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F5F5] flex flex-col pb-28">
+    <div
+      className="min-h-screen bg-[#F5F5F5] flex flex-col pb-28"
+      style={
+        {
+          '--theme-primary': primaryColor,
+          '--theme-bg-dark': themeGradientDark,
+          '--theme-bg-darker': themeGradientDarker,
+          '--theme-accent': themeAccentColor,
+        } as React.CSSProperties
+      }
+    >
       {/* Header Banner */}
-      <header className="bg-gradient-to-br from-[#8B0000] to-[#6B0000] px-4 pt-5 pb-8 relative overflow-hidden">
+      <header
+        className="px-4 pt-5 pb-8 relative overflow-hidden"
+        style={{ background: `linear-gradient(135deg, ${themeGradientDark} 0%, ${themeGradientDarker} 100%)` }}
+      >
         <svg className="absolute bottom-0 left-0 w-full h-12" viewBox="0 0 1440 120" preserveAspectRatio="none">
-          <path d="M0,60L60,52C120,44,240,28,360,32C480,36,600,60,720,68C840,76,960,68,1080,56C1200,44,1320,28,1380,20L1440,12L1440,120L0,120Z" fill="#C0181A" fillOpacity="0.15" />
+          <path d="M0,60L60,52C120,44,240,28,360,32C480,36,600,60,720,68C840,76,960,68,1080,56C1200,44,1320,28,1380,20L1440,12L1440,120L0,120Z" fill={primaryColor} fillOpacity="0.15" />
         </svg>
         <div className="max-w-md mx-auto relative z-10">
           <Link href={menuUrl} className="inline-flex items-center gap-1.5 text-white/80 text-sm mb-3 active:opacity-75">

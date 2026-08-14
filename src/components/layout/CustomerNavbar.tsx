@@ -8,6 +8,7 @@ import { usePathname } from 'next/navigation';
 import { UtensilsCrossed, ShoppingBag, Receipt, Award, Bell, Loader2 } from 'lucide-react';
 import { callStaffAction } from '@/actions/orders';
 import { getRestaurantMenuContext } from '@/actions/menu';
+import { getActiveTheme, saveActiveTheme } from '@/config/themes';
 
 interface CustomerNavbarProps {
   restaurantId?: string;
@@ -68,12 +69,28 @@ export default function CustomerNavbar({ restaurantId, menuContext }: CustomerNa
     }
   }
 
-  // Hydrate Call Staff allowance config
+  const initialTheme = getActiveTheme(currentRestaurantId);
+  const [themeGradientDark, setThemeGradientDark] = useState(initialTheme.themeGradientDark);
+  const [themeGradientDarker, setThemeGradientDarker] = useState(initialTheme.themeGradientDarker);
+  const [themeAccentColor, setThemeAccentColor] = useState(initialTheme.themeAccentColor);
+
+  // Hydrate Call Staff & Theme config
   useEffect(() => {
-    if (menuContext) {
-      if (menuContext.admin) {
-        setCallStaffAllowed(menuContext.admin.callStaffEnabled !== false);
-      }
+    if (menuContext?.admin) {
+      setCallStaffAllowed(menuContext.admin.callStaffEnabled !== false);
+      const gDark = menuContext.admin.themeGradientDark || '#8B0000';
+      const gDarker = menuContext.admin.themeGradientDarker || '#6B0000';
+      const accent = menuContext.admin.themeAccentColor || '#F5C518';
+      const primary = menuContext.admin.primaryColor || '#C0181A';
+      setThemeGradientDark(gDark);
+      setThemeGradientDarker(gDarker);
+      setThemeAccentColor(accent);
+      saveActiveTheme({
+        primaryColor: primary,
+        themeGradientDark: gDark,
+        themeGradientDarker: gDarker,
+        themeAccentColor: accent,
+      }, currentRestaurantId);
       return;
     }
 
@@ -82,9 +99,22 @@ export default function CustomerNavbar({ restaurantId, menuContext }: CustomerNa
         .then((context) => {
           if (context && context.admin) {
             setCallStaffAllowed(context.admin.callStaffEnabled !== false);
+            const gDark = context.admin.themeGradientDark || '#8B0000';
+            const gDarker = context.admin.themeGradientDarker || '#6B0000';
+            const accent = context.admin.themeAccentColor || '#F5C518';
+            const primary = context.admin.primaryColor || '#C0181A';
+            setThemeGradientDark(gDark);
+            setThemeGradientDarker(gDarker);
+            setThemeAccentColor(accent);
+            saveActiveTheme({
+              primaryColor: primary,
+              themeGradientDark: gDark,
+              themeGradientDarker: gDarker,
+              themeAccentColor: accent,
+            }, currentRestaurantId);
           }
         })
-        .catch((err) => console.error('Error fetching navbar call settings:', err));
+        .catch((err) => console.error('Error fetching theme for navbar:', err));
     }
   }, [currentRestaurantId, menuContext]);
 
@@ -96,71 +126,103 @@ export default function CustomerNavbar({ restaurantId, menuContext }: CustomerNa
 
   return (
     <>
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-sm bg-gradient-to-r from-[#8B0000]/95 via-[#7B0000]/95 to-[#6B0000]/95 border border-white/15 rounded-full py-2.5 px-6 flex items-center justify-around shadow-[0_12px_40px_rgba(107,0,0,0.5)] backdrop-blur-md">
+      <div
+        suppressHydrationWarning
+        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-sm border border-white/15 rounded-full py-2.5 px-6 flex items-center justify-around shadow-[0_12px_40px_rgba(0,0,0,0.4)] backdrop-blur-md transition-all duration-300"
+        style={{ background: `linear-gradient(90deg, ${themeGradientDark}EE 0%, ${themeGradientDarker}EE 100%)` }}
+      >
         {/* Menu Link */}
         <Link
+          suppressHydrationWarning
           href={`/menu/${currentRestaurantId}`}
           className={`flex flex-col items-center gap-0.5 transition-all duration-200 active:scale-95 ${
-            isMenuActive ? 'text-[#F5C518]' : 'text-white/60 hover:text-white'
+            isMenuActive ? '' : 'text-white/60 hover:text-white'
           }`}
+          style={isMenuActive ? { color: themeAccentColor } : undefined}
         >
           <UtensilsCrossed className="w-5 h-5" />
           <span className="text-[10px] font-bold uppercase tracking-wider">Menu</span>
-          <span className={`w-1 h-1 rounded-full bg-[#F5C518] transition-all duration-300 ${
-            isMenuActive ? 'scale-100 opacity-100 mt-0.5' : 'scale-0 opacity-0 h-0 mt-0'
-          }`} />
+          <span
+            suppressHydrationWarning
+            className={`w-1 h-1 rounded-full transition-all duration-300 ${
+              isMenuActive ? 'scale-100 opacity-100 mt-0.5' : 'scale-0 opacity-0 h-0 mt-0'
+            }`}
+            style={{ backgroundColor: themeAccentColor }}
+          />
         </Link>
 
         {/* Cart Link */}
         <Link
+          suppressHydrationWarning
           href={`/cart${currentRestaurantId ? `?restaurantId=${currentRestaurantId}` : ''}`}
           className={`flex flex-col items-center gap-0.5 transition-all duration-200 active:scale-95 relative ${
-            isCartActive ? 'text-[#F5C518]' : 'text-white/60 hover:text-white'
+            isCartActive ? '' : 'text-white/60 hover:text-white'
           }`}
+          style={isCartActive ? { color: themeAccentColor } : undefined}
         >
           <div className="relative">
             <ShoppingBag className="w-5 h-5" />
             {totalItemsCount > 0 && (
-              <span className="absolute -top-1.5 -right-2 bg-[#F5C518] text-[#1A1A1A] text-[8px] font-extrabold w-4.5 h-4.5 rounded-full flex items-center justify-center border border-[#7B0000] shadow-sm animate-pulse">
+              <span
+                suppressHydrationWarning
+                className="absolute -top-1.5 -right-2 text-[#1A1A1A] text-[8px] font-extrabold w-4.5 h-4.5 rounded-full flex items-center justify-center border border-black/20 shadow-sm animate-pulse"
+                style={{ backgroundColor: themeAccentColor }}
+              >
                 {totalItemsCount}
               </span>
             )}
           </div>
           <span className="text-[10px] font-bold uppercase tracking-wider">Cart</span>
-          <span className={`w-1 h-1 rounded-full bg-[#F5C518] transition-all duration-300 ${
-            isCartActive ? 'scale-100 opacity-100 mt-0.5' : 'scale-0 opacity-0 h-0 mt-0'
-          }`} />
+          <span
+            suppressHydrationWarning
+            className={`w-1 h-1 rounded-full transition-all duration-300 ${
+              isCartActive ? 'scale-100 opacity-100 mt-0.5' : 'scale-0 opacity-0 h-0 mt-0'
+            }`}
+            style={{ backgroundColor: themeAccentColor }}
+          />
         </Link>
 
         {/* Stamps Link */}
         {mounted && (lastOrder || hasPhone) && (
           <Link
+            suppressHydrationWarning
             href="/stamps"
             className={`flex flex-col items-center gap-0.5 transition-all duration-200 active:scale-95 ${
-              isStampsActive ? 'text-[#F5C518]' : 'text-white/60 hover:text-white'
+              isStampsActive ? '' : 'text-white/60 hover:text-white'
             }`}
+            style={isStampsActive ? { color: themeAccentColor } : undefined}
           >
             <Award className="w-5 h-5" />
             <span className="text-[10px] font-bold uppercase tracking-wider">Stamps</span>
-            <span className={`w-1 h-1 rounded-full bg-[#F5C518] transition-all duration-300 ${
-              isStampsActive ? 'scale-100 opacity-100 mt-0.5' : 'scale-0 opacity-0 h-0 mt-0'
-            }`} />
+            <span
+              suppressHydrationWarning
+              className={`w-1 h-1 rounded-full transition-all duration-300 ${
+                isStampsActive ? 'scale-100 opacity-100 mt-0.5' : 'scale-0 opacity-0 h-0 mt-0'
+              }`}
+              style={{ backgroundColor: themeAccentColor }}
+            />
           </Link>
         )}
 
         {/* Orders Link (visible if there's a recent order or they are logged in with phone) */}
         {mounted && (lastOrder || hasPhone) && (
           <Link
+            suppressHydrationWarning
             href={`/orders?restaurantId=${currentRestaurantId}`}
             className={`flex flex-col items-center gap-0.5 transition-all duration-200 active:scale-95 ${
-              isOrdersActive ? 'text-[#F5C518]' : 'text-white/60 hover:text-white'
+              isOrdersActive ? '' : 'text-white/60 hover:text-white'
             }`}
+            style={isOrdersActive ? { color: themeAccentColor } : undefined}
           >
             <Receipt className="w-5 h-5" />
             <span className="text-[10px] font-bold uppercase tracking-wider">Orders</span>
-            <span className={`w-1 h-1 rounded-full bg-[#F5C518] transition-all duration-300 ${
-              isOrdersActive ? 'scale-100 opacity-100 mt-0.5' : 'scale-0 opacity-0 h-0 mt-0'
-            }`} />
+            <span
+              suppressHydrationWarning
+              className={`w-1 h-1 rounded-full transition-all duration-300 ${
+                isOrdersActive ? 'scale-100 opacity-100 mt-0.5' : 'scale-0 opacity-0 h-0 mt-0'
+              }`}
+              style={{ backgroundColor: themeAccentColor }}
+            />
           </Link>
         )}
 

@@ -51,6 +51,10 @@ export default async function MenuPage({ params, searchParams }: PageProps) {
   let primaryColor = '#C0181A';
   let welcomeMessage = 'Welcome to our restaurant!';
 
+  let themeGradientDark = '#8B0000';
+  let themeGradientDarker = '#6B0000';
+  let themeAccentColor = '#F5C518';
+
   try {
     const context = await getCachedRestaurantMenuContext(slug);
     menuContextResult = context;
@@ -64,6 +68,9 @@ export default async function MenuPage({ params, searchParams }: PageProps) {
       logoUrl = admin.logoUrl || '';
       primaryColor = admin.primaryColor || '#C0181A';
       welcomeMessage = admin.welcomeMessage || 'Welcome to our restaurant!';
+      if (admin.themeGradientDark) themeGradientDark = admin.themeGradientDark;
+      if (admin.themeGradientDarker) themeGradientDarker = admin.themeGradientDarker;
+      if (admin.themeAccentColor) themeAccentColor = admin.themeAccentColor;
     }
   } catch (error) {
     console.error('Error loading menu page:', error);
@@ -129,22 +136,32 @@ export default async function MenuPage({ params, searchParams }: PageProps) {
   }
 
   return (
-    <MenuList
-      initialItems={menuItems}
-      initialBanners={banners}
-      restaurantName={restaurantName}
-      restaurantId={slug}
-      table={table}
-      logoUrl={logoUrl}
-      primaryColor={primaryColor}
-      welcomeMessage={welcomeMessage}
-      upsellData={upsellDataResult ? {
-        pairingRules: upsellDataResult.pairingRules,
-        computedAffinity: upsellDataResult.computedAffinity,
-        completedCount: upsellDataResult.completedCount,
-        menuItems: upsellDataResult.menuItems
-      } : undefined}
-      menuContext={menuContextResult}
-    />
+    <>
+      <style dangerouslySetInnerHTML={{ __html: `
+        :root {
+          --theme-primary: ${primaryColor};
+          --theme-bg-dark: ${themeGradientDark};
+          --theme-bg-darker: ${themeGradientDarker};
+          --theme-accent: ${themeAccentColor};
+        }
+      ` }} />
+      <MenuList
+        initialItems={menuItems}
+        initialBanners={banners}
+        restaurantName={restaurantName}
+        restaurantId={slug}
+        table={table}
+        logoUrl={logoUrl}
+        primaryColor={primaryColor}
+        welcomeMessage={welcomeMessage}
+        upsellData={upsellDataResult ? {
+          pairingRules: upsellDataResult.pairingRules,
+          computedAffinity: upsellDataResult.computedAffinity,
+          completedCount: upsellDataResult.completedCount,
+          menuItems: upsellDataResult.menuItems
+        } : undefined}
+        menuContext={menuContextResult}
+      />
+    </>
   );
 }

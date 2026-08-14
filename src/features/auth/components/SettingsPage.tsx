@@ -6,7 +6,8 @@ import { RootState } from '@/redux/store';
 import QRCode from 'qrcode';
 import { getRestaurantDetails, saveRestaurantBranding } from '@/actions/auth';
 import { PageHeader, AdminButton } from '@/components/ui';
-import { Plus, Trash2, Download, Printer, CheckCircle } from 'lucide-react';
+import { Plus, Trash2, Download, Printer, CheckCircle, Palette, Sparkles, Check, Smartphone, Sliders, ShoppingBag } from 'lucide-react';
+import { THEME_PRESETS, ThemePreset } from '@/config/themes';
 
 export function getBaseAppUrl(): string {
   if (process.env.NEXT_PUBLIC_APP_URL) {
@@ -25,9 +26,16 @@ export default function SettingsPage() {
   const auth = useSelector((state: RootState) => state.auth);
 
   const [logoUrl, setLogoUrl] = useState('');
-  const [primaryColor, setPrimaryColor] = useState('#000000');
+  const [primaryColor, setPrimaryColor] = useState('#C0181A');
   const [welcomeMessage, setWelcomeMessage] = useState('Welcome to our restaurant!');
   const [whatsappNumber, setWhatsappNumber] = useState('9541234068');
+
+  // Business Theme State
+  const [themePreset, setThemePreset] = useState('burgundy');
+  const [themeGradientDark, setThemeGradientDark] = useState('#8B0000');
+  const [themeGradientDarker, setThemeGradientDarker] = useState('#6B0000');
+  const [themeAccentColor, setThemeAccentColor] = useState('#F5C518');
+
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -55,9 +63,13 @@ export default function SettingsPage() {
         const details = await getRestaurantDetails();
         if (details) {
           setLogoUrl(details.logoUrl || '');
-          setPrimaryColor(details.primaryColor || '#000000');
+          setPrimaryColor(details.primaryColor || '#C0181A');
           setWelcomeMessage(details.welcomeMessage || 'Welcome to our restaurant!');
           setWhatsappNumber(details.whatsappNumber || details.phone || '9541234068');
+          setThemePreset(details.themePreset || 'burgundy');
+          setThemeGradientDark(details.themeGradientDark || '#8B0000');
+          setThemeGradientDarker(details.themeGradientDarker || '#6B0000');
+          setThemeAccentColor(details.themeAccentColor || '#F5C518');
           setLoyaltyEnabled(!!details.loyaltyEnabled);
           setCallStaffEnabled(details.callStaffEnabled !== false);
           setStampsRequired(details.stampsRequired ?? 8);
@@ -121,6 +133,14 @@ export default function SettingsPage() {
     }
   };
 
+  const applyPreset = (preset: ThemePreset) => {
+    setThemePreset(preset.id);
+    setPrimaryColor(preset.primaryColor);
+    setThemeGradientDark(preset.gradientDark);
+    setThemeGradientDarker(preset.gradientDarker);
+    setThemeAccentColor(preset.accentColor);
+  };
+
   const handleSaveBranding = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -131,6 +151,10 @@ export default function SettingsPage() {
         primaryColor, 
         welcomeMessage,
         whatsappNumber,
+        themePreset,
+        themeGradientDark,
+        themeGradientDarker,
+        themeAccentColor,
         loyaltyEnabled,
         callStaffEnabled,
         stampsRequired,
@@ -169,6 +193,11 @@ export default function SettingsPage() {
         logoUrl,
         primaryColor,
         welcomeMessage,
+        whatsappNumber,
+        themePreset,
+        themeGradientDark,
+        themeGradientDarker,
+        themeAccentColor,
         loyaltyEnabled,
         callStaffEnabled,
         stampsRequired,
@@ -197,6 +226,10 @@ export default function SettingsPage() {
         primaryColor,
         welcomeMessage,
         whatsappNumber,
+        themePreset,
+        themeGradientDark,
+        themeGradientDarker,
+        themeAccentColor,
         loyaltyEnabled,
         callStaffEnabled,
         stampsRequired,
@@ -249,50 +282,262 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6 max-w-2xl pb-12">
-      <PageHeader title="Settings" subtitle="Configure branding and table QR codes" />
+      <PageHeader title="Settings" subtitle="Configure business themes, branding, and table QR codes" />
 
-      {/* Branding */}
-      <form onSubmit={handleSaveBranding} className="bg-white border border-[#E2E6EA] rounded-xl p-6 flex flex-col gap-5">
-        <div>
-          <h2 className="text-[15px] font-semibold text-[#111827]">Custom Branding</h2>
-          <p className="text-[13px] text-[#6B7280] mt-0.5">Personalize the customer-facing menu appearance</p>
+      {/* Business Themes & Custom Branding */}
+      <form onSubmit={handleSaveBranding} className="bg-white border border-[#E2E6EA] rounded-xl p-6 flex flex-col gap-6 shadow-sm">
+        <div className="flex items-center justify-between border-b border-[#E2E6EA] pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Palette className="w-5 h-5 text-[#C0181A]" />
+              <h2 className="text-base font-bold text-[#111827]">Business Themes & Appearance</h2>
+            </div>
+            <p className="text-[13px] text-[#6B7280] mt-0.5">Select a curated aesthetic for your restaurant type or create custom color gradients.</p>
+          </div>
+          <span className="text-[11px] font-extrabold uppercase bg-[#FEF2F2] text-[#C0181A] px-2.5 py-1 rounded-full border border-[#C0181A]/10">
+            Multi-Business
+          </span>
         </div>
 
         {saveSuccess && (
           <div className="flex items-center gap-2 bg-[#F0FDF4] border border-[#16A34A]/20 rounded-lg p-3 text-sm text-[#16A34A] font-medium">
-            <CheckCircle className="w-4 h-4" /> Settings saved successfully
+            <CheckCircle className="w-4 h-4" /> Theme and branding settings saved successfully!
           </div>
         )}
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Logo URL</label>
-          <input
-            type="url"
-            placeholder="https://example.com/logo.png"
-            value={logoUrl}
-            onChange={(e) => setLogoUrl(e.target.value)}
-            className="px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors"
-          />
+        {/* Theme Presets Grid */}
+        <div className="flex flex-col gap-3">
+          <label className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#374151] flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-[#C0181A]" /> Choose Business Theme Preset
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {THEME_PRESETS.map((preset) => {
+              const isSelected = themePreset === preset.id;
+              return (
+                <div
+                  key={preset.id}
+                  onClick={() => applyPreset(preset)}
+                  className={`relative p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-3 ${
+                    isSelected
+                      ? 'border-[#C0181A] bg-[#FEF2F2]/40 ring-2 ring-[#C0181A]/20 shadow-sm'
+                      : 'border-[#E2E6EA] bg-white hover:border-gray-400 hover:shadow-xs'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-5 h-5 rounded-full border border-black/10 shadow-xs"
+                        style={{ background: preset.previewBg }}
+                      />
+                      <span className="text-xs font-bold text-[#111827]">{preset.name}</span>
+                    </div>
+                    {isSelected ? (
+                      <span className="flex items-center gap-1 text-[10px] font-bold uppercase bg-[#C0181A] text-white px-2 py-0.5 rounded-full">
+                        <Check className="w-3 h-3" /> Active
+                      </span>
+                    ) : (
+                      <div className="flex gap-1">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: preset.primaryColor }} title="Primary" />
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: preset.accentColor }} title="Accent" />
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-[11px] text-[#6B7280] leading-relaxed">{preset.description}</p>
+
+                  <span className="text-[10px] font-semibold text-[#4B5563] bg-[#F3F4F6] px-2 py-1 rounded-md self-start border border-[#E5E7EB]">
+                    {preset.category}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setThemePreset('custom')}
+            className={`mt-1 text-xs font-semibold px-3 py-2 rounded-lg border transition-colors flex items-center justify-center gap-2 ${
+              themePreset === 'custom'
+                ? 'border-[#C0181A] bg-[#C0181A] text-white'
+                : 'border-[#E2E6EA] text-[#374151] hover:bg-[#F9FAFB]'
+            }`}
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            {themePreset === 'custom' ? 'Custom Colors Enabled' : 'Customize Colors Manually'}
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Live Customer Preview */}
+        <div className="bg-[#F8FAFC] border border-[#E2E6EA] rounded-xl p-4 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#475569] flex items-center gap-1.5">
+              <Smartphone className="w-4 h-4 text-[#C0181A]" /> Live Customer App Preview
+            </span>
+            <span className="text-[10px] font-bold text-[#64748B] bg-white px-2 py-0.5 rounded border border-[#E2E6EA]">
+              Real-time
+            </span>
+          </div>
+
+          <div className="rounded-xl overflow-hidden border border-black/10 shadow-md bg-white">
+            {/* Header Gradient Preview */}
+            <div
+              className="p-4 text-white relative overflow-hidden transition-all duration-300"
+              style={{ background: `linear-gradient(135deg, ${themeGradientDark} 0%, ${themeGradientDarker} 100%)` }}
+            >
+              <div className="flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-2.5">
+                  {logoUrl ? (
+                    <img src={logoUrl} alt="Logo" className="w-8 h-8 rounded-lg object-cover bg-white/20 border border-white/30" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-lg bg-white/20 border border-white/30 flex items-center justify-center font-black text-xs">
+                      {auth.restaurantName ? auth.restaurantName.charAt(0) : 'R'}
+                    </div>
+                  )}
+                  <div>
+                    <h3 className="font-extrabold text-sm leading-tight text-white">{auth.restaurantName || 'Your Business Name'}</h3>
+                    <p className="text-[10px] text-white/80 line-clamp-1">{welcomeMessage || 'Welcome to our restaurant!'}</p>
+                  </div>
+                </div>
+                <span className="text-[9px] font-black uppercase px-2 py-1 rounded-full text-black shadow-xs" style={{ backgroundColor: themeAccentColor }}>
+                  Table #1
+                </span>
+              </div>
+            </div>
+
+            {/* Menu Card Sample */}
+            <div className="p-3 bg-[#F8FAFC] flex items-center justify-between gap-3 border-t border-[#E2E6EA]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-lg bg-gray-200 flex items-center justify-center text-gray-400">
+                  <ShoppingBag className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-[#1E293B]">Signature Special Combo</div>
+                  <div className="text-[11px] font-extrabold" style={{ color: primaryColor }}>₹249</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="text-[11px] font-extrabold text-white px-3 py-1.5 rounded-lg uppercase shadow-xs transition-transform active:scale-95 cursor-default"
+                style={{ backgroundColor: primaryColor }}
+              >
+                Add +
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Color Configuration Inputs */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-[#E2E6EA] pt-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Primary Color</label>
+            <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Primary Color (Buttons & Accents)</label>
             <div className="flex gap-2 items-center">
               <input
                 type="color"
                 value={primaryColor}
-                onChange={(e) => setPrimaryColor(e.target.value)}
+                onChange={(e) => {
+                  setPrimaryColor(e.target.value);
+                  setThemePreset('custom');
+                }}
                 className="w-10 h-10 cursor-pointer border border-[#E2E6EA] rounded-lg p-0.5"
               />
               <input
                 type="text"
                 value={primaryColor}
-                onChange={(e) => setPrimaryColor(e.target.value)}
+                onChange={(e) => {
+                  setPrimaryColor(e.target.value);
+                  setThemePreset('custom');
+                }}
                 className="flex-1 px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] font-mono"
               />
             </div>
           </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Accent / CTA Highlight Color</label>
+            <div className="flex gap-2 items-center">
+              <input
+                type="color"
+                value={themeAccentColor}
+                onChange={(e) => {
+                  setThemeAccentColor(e.target.value);
+                  setThemePreset('custom');
+                }}
+                className="w-10 h-10 cursor-pointer border border-[#E2E6EA] rounded-lg p-0.5"
+              />
+              <input
+                type="text"
+                value={themeAccentColor}
+                onChange={(e) => {
+                  setThemeAccentColor(e.target.value);
+                  setThemePreset('custom');
+                }}
+                className="flex-1 px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Gradient Top Shade</label>
+            <div className="flex gap-2 items-center">
+              <input
+                type="color"
+                value={themeGradientDark}
+                onChange={(e) => {
+                  setThemeGradientDark(e.target.value);
+                  setThemePreset('custom');
+                }}
+                className="w-10 h-10 cursor-pointer border border-[#E2E6EA] rounded-lg p-0.5"
+              />
+              <input
+                type="text"
+                value={themeGradientDark}
+                onChange={(e) => {
+                  setThemeGradientDark(e.target.value);
+                  setThemePreset('custom');
+                }}
+                className="flex-1 px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Gradient Bottom Shade</label>
+            <div className="flex gap-2 items-center">
+              <input
+                type="color"
+                value={themeGradientDarker}
+                onChange={(e) => {
+                  setThemeGradientDarker(e.target.value);
+                  setThemePreset('custom');
+                }}
+                className="w-10 h-10 cursor-pointer border border-[#E2E6EA] rounded-lg p-0.5"
+              />
+              <input
+                type="text"
+                value={themeGradientDarker}
+                onChange={(e) => {
+                  setThemeGradientDarker(e.target.value);
+                  setThemePreset('custom');
+                }}
+                className="flex-1 px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] font-mono"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Branding Details */}
+        <div className="flex flex-col gap-4 border-t border-[#E2E6EA] pt-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Logo URL</label>
+            <input
+              type="url"
+              placeholder="https://example.com/logo.png"
+              value={logoUrl}
+              onChange={(e) => setLogoUrl(e.target.value)}
+              className="px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors"
+            />
+          </div>
+
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Welcome Message</label>
             <input
@@ -303,41 +548,41 @@ export default function SettingsPage() {
               className="px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors"
             />
           </div>
-        </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">
-            WhatsApp & Direct Call Number (Emergency / Order Alerts)
-          </label>
-          <input
-            type="tel"
-            placeholder="e.g. 9541234068"
-            value={whatsappNumber}
-            onChange={(e) => setWhatsappNumber(e.target.value)}
-            className="px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors font-mono"
-            required
-          />
-          <span className="text-xs text-[#6B7280]">
-            Customers can send order details directly to this WhatsApp number or call for emergency order confirmation if pending.
-          </span>
-        </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">
+              WhatsApp & Direct Call Number (Emergency / Order Alerts)
+            </label>
+            <input
+              type="tel"
+              placeholder="e.g. 9541234068"
+              value={whatsappNumber}
+              onChange={(e) => setWhatsappNumber(e.target.value)}
+              className="px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors font-mono"
+              required
+            />
+            <span className="text-xs text-[#6B7280]">
+              Customers can send order details directly to this WhatsApp number or call for emergency order confirmation if pending.
+            </span>
+          </div>
 
-        <div className="flex items-center gap-3 bg-[#F4F6F9] border border-[#E2E6EA] rounded-lg p-4">
-          <input
-            type="checkbox"
-            id="callStaffEnabled"
-            checked={callStaffEnabled}
-            onChange={(e) => setCallStaffEnabled(e.target.checked)}
-            className="w-4.5 h-4.5 text-[#C0181A] border-gray-300 rounded focus:ring-[#C0181A]/20 cursor-pointer"
-          />
-          <label htmlFor="callStaffEnabled" className="text-sm font-semibold text-[#111827] cursor-pointer select-none">
-            Enable "Call Staff" Button on Customer App
-            <span className="text-xs text-[#6B7280] font-normal block mt-0.5">Allow customers to ring staff alerts from their table</span>
-          </label>
+          <div className="flex items-center gap-3 bg-[#F4F6F9] border border-[#E2E6EA] rounded-lg p-4">
+            <input
+              type="checkbox"
+              id="callStaffEnabled"
+              checked={callStaffEnabled}
+              onChange={(e) => setCallStaffEnabled(e.target.checked)}
+              className="w-4.5 h-4.5 text-[#C0181A] border-gray-300 rounded focus:ring-[#C0181A]/20 cursor-pointer"
+            />
+            <label htmlFor="callStaffEnabled" className="text-sm font-semibold text-[#111827] cursor-pointer select-none">
+              Enable "Call Staff" Button on Customer App
+              <span className="text-xs text-[#6B7280] font-normal block mt-0.5">Allow customers to ring staff alerts from their table</span>
+            </label>
+          </div>
         </div>
 
         <AdminButton type="submit" loading={saving} className="w-full">
-          Save Branding
+          Save Theme & Branding
         </AdminButton>
       </form>
 

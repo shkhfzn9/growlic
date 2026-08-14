@@ -10,6 +10,10 @@ export interface IAdmin {
   logoUrl?: string;
   primaryColor?: string;
   welcomeMessage?: string;
+  themePreset?: string;
+  themeGradientDark?: string;
+  themeGradientDarker?: string;
+  themeAccentColor?: string;
   loyaltyEnabled?: boolean;
   callStaffEnabled?: boolean;
   stampsRequired?: number;

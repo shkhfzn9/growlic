@@ -379,6 +379,10 @@ export async function updateRestaurantBranding(
     maintenanceEstimatedRestore?: string;
     whatsappNumber?: string;
     phone?: string;
+    themePreset?: string;
+    themeGradientDark?: string;
+    themeGradientDarker?: string;
+    themeAccentColor?: string;
   }
 ) {
   if (!restaurantId) {

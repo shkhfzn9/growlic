@@ -12,6 +12,10 @@ export interface IAdminDocument extends Document {
   logoUrl?: string;
   primaryColor?: string;
   welcomeMessage?: string;
+  themePreset?: string;
+  themeGradientDark?: string;
+  themeGradientDarker?: string;
+  themeAccentColor?: string;
   active?: boolean;
   location?: string;
   loyaltyEnabled?: boolean;
@@ -40,6 +44,10 @@ const AdminSchema: Schema = new Schema<IAdminDocument>(
     logoUrl: { type: String, default: '' },
     primaryColor: { type: String, default: '#000000' },
     welcomeMessage: { type: String, default: 'Welcome to our restaurant!' },
+    themePreset: { type: String, default: 'burgundy' },
+    themeGradientDark: { type: String, default: '#8B0000' },
+    themeGradientDarker: { type: String, default: '#6B0000' },
+    themeAccentColor: { type: String, default: '#F5C518' },
     active: { type: Boolean, default: true, required: true },
     location: { type: String, default: 'Tokyo', required: true },
     loyaltyEnabled: { type: Boolean, default: false },
