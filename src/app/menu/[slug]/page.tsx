@@ -1,5 +1,5 @@
 import React from 'react';
-import { getRestaurantMenuContext } from '@/actions/menu';
+import { getCachedRestaurantMenuContext } from '@/actions/menu';
 import MenuList from '@/features/menu/components/MenuList';
 import Link from 'next/link';
 
@@ -52,7 +52,7 @@ export default async function MenuPage({ params, searchParams }: PageProps) {
   let welcomeMessage = 'Welcome to our restaurant!';
 
   try {
-    const context = await getRestaurantMenuContext(slug);
+    const context = await getCachedRestaurantMenuContext(slug);
     menuContextResult = context;
     const admin = context.admin;
     upsellDataResult = context.upsellConfig;

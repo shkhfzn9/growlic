@@ -33,7 +33,7 @@ export function normalizeDiscountTier(doc: any): IDiscountTier {
  */
 export async function findAll(restaurantId: string): Promise<IDiscountTier[]> {
   await dbConnect();
-  const docs = await DiscountTier.find({ restaurantId }).sort({ minSpend: 1 });
+  const docs = await DiscountTier.find({ restaurantId }).sort({ minSpend: 1 }).lean();
   return docs.map(normalizeDiscountTier);
 }
 
@@ -46,7 +46,7 @@ export async function findAll(restaurantId: string): Promise<IDiscountTier[]> {
  */
 export async function findActive(restaurantId: string): Promise<IDiscountTier[]> {
   await dbConnect();
-  const docs = await DiscountTier.find({ restaurantId, active: true }).sort({ minSpend: 1 });
+  const docs = await DiscountTier.find({ restaurantId, active: true }).sort({ minSpend: 1 }).lean();
   return docs.map(normalizeDiscountTier);
 }
 

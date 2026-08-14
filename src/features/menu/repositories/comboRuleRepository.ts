@@ -35,7 +35,7 @@ export function normalizeComboRule(doc: any): IComboRule {
  */
 export async function findAll(restaurantId: string): Promise<IComboRule[]> {
   await dbConnect();
-  const docs = await ComboRule.find({ restaurantId });
+  const docs = await ComboRule.find({ restaurantId }).lean();
   return docs.map(normalizeComboRule);
 }
 
@@ -47,7 +47,7 @@ export async function findAll(restaurantId: string): Promise<IComboRule[]> {
  */
 export async function findActive(restaurantId: string): Promise<IComboRule[]> {
   await dbConnect();
-  const docs = await ComboRule.find({ restaurantId, active: true });
+  const docs = await ComboRule.find({ restaurantId, active: true }).lean();
   return docs.map(normalizeComboRule);
 }
 

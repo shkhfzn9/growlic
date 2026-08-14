@@ -271,6 +271,25 @@ export async function getRestaurantMenuContext(restaurantId: string) {
 }
 
 /**
+ * Cached wrapper for getRestaurantMenuContext using Next.js Data Cache.
+ * Caches menu data for 5 minutes fallback or until revalidateTag(`menu-${slug}`) is invoked.
+ */
+export async function getCachedRestaurantMenuContext(restaurantId: string) {
+  if (!restaurantId) {
+    throw new Error('Restaurant ID is required');
+  }
+  const slug = restaurantId.toLowerCase();
+  return unstable_cache(
+    async () => getRestaurantMenuContext(slug),
+    [`restaurant-menu-context-${slug}`],
+    {
+      revalidate: 300,
+      tags: [`menu-${slug}`],
+    }
+  )();
+}
+
+/**
  * Server action to adjust all menu item prices by a specified amount (e.g. +₹1 or -₹1).
  * Triggers Next.js page revalidation.
  * 

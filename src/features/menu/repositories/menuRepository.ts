@@ -51,7 +51,7 @@ export function normalizeMenuItem(doc: any): IMenuItem {
  */
 export async function findAll(restaurantId: string): Promise<IMenuItem[]> {
   await dbConnect();
-  const docs = await Menu.find({ restaurantId }).sort({ category: 1, name: 1 });
+  const docs = await Menu.find({ restaurantId }).sort({ category: 1, name: 1 }).lean();
   return docs.map(normalizeMenuItem);
 }
 
@@ -64,7 +64,7 @@ export async function findAll(restaurantId: string): Promise<IMenuItem[]> {
  */
 export async function findById(restaurantId: string, id: string): Promise<IMenuItem | null> {
   await dbConnect();
-  const doc = await Menu.findOne({ _id: id, restaurantId });
+  const doc = await Menu.findOne({ _id: id, restaurantId }).lean();
   return doc ? normalizeMenuItem(doc) : null;
 }
 

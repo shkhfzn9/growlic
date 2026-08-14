@@ -32,7 +32,7 @@ export function normalizePairingRule(doc: any): IPairingRule {
  */
 export async function findAll(restaurantId: string): Promise<IPairingRule[]> {
   await dbConnect();
-  const docs = await PairingRule.find({ restaurantId });
+  const docs = await PairingRule.find({ restaurantId }).lean();
   return docs.map(normalizePairingRule);
 }
 
@@ -44,7 +44,7 @@ export async function findAll(restaurantId: string): Promise<IPairingRule[]> {
  */
 export async function findActive(restaurantId: string): Promise<IPairingRule[]> {
   await dbConnect();
-  const docs = await PairingRule.find({ restaurantId, active: true });
+  const docs = await PairingRule.find({ restaurantId, active: true }).lean();
   return docs.map(normalizePairingRule);
 }
 
