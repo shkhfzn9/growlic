@@ -28,6 +28,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 
+import PwaInstallBanner from '@/components/pwa/PwaInstallBanner';
+
 interface PlainSopTask {
   _id: string;
   batchName: string;
@@ -158,6 +160,26 @@ export default function StaffTrackerPage({
 
   useEffect(() => {
     loadData();
+  }, [restaurantId]);
+
+  // Auto-refresh when staff opens the PWA or returns to foreground (e.g. next morning)
+  useEffect(() => {
+    let lastDate = new Date().toDateString();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const currentDate = new Date().toDateString();
+        if (currentDate !== lastDate) {
+          lastDate = currentDate;
+          loadData();
+        } else {
+          loadData();
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [restaurantId]);
 
   const toggleBatchCollapse = (batchName: string) => {
@@ -331,6 +353,11 @@ export default function StaffTrackerPage({
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-[#111827] flex flex-col font-sans pb-16">
+      <PwaInstallBanner
+        appName="Staff SOP Tracker"
+        manifestPath={`/api/manifest/staff-tracker/${restaurantId}`}
+        themeColor="#10B981"
+      />
       {/* Sleek Dark Brand Header */}
       <header className="sticky top-0 z-30 bg-[#0F172A] text-white border-b border-slate-800 px-4 py-3.5 shadow-md">
         <div className="max-w-xl mx-auto flex items-center justify-between">

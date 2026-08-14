@@ -35,6 +35,7 @@ import {
   seedSampleExpenseDataAction,
 } from '@/actions/expense';
 import { Edit2, Trash2 } from 'lucide-react';
+import PwaInstallBanner from '@/components/pwa/PwaInstallBanner';
 
 const UNIT_OPTIONS: Array<{ value: ExpenseUnit; label: string }> = [
   { value: 'kg', label: 'Kilogram (kg)' },
@@ -121,6 +122,26 @@ export default function PublicExpenseTrackerPage({
 
   useEffect(() => {
     loadData();
+  }, [loadData]);
+
+  // Auto-refresh data when staff opens the PWA or returns to foreground (e.g. next morning)
+  useEffect(() => {
+    let lastDate = new Date().toDateString();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const currentDate = new Date().toDateString();
+        if (currentDate !== lastDate) {
+          lastDate = currentDate;
+          loadData();
+        } else {
+          loadData();
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [loadData]);
 
   // Keep selectedItemId valid when items list changes
@@ -343,6 +364,11 @@ export default function PublicExpenseTrackerPage({
       )}
 
       {/* Top Header Bar */}
+      <PwaInstallBanner
+        appName="Daily Expense Tracker"
+        manifestPath={`/api/manifest/expense-tracker/${restaurantId}`}
+        themeColor="#3B82F6"
+      />
       <header className="bg-[#1C2333] text-white border-b border-white/10 sticky top-0 z-30 shadow-md">
         <div className="max-w-4xl mx-auto px-4 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
