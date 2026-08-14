@@ -7,6 +7,7 @@ import { RootState } from '@/redux/store';
 import { logout } from '@/redux/authSlice';
 import { Sidebar, MobileHeader } from '@/components/layout';
 import { OrderNotificationProvider } from '@/components/providers';
+import PwaInstallBanner from '@/components/pwa/PwaInstallBanner';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -21,7 +22,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, []);
 
   if (pathname === '/admin/login' || pathname === '/admin/register') {
-    return <>{children}</>;
+    return (
+      <>
+        <PwaInstallBanner
+          appName="Growlic Admin"
+          manifestPath="/api/manifest/admin"
+          themeColor="#C0181A"
+        />
+        {children}
+      </>
+    );
   }
 
   const handleLogout = async () => {
@@ -38,6 +48,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <OrderNotificationProvider>
+      <PwaInstallBanner
+        appName="Growlic Admin"
+        manifestPath="/api/manifest/admin"
+        themeColor="#C0181A"
+      />
       <div className="flex flex-col md:flex-row min-h-screen bg-[#F4F6F9]">
         {mounted && (
           <>
