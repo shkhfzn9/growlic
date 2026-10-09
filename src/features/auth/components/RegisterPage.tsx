@@ -2,16 +2,20 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Sparkles, CheckCircle, AlertCircle, Building2, Check, X, ArrowRight, Scissors, Car, ShoppingBag, Briefcase, Utensils } from 'lucide-react';
+import { BUSINESS_CATEGORIES } from '@/config/themes';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
+  const [businessCategory, setBusinessCategory] = useState('restaurant');
   const [designation, setDesignation] = useState('owner');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -75,17 +79,27 @@ export default function RegisterPage() {
     setError('');
 
     if (slugAvailable === false) {
-      setError('The selected Restaurant ID is already taken. Please choose another one.');
+      setError('The selected Business ID is already taken. Please choose another one.');
       return;
     }
 
-    if (!name.trim() || !slug.trim() || !email.trim() || !password.trim() || !phone.trim() || !designation) {
+    if (!name.trim() || !slug.trim() || !email.trim() || !password.trim() || !confirmPassword.trim() || !phone.trim() || !designation) {
       setError('Please fill in all fields.');
       return;
     }
 
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match. Please re-enter matching passwords.');
+      return;
+    }
+
     if (slug.length < 3) {
-      setError('Restaurant ID slug must be at least 3 characters.');
+      setError('Business ID slug must be at least 3 characters.');
       return;
     }
 
@@ -107,211 +121,419 @@ export default function RegisterPage() {
           password,
           phone,
           designation,
+          businessCategory,
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Registration failed');
+        setError(data.error || 'Registration failed');
+        setLoading(false);
+        return;
       }
 
       setSuccess(true);
     } catch (err) {
-      console.error(err);
-      setError(err instanceof Error ? err.message : 'Registration failed. Please try again.');
+      setError('Unable to connect to registration service. Please check your connection.');
     } finally {
       setLoading(false);
     }
   };
 
+  const getBusinessTitle = () => {
+    switch (businessCategory) {
+      case 'salon': return 'Salon / Spa Name';
+      case 'detailing': return 'Studio / Showroom Name';
+      case 'retail': return 'Store / Boutique Name';
+      case 'services': return 'Business / Agency Name';
+      default: return 'Restaurant / Cafe Name';
+    }
+  };
+
+  const getBusinessPlaceholder = () => {
+    switch (businessCategory) {
+      case 'salon': return 'e.g. Velvet Touch Salon & Spa';
+      case 'detailing': return 'e.g. Apex Auto Detailing Studio';
+      case 'retail': return 'e.g. Urban Threads Apparel';
+      case 'services': return 'e.g. Horizon Media Solutions';
+      default: return 'e.g. Srinagar Dumpling House';
+    }
+  };
+
+  const getBusinessCardDesc = () => {
+    switch (businessCategory) {
+      case 'salon': return 'Create your digital service catalog & appointment system';
+      case 'detailing': return 'Create your detailing package catalog & booking system';
+      case 'retail': return 'Create your digital product catalog & order system';
+      case 'services': return 'Create your service package & client billing system';
+      default: return 'Create your digital menu & order management account';
+    }
+  };
+
+  const getBusinessHeaderSub = () => {
+    switch (businessCategory) {
+      case 'salon': return 'Register Salon & Spa';
+      case 'detailing': return 'Register Detailing Studio';
+      case 'retail': return 'Register Store & Boutique';
+      case 'services': return 'Register Business Profile';
+      default: return 'Register Restaurant';
+    }
+  };
+
+  const getBusinessSubmitText = () => {
+    switch (businessCategory) {
+      case 'salon': return 'Register Salon & Spa';
+      case 'detailing': return 'Register Detailing Studio';
+      case 'retail': return 'Register Store & Boutique';
+      case 'services': return 'Register Business Profile';
+      default: return 'Register Restaurant';
+    }
+  };
+
+  const getBusinessCatalogLabel = () => {
+    switch (businessCategory) {
+      case 'salon': return 'digital catalog';
+      case 'detailing': return 'detailing catalog';
+      case 'retail': return 'store catalog';
+      case 'services': return 'service catalog';
+      default: return 'digital menu';
+    }
+  };
+
+  const getBusinessSeedSummary = () => {
+    switch (businessCategory) {
+      case 'salon':
+        return [
+          'Seeded sample treatments (Haircut & Styling, Keratin Therapy, Hydra Facial).',
+          'Setup initial 10% Package Discount Tier at ₹399.',
+          'Created cross-pairing rules for Hair & Spa therapy.',
+        ];
+      case 'detailing':
+        return [
+          'Seeded sample packages (9H Ceramic Coating, Interior Spa, Foam Wash).',
+          'Setup initial 10% Package Discount Tier at ₹399.',
+          'Created cross-pairing rules for Coating & Detailing washes.',
+        ];
+      case 'retail':
+        return [
+          'Seeded sample products (Hoodies, Jackets, Sneakers).',
+          'Setup initial 10% Discount Tier at ₹399.',
+          'Created category combo discount rules.',
+        ];
+      default:
+        return [
+          'Seeded sample menu items (Momos, Soda, Biryani).',
+          'Setup initial 10% Discount Tier at ₹399.',
+          'Created 50% discount category combo rules.',
+        ];
+    }
+  };
+
   if (success) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-white font-mono-custom text-center">
-        <div className="w-full max-w-md border border-black p-8 bg-white flex flex-col gap-6 shadow-md">
-          {/* Success Header */}
-          <div className="border-b border-black pb-4 text-center">
-            <h1 className="text-xl font-bold uppercase tracking-tight">Registration Complete!</h1>
-            <span className="text-[10px] text-zinc-500 uppercase">Restaurant Multi-Tenant System</span>
+      <div className="min-h-screen bg-[#1C2333] flex flex-col items-center justify-center p-6 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-[#1C2333] via-[#111827] to-[#0A0F1D]" />
+        <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-gradient-to-t from-[#C0181A]/10 to-transparent" />
+
+        <div className="relative z-10 w-full max-w-md">
+          {/* Logo Header */}
+          <div className="text-center mb-6">
+            <h1 className="text-3xl font-black text-white tracking-tight flex items-center justify-center gap-2">
+              Growlic
+              <span className="bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide leading-none">Beta</span>
+            </h1>
+            <p className="text-white/50 text-xs mt-1 font-medium uppercase tracking-wider">Multi-Tenant Platform</p>
           </div>
 
-          <p className="text-xs text-zinc-655 text-left leading-relaxed">
-            Your restaurant <strong>{name.toUpperCase()}</strong> (ID: <code>{slug}</code>) has been successfully registered on the platform!
-          </p>
+          <div className="bg-white rounded-3xl shadow-2xl p-6 sm:p-8 flex flex-col gap-6 text-center border border-gray-100">
+            <div className="bg-emerald-50 text-emerald-600 rounded-full w-16 h-16 flex items-center justify-center mx-auto shadow-inner border border-emerald-200">
+              <CheckCircle className="w-9 h-9" />
+            </div>
 
-          <div className="border border-dashed border-black p-4 bg-zinc-50 text-left text-xs space-y-2 uppercase">
-            <strong className="text-[10px] text-black">🚀 Seeding Complete:</strong>
-            <ul className="list-disc pl-4 space-y-1 text-zinc-600 text-[10px] normal-case">
-              <li>Created default menu items (Veg Steamed Momos, Chicken Fried Momos, Soda, Spicy Noodles).</li>
-              <li>Setup initial 10% Discount Tier rule at ₹399.</li>
-              <li>Setup default category pairing rules and a 50% discount combo rule.</li>
-            </ul>
+            <div>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
+                Registration Successful
+              </span>
+              <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight mt-3">
+                {name}
+              </h2>
+              <p className="text-xs text-gray-500 font-mono mt-1">ID: {slug}</p>
+            </div>
+
+            <div className="bg-gradient-to-br from-gray-50 to-slate-50 border border-gray-200 rounded-2xl p-4 text-left text-xs space-y-2">
+              <div className="flex items-center gap-1.5 text-gray-900 font-extrabold text-xs uppercase tracking-wider">
+                <Sparkles className="w-4 h-4 text-yellow-500 fill-current animate-pulse" />
+                <span>Automatic Setup Complete</span>
+              </div>
+              <ul className="space-y-1.5 text-gray-600 text-[11px] font-medium pt-1">
+                {getBusinessSeedSummary().map((item, idx) => (
+                  <li key={idx} className="flex items-center gap-2">
+                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Your {getBusinessCatalogLabel()} is live at <code className="text-[#C0181A] font-bold">growlic.com/menu/{slug}</code>. Log in to manage orders, customize pricing, or set up themes.
+            </p>
+
+            <Link
+              href="/admin/login"
+              className="w-full bg-gradient-to-r from-[#C0181A] to-[#8B0000] hover:from-[#A01012] hover:to-[#6B0000] text-white font-extrabold text-sm py-4 rounded-2xl uppercase tracking-wider transition-all shadow-lg active:scale-[0.98] flex items-center justify-center gap-2"
+            >
+              <span>Log In To Admin Panel</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
           </div>
-
-          <p className="text-[11px] text-zinc-500 text-left leading-relaxed">
-            You can now immediately scan your table QR code to start receiving test orders, or log in to the admin panel to update your custom pricing and menu dishes.
-          </p>
-
-          <Link
-            href="/admin/login"
-            className="border-2 border-black w-full py-3 text-xs font-bold uppercase bg-black text-white hover:bg-white hover:text-black transition-all cursor-pointer text-center"
-          >
-            [ LOG IN TO YOUR PANEL ]
-          </Link>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-white font-mono-custom">
-      <div className="w-full max-w-md border border-black p-5 sm:p-8 bg-white shadow-sm">
-        {/* Header */}
-        <div className="border-b border-black pb-4 mb-6 text-center">
-          <h1 className="text-xl font-bold uppercase tracking-tighter">Register Restaurant</h1>
-          <span className="text-[10px] text-zinc-500 uppercase">Onboard your restaurant to Growlic platform</span>
+    <div className="min-h-screen bg-[#1C2333] flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      {/* Background accents */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#1C2333] via-[#111827] to-[#0A0F1D]" />
+      <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-gradient-to-t from-[#C0181A]/10 to-transparent" />
+
+      <div className="relative z-10 w-full max-w-md">
+        {/* Brand Header */}
+        <div className="text-center mb-6">
+          <h1 className="text-3xl font-black text-white tracking-tight flex items-center justify-center gap-2">
+            Growlic
+            <span className="bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide leading-none">Beta</span>
+          </h1>
+          <p className="text-white/50 text-xs mt-1 font-semibold uppercase tracking-wider">{getBusinessHeaderSub()}</p>
         </div>
 
-        {/* Error message */}
-        {error && (
-          <div className="border border-black p-3 text-xs bg-zinc-100 font-bold text-red-600 uppercase mb-4">
-            ⚠️ {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {/* Restaurant Name */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold uppercase">Restaurant Name</label>
-            <input
-              type="text"
-              placeholder="e.g. Srinagar Dumpling House"
-              value={name}
-              onChange={handleNameChange}
-              disabled={loading}
-              className="w-full text-xs font-mono-custom"
-              required
-              autoFocus
-            />
-          </div>
-
-          {/* Restaurant ID (Slug) */}
-          <div className="flex flex-col gap-1">
-            <div className="flex justify-between items-center">
-              <label className="text-[10px] font-bold uppercase">Restaurant ID / URL Slug</label>
-              {slug.length >= 3 && (
-                <span className="text-[9px] font-bold uppercase">
-                  {slugChecking ? (
-                    <span className="text-zinc-500">Checking...</span>
-                  ) : slugAvailable === true ? (
-                    <span className="text-green-600">✔ Available</span>
-                  ) : slugAvailable === false ? (
-                    <span className="text-red-650">❌ Already Taken</span>
-                  ) : null}
-                </span>
-              )}
+        {/* Card */}
+        <div className="bg-white rounded-3xl shadow-2xl p-6 sm:p-8 border border-gray-100">
+          <div className="text-center mb-6">
+            <div className="w-12 h-12 rounded-2xl bg-red-50 text-[#C0181A] flex items-center justify-center mx-auto mb-3 shadow-inner">
+              <Building2 className="w-6 h-6" />
             </div>
-            <input
-              type="text"
-              placeholder="e.g. srinagar-dumplings"
-              value={slug}
-              onChange={handleSlugChange}
-              disabled={loading}
-              className={`w-full text-xs font-mono-custom lowercase ${
-                slugAvailable === true ? 'border-green-600 focus:border-green-600' :
-                slugAvailable === false ? 'border-red-650 focus:border-red-650' : ''
-              }`}
-              required
-            />
-            <span className="text-[9px] text-zinc-400 uppercase leading-normal">
-              Used in table QR URLs: <code>growlic.com/menu/{slug || 'your-slug'}</code>
-            </span>
+            <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight">Onboard Your Business</h2>
+            <p className="text-xs text-gray-500 mt-1 font-medium">{getBusinessCardDesc()}</p>
           </div>
 
-          {/* Contact details */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold uppercase">Phone Number</label>
-              <input
-                type="tel"
-                maxLength={10}
-                placeholder="9876543210"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                disabled={loading}
-                className="w-full text-xs font-mono-custom"
-                required
-              />
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-50 text-red-700 text-xs font-semibold rounded-2xl p-3.5 mb-5 border border-red-200/60 flex items-center gap-2.5">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+              <span>{error}</span>
             </div>
-            
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold uppercase">Designation</label>
+          )}
+
+          <form onSubmit={handleSubmit} autoComplete="off" className="flex flex-col gap-4">
+            {/* Business Industry Category */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-extrabold uppercase tracking-wider text-gray-700">Business Type / Industry</label>
               <select
-                value={designation}
-                onChange={(e) => setDesignation(e.target.value)}
+                value={businessCategory}
+                onChange={(e) => setBusinessCategory(e.target.value)}
                 disabled={loading}
-                className="w-full text-xs border border-black p-2 bg-white rounded-none uppercase font-mono-custom"
+                className="w-full text-xs px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 text-gray-900 font-bold uppercase outline-none focus:bg-white focus:border-[#C0181A] focus:ring-4 focus:ring-[#C0181A]/10 transition-all cursor-pointer"
               >
-                <option value="owner">Owner</option>
-                <option value="manager">Manager</option>
+                {BUSINESS_CATEGORIES.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.icon} {cat.name}
+                  </option>
+                ))}
               </select>
             </div>
-          </div>
 
-          {/* Email */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold uppercase">Admin Email</label>
-            <input
-              type="email"
-              placeholder="manager@myrestaurant.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={loading}
-              className="w-full text-xs font-mono-custom"
-              required
-            />
-          </div>
-
-          {/* Password */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold uppercase">Password</label>
-            <div className="relative flex items-center">
+            {/* Business Name */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-extrabold uppercase tracking-wider text-gray-700">{getBusinessTitle()}</label>
               <input
-                type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                type="text"
+                name="new_business_name"
+                autoComplete="off"
+                placeholder={getBusinessPlaceholder()}
+                value={name}
+                onChange={handleNameChange}
                 disabled={loading}
-                className="w-full text-xs font-mono-custom pr-10"
+                className="w-full text-xs px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 text-gray-900 font-semibold outline-none focus:bg-white focus:border-[#C0181A] focus:ring-4 focus:ring-[#C0181A]/10 transition-all"
+                required
+                autoFocus
+              />
+            </div>
+
+            {/* Business ID (Slug) */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex justify-between items-center">
+                <label className="text-[11px] font-extrabold uppercase tracking-wider text-gray-700">Business ID / Slug</label>
+                {slug.length >= 3 && (
+                  <span className="text-[10px] font-black uppercase flex items-center gap-1">
+                    {slugChecking ? (
+                      <span className="text-gray-400">Checking...</span>
+                    ) : slugAvailable === true ? (
+                      <span className="text-emerald-600 flex items-center gap-0.5">
+                        <Check className="w-3 h-3" /> Available
+                      </span>
+                    ) : slugAvailable === false ? (
+                      <span className="text-red-600 flex items-center gap-0.5">
+                        <X className="w-3 h-3" /> Already Taken
+                      </span>
+                    ) : null}
+                  </span>
+                )}
+              </div>
+              <input
+                type="text"
+                name="new_business_slug"
+                autoComplete="off"
+                placeholder="e.g. srinagar-dumplings"
+                value={slug}
+                onChange={handleSlugChange}
+                disabled={loading}
+                className={`w-full text-xs px-4 py-3 rounded-xl border bg-gray-50/50 text-gray-900 font-mono font-semibold lowercase outline-none focus:bg-white transition-all ${
+                  slugAvailable === true
+                    ? 'border-emerald-500 focus:border-emerald-600 focus:ring-4 focus:ring-emerald-500/10'
+                    : slugAvailable === false
+                    ? 'border-red-500 focus:border-red-600 focus:ring-4 focus:ring-red-500/10'
+                    : 'border-gray-200 focus:border-[#C0181A] focus:ring-4 focus:ring-[#C0181A]/10'
+                }`}
                 required
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-black cursor-pointer bg-transparent border-0 focus:outline-none flex items-center justify-center"
-                title={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+              <span className="text-[10px] text-gray-400 font-medium leading-tight">
+                Menu URL: <code className="text-gray-700 font-semibold">growlic.com/menu/{slug || 'your-id'}</code>
+              </span>
             </div>
+
+            {/* Contact details */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-extrabold uppercase tracking-wider text-gray-700">Phone</label>
+                <input
+                  type="tel"
+                  name="new_user_phone"
+                  autoComplete="off"
+                  maxLength={10}
+                  placeholder="9876543210"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+                  disabled={loading}
+                  className="w-full text-xs px-3.5 py-3 rounded-xl border border-gray-200 bg-gray-50/50 text-gray-900 font-semibold outline-none focus:bg-white focus:border-[#C0181A] focus:ring-4 focus:ring-[#C0181A]/10 transition-all"
+                  required
+                />
+              </div>
+              
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-extrabold uppercase tracking-wider text-gray-700">Role</label>
+                <select
+                  value={designation}
+                  onChange={(e) => setDesignation(e.target.value)}
+                  disabled={loading}
+                  className="w-full text-xs px-3.5 py-3 rounded-xl border border-gray-200 bg-gray-50/50 text-gray-900 font-bold uppercase outline-none focus:bg-white focus:border-[#C0181A] focus:ring-4 focus:ring-[#C0181A]/10 transition-all cursor-pointer"
+                >
+                  <option value="owner">Owner</option>
+                  <option value="manager">Manager</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Admin Email */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-extrabold uppercase tracking-wider text-gray-700">Admin Email</label>
+              <input
+                type="email"
+                name="new_user_email"
+                autoComplete="off"
+                placeholder="e.g. owner@mybusiness.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
+                className="w-full text-xs px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 text-gray-900 font-semibold outline-none focus:bg-white focus:border-[#C0181A] focus:ring-4 focus:ring-[#C0181A]/10 transition-all"
+                required
+              />
+            </div>
+
+            {/* Password */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-extrabold uppercase tracking-wider text-gray-700">Password</label>
+              <div className="relative flex items-center">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  name="new_user_password"
+                  autoComplete="new-password"
+                  placeholder="At least 6 characters"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                  className="w-full text-xs px-4 py-3 pr-10 rounded-xl border border-gray-200 bg-gray-50/50 text-gray-900 font-semibold outline-none focus:bg-white focus:border-[#C0181A] focus:ring-4 focus:ring-[#C0181A]/10 transition-all"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 p-1 text-gray-400 hover:text-gray-700 transition-colors cursor-pointer"
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Confirm Password */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-extrabold uppercase tracking-wider text-gray-700">Confirm Password</label>
+              <div className="relative flex items-center">
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  name="new_user_confirm_password"
+                  autoComplete="new-password"
+                  placeholder="Re-enter password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={loading}
+                  className={`w-full text-xs px-4 py-3 pr-10 rounded-xl border bg-gray-50/50 text-gray-900 font-semibold outline-none focus:bg-white transition-all ${
+                    confirmPassword && confirmPassword !== password
+                      ? 'border-red-500 focus:border-red-600 focus:ring-4 focus:ring-red-500/10'
+                      : confirmPassword && confirmPassword === password
+                      ? 'border-emerald-500 focus:border-emerald-600 focus:ring-4 focus:ring-emerald-500/10'
+                      : 'border-gray-200 focus:border-[#C0181A] focus:ring-4 focus:ring-[#C0181A]/10'
+                  }`}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 p-1 text-gray-400 hover:text-gray-700 transition-colors cursor-pointer"
+                  title={showConfirmPassword ? "Hide password" : "Show password"}
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-[#C0181A] to-[#8B0000] hover:from-[#A01012] hover:to-[#6B0000] text-white font-extrabold text-xs py-4 rounded-2xl uppercase tracking-wider transition-all shadow-lg active:scale-[0.98] disabled:opacity-50 mt-2 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Creating Profile...</span>
+                </>
+              ) : (
+                <span>{getBusinessSubmitText()}</span>
+              )}
+            </button>
+          </form>
+
+          <div className="mt-6 pt-4 border-t border-gray-100 text-center">
+            <Link
+              href="/admin/login"
+              className="inline-block text-xs font-extrabold text-gray-500 hover:text-[#C0181A] transition-colors uppercase tracking-wider"
+            >
+              ← Back to Login
+            </Link>
           </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="border-2 border-black w-full py-2.5 text-xs font-bold uppercase bg-black text-white hover:bg-white hover:text-black transition-all cursor-pointer disabled:opacity-50 mt-2"
-          >
-            {loading ? 'CREATING PROFILE...' : '[ REGISTER RESTAURANT ]'}
-          </button>
-        </form>
-
-        <div className="mt-6 pt-4 border-t border-dashed border-black/20 text-center font-mono-custom">
-          <Link
-            href="/admin/login"
-            className="inline-block text-xs font-bold uppercase underline hover:no-underline hover:text-zinc-650 transition-colors"
-          >
-            ← Back to Login
-          </Link>
         </div>
       </div>
     </div>

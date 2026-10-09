@@ -161,6 +161,7 @@ export default async function MenuPage({ params, searchParams }: PageProps) {
           menuItems: upsellDataResult.menuItems
         } : undefined}
         menuContext={menuContextResult}
+        businessCategory={menuContextResult?.admin?.businessCategory}
       />
     </>
   );

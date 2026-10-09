@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { getDashboardMetrics, updateOrderStatus, updateOrderEstimatedTime } from '@/actions/orders';
+import { getRestaurantDetails } from '@/actions/auth';
+import { getVocabulary } from '@/config/businessVocabulary';
 import { useOrderNotification } from '@/components/providers';
 import Link from 'next/link';
 import {
@@ -199,6 +201,28 @@ function Section({ title, badge, description, defaultOpen = false, children }: {
 export default function DashboardPage() {
   const { acknowledgeOrder } = useOrderNotification();
   const [datePreset, setDatePreset] = useState<'7d' | '30d' | 'custom'>('30d');
+  const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
+
+  useEffect(() => {
+    const fetchBusinessInfo = async () => {
+      try {
+        const details = await getRestaurantDetails();
+        if (details?.businessCategory) {
+          setBusinessCategory(details.businessCategory);
+        } else if (details?.themePreset === 'rose_quartz' || details?.themePreset === 'velvet_noir') {
+          setBusinessCategory('salon');
+        } else if (details?.themePreset === 'carbon_crimson' || details?.themePreset === 'cyber_cyan') {
+          setBusinessCategory('detailing');
+        }
+      } catch (err) {
+        console.error('Failed to load business details in dashboard:', err);
+      }
+    };
+
+    fetchBusinessInfo();
+  }, []);
+
+  const vocab = getVocabulary(businessCategory);
 
   const getInitialDates = () => {
     const today = new Date();
@@ -1034,10 +1058,14 @@ export default function DashboardPage() {
                 )}
               </div>
               <div className="bg-[#F4F6F9] rounded-lg p-4">
-                <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] mb-2">Party Size (Proxy)</h4>
+                <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] mb-2">
+                  {businessCategory === 'restaurant' ? 'Party Size (Proxy)' : `${vocab.itemNoun} Volume (Proxy)`}
+                </h4>
                 <div className="flex items-baseline gap-2">
                   <span className="text-[24px] font-bold text-[#111827]">{metrics.customerBehavior.avgPartySizeProxy.toFixed(1)}</span>
-                  <span className="text-[12px] text-[#6B7280]">items per table</span>
+                  <span className="text-[12px] text-[#6B7280]">
+                    items per {vocab.tableNoun.split(' ')[0].toLowerCase() || 'order'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1048,19 +1076,43 @@ export default function DashboardPage() {
       </Section>
 
       {/* Operational Signals */}
-      <Section title="Operational Signals" badge="Kitchen" description="Spice distribution and allergen prep requirements.">
+      <Section
+        title="Operational Signals"
+        badge={vocab.prepArea}
+        description={
+          businessCategory === 'salon'
+            ? 'Treatment duration and products used analysis.'
+            : businessCategory === 'detailing'
+            ? 'Work & cure time distribution and package signals.'
+            : businessCategory === 'retail'
+            ? 'Fulfillment packing times and product material signals.'
+            : 'Spice distribution and allergen prep requirements.'
+        }
+      >
         {metrics?.operationalSignals ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="bg-[#F4F6F9] rounded-lg p-4">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] mb-4">Spice Level Distribution</h3>
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] mb-4">
+                {businessCategory === 'salon'
+                  ? 'Service Duration Distribution'
+                  : businessCategory === 'detailing'
+                  ? 'Work & Cure Duration Breakdown'
+                  : businessCategory === 'retail'
+                  ? 'Dispatch & Packing Time Breakdown'
+                  : 'Spice Level Distribution'}
+              </h3>
               {(() => {
                 const { mild, medium, hot } = metrics.operationalSignals.spiceDistribution;
                 const total = mild + medium + hot || 1;
+                const label1 = businessCategory === 'salon' ? 'Express (<30m)' : businessCategory === 'detailing' ? 'Express Wash (<60m)' : businessCategory === 'retail' ? 'Express (<10m)' : 'Mild';
+                const label2 = businessCategory === 'salon' ? 'Standard (30-60m)' : businessCategory === 'detailing' ? 'Full Detail (60-180m)' : businessCategory === 'retail' ? 'Standard (10-30m)' : 'Medium';
+                const label3 = businessCategory === 'salon' ? 'Deep Treatment (>60m)' : businessCategory === 'detailing' ? 'Ceramic Coating (>180m)' : businessCategory === 'retail' ? 'Special Order (>30m)' : 'Hot / Extra Spicy';
+
                 return (
                   <div className="flex flex-col gap-3">
                     <div>
                       <div className="flex justify-between text-sm mb-1">
-                        <span className="text-[#6B7280]">Mild</span>
+                        <span className="text-[#6B7280]">{label1}</span>
                         <span className="font-medium">{mild} ({((mild / total) * 100).toFixed(0)}%)</span>
                       </div>
                       <div className="w-full bg-[#E2E6EA] h-2 rounded-full overflow-hidden">
@@ -1069,7 +1121,7 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <div className="flex justify-between text-sm mb-1">
-                        <span className="text-[#6B7280]">Medium</span>
+                        <span className="text-[#6B7280]">{label2}</span>
                         <span className="font-medium">{medium} ({((medium / total) * 100).toFixed(0)}%)</span>
                       </div>
                       <div className="w-full bg-[#E2E6EA] h-2 rounded-full overflow-hidden">
@@ -1078,7 +1130,7 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <div className="flex justify-between text-sm mb-1">
-                        <span className="text-[#6B7280]">Hot / Extra Spicy</span>
+                        <span className="text-[#6B7280]">{label3}</span>
                         <span className="font-medium">{hot} ({((hot / total) * 100).toFixed(0)}%)</span>
                       </div>
                       <div className="w-full bg-[#E2E6EA] h-2 rounded-full overflow-hidden">
@@ -1091,16 +1143,22 @@ export default function DashboardPage() {
             </div>
 
             <div className="bg-[#F4F6F9] rounded-lg p-4">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] mb-4">Allergen Frequency</h3>
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] mb-4">
+                {vocab.suppliesLabel} Frequency
+              </h3>
               <div className="flex flex-col gap-2">
-                {Object.entries(metrics.operationalSignals.allergenFrequency)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([allergen, count]) => (
-                    <div key={allergen} className="flex justify-between items-center text-sm border-b border-[#E2E6EA] pb-2 last:border-0">
-                      <span className="text-[#6B7280] capitalize">{allergen}</span>
-                      <span className="font-medium text-[#111827]">{count} portions</span>
-                    </div>
-                  ))}
+                {Object.entries(metrics.operationalSignals.allergenFrequency).length > 0 ? (
+                  Object.entries(metrics.operationalSignals.allergenFrequency)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([item, count]) => (
+                      <div key={item} className="flex justify-between items-center text-sm border-b border-[#E2E6EA] pb-2 last:border-0">
+                        <span className="text-[#6B7280] capitalize">{item}</span>
+                        <span className="font-medium text-[#111827]">{count} units</span>
+                      </div>
+                    ))
+                ) : (
+                  <p className="text-xs text-[#6B7280] italic">No material/ingredient signals recorded for this range.</p>
+                )}
               </div>
             </div>
           </div>

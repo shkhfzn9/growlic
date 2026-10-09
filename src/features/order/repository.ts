@@ -1,6 +1,12 @@
 import dbConnect from '@/lib/mongodb';
 import Order, { StaffCall } from './model';
 import { IOrder } from './types';
+import crypto from 'crypto';
+
+export function sanitizeTenantId(id: string): string {
+  if (!id) return '';
+  return id.trim().toLowerCase();
+}
 
 /**
  * Normalizes a raw Mongoose document representing an Order into a standard IOrder plain object.
@@ -35,6 +41,14 @@ export function normalizeOrder(doc: any): IOrder {
     total: plain.total,
     status: plain.status,
     notes: plain.notes || '',
+    appointmentDetails: plain.appointmentDetails ? {
+      bookingDate: plain.appointmentDetails.bookingDate,
+      bookingTime: plain.appointmentDetails.bookingTime,
+      specialistId: plain.appointmentDetails.specialistId || '',
+      specialistName: plain.appointmentDetails.specialistName || '',
+      userNotes: plain.appointmentDetails.userNotes || '',
+    } : undefined,
+    activeSlotKey: plain.activeSlotKey || null,
     estimatedTime: plain.estimatedTime ?? 0,
     actualPrepTimeMinutes: plain.actualPrepTimeMinutes ?? 0,
     delayMinutes: plain.delayMinutes ?? 0,
@@ -42,6 +56,7 @@ export function normalizeOrder(doc: any): IOrder {
     delayReason: plain.delayReason || '',
     rejectionReason: plain.rejectionReason || '',
     rejectedAt: plain.rejectedAt ? new Date(plain.rejectedAt).toISOString() : '',
+    trackingToken: plain.trackingToken || '',
     createdAt: plain.createdAt ? new Date(plain.createdAt).toISOString() : '',
     updatedAt: plain.updatedAt ? new Date(plain.updatedAt).toISOString() : '',
   };
@@ -74,10 +89,86 @@ export async function create(data: {
   total: number;
   status: IOrder['status'];
   notes?: string;
-}): Promise<IOrder> {
+  appointmentDetails?: IOrder['appointmentDetails'];
+  activeSlotKey?: string | null;
+  trackingToken?: string;
+}, options?: { session?: any }): Promise<IOrder> {
   await dbConnect();
-  const doc = await Order.create(data);
+  const cleanData = {
+    ...data,
+    restaurantId: sanitizeTenantId(data.restaurantId),
+    trackingToken: data.trackingToken || crypto.randomBytes(16).toString('hex'),
+  };
+  const docs = await Order.create([cleanData], options?.session ? { session: options.session } : undefined);
+  const doc = Array.isArray(docs) ? docs[0] : docs;
   return normalizeOrder(doc);
+}
+
+/**
+ * Retrieves an active appointment for date, time slot, and specialist to enforce concurrency locks.
+ */
+export async function findActiveAppointment(
+  restaurantId: string,
+  bookingDate: string,
+  bookingTime: string,
+  specialistName?: string
+): Promise<IOrder | null> {
+  await dbConnect();
+  const cleanRestId = sanitizeTenantId(restaurantId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const query: any = {
+    restaurantId: cleanRestId,
+    'appointmentDetails.bookingDate': bookingDate,
+    'appointmentDetails.bookingTime': bookingTime,
+    status: { $nin: ['cancelled', 'rejected'] },
+  };
+  if (specialistName) {
+    query['appointmentDetails.specialistName'] = specialistName;
+  }
+  const doc = await Order.findOne(query);
+  return doc ? normalizeOrder(doc) : null;
+}
+
+export async function findBookedSlotsForDate(
+  restaurantId: string,
+  bookingDate: string,
+  specialistName?: string
+): Promise<string[]> {
+  await dbConnect();
+  const cleanRestId = sanitizeTenantId(restaurantId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const query: any = {
+    restaurantId: cleanRestId,
+    'appointmentDetails.bookingDate': bookingDate,
+    status: { $nin: ['cancelled', 'rejected'] },
+  };
+  if (specialistName && specialistName !== 'Any Available Specialist') {
+    query['appointmentDetails.specialistName'] = specialistName;
+  }
+  const orders = await Order.find(query, { 'appointmentDetails.bookingTime': 1 });
+  return orders
+    .map((o) => o.appointmentDetails?.bookingTime)
+    .filter((time): time is string => Boolean(time));
+}
+
+export async function countActiveUnassignedAppointments(
+  restaurantId: string,
+  bookingDate: string,
+  bookingTime: string
+): Promise<number> {
+  await dbConnect();
+  const cleanRestId = sanitizeTenantId(restaurantId);
+  return Order.countDocuments({
+    restaurantId: cleanRestId,
+    'appointmentDetails.bookingDate': bookingDate,
+    'appointmentDetails.bookingTime': bookingTime,
+    $or: [
+      { 'appointmentDetails.specialistName': '' },
+      { 'appointmentDetails.specialistName': null },
+      { 'appointmentDetails.specialistName': { $exists: false } },
+    ],
+    status: { $nin: ['cancelled', 'rejected'] },
+  });
 }
 
 /**
@@ -90,7 +181,7 @@ export async function create(data: {
  */
 export async function findRecentCompleted(restaurantId: string, limitCount = 1000): Promise<IOrder[]> {
   await dbConnect();
-  const docs = await Order.find({ restaurantId, status: 'completed' })
+  const docs = await Order.find({ restaurantId: sanitizeTenantId(restaurantId), status: 'completed' })
                           .sort({ createdAt: -1 })
                           .limit(limitCount);
   return docs.map(normalizeOrder);
@@ -99,15 +190,17 @@ export async function findRecentCompleted(restaurantId: string, limitCount = 100
 /**
  * Retrieves a single order by database ID within a specific restaurant scope.
  * 
- * @param restaurantId Optional scope enforcing multi-tenant isolation.
+ * @param restaurantId Scope enforcing multi-tenant isolation.
  * @param id Database string ID.
  * @returns The normalized order or null if not found.
  */
 export async function findById(restaurantId?: string, id?: string): Promise<IOrder | null> {
   await dbConnect();
+  if (!id) return null;
+  const cleanRestId = sanitizeTenantId(restaurantId || '');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const query: any = { _id: id };
-  if (restaurantId) query.restaurantId = restaurantId;
+  if (cleanRestId) query.restaurantId = cleanRestId;
   const doc = await Order.findOne(query);
   return doc ? normalizeOrder(doc) : null;
 }
@@ -128,7 +221,8 @@ export async function findAll(
   status?: string
 ): Promise<{ orders: IOrder[]; totalCount: number }> {
   await dbConnect();
-  const query: any = { restaurantId };
+  const cleanRestId = sanitizeTenantId(restaurantId);
+  const query: any = { restaurantId: cleanRestId };
   if (status && status !== 'all') {
     if (status === 'delayed') {
       query.isDelayed = true;
@@ -180,13 +274,12 @@ export async function updateStatus(
     if (delayData.isDelayed !== undefined) payload.isDelayed = delayData.isDelayed;
     if (delayData.delayReason !== undefined) payload.delayReason = delayData.delayReason;
   }
-  if (rejectionReason !== undefined) {
-    payload.rejectionReason = rejectionReason;
-    payload.rejectedAt = new Date();
+  if (status === 'cancelled' || status === 'rejected') {
+    payload.activeSlotKey = null;
   }
 
   const doc = await Order.findOneAndUpdate(
-    { _id: id, restaurantId },
+    { _id: id, restaurantId: sanitizeTenantId(restaurantId) },
     payload,
     { new: true }
   );
@@ -210,7 +303,7 @@ export async function updateEstimatedTime(
 ): Promise<IOrder | null> {
   await dbConnect();
   const doc = await Order.findOneAndUpdate(
-    { _id: id, restaurantId },
+    { _id: id, restaurantId: sanitizeTenantId(restaurantId) },
     { estimatedTime: minutes, status },
     { new: true }
   );
@@ -228,67 +321,57 @@ export async function updateEstimatedTime(
 export async function findInRange(restaurantId: string, start: Date, end: Date): Promise<IOrder[]> {
   await dbConnect();
   const docs = await Order.find({
-    restaurantId,
+    restaurantId: sanitizeTenantId(restaurantId),
     createdAt: { $gte: start, $lte: end },
   }).sort({ createdAt: -1 });
   return docs.map(normalizeOrder);
 }
 
-/**
- * Counts the number of pending orders (received, accepted, preparing, or ready) for a specific restaurant.
- * Used to calculate active load warnings on the client.
- * 
- * @param restaurantId The restaurant slug ID.
- * @returns A promise resolving to the pending orders count.
- */
 export async function countPending(restaurantId: string): Promise<number> {
   await dbConnect();
   return Order.countDocuments({
-    restaurantId,
+    restaurantId: sanitizeTenantId(restaurantId),
     status: { $in: ['received', 'accepted', 'preparing', 'ready'] },
   });
 }
 
-/**
- * Performs a bulk insert of order documents scoped to a specific restaurant.
- * 
- * @param restaurantId The restaurant slug ID.
- * @param items Array of raw order parameters.
- * @returns An array of newly created, normalized order records.
- */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function insertMany(restaurantId: string, items: any[]): Promise<IOrder[]> {
   await dbConnect();
-  const itemsWithTenant = items.map(item => ({ ...item, restaurantId }));
+  const cleanRestId = sanitizeTenantId(restaurantId);
+  const itemsWithTenant = items.map(item => ({ ...item, restaurantId: cleanRestId }));
   const docs = await Order.insertMany(itemsWithTenant);
   return docs.map(normalizeOrder);
 }
 
-/**
- * Deletes all orders belonging to a specific restaurant tenant.
- * 
- * @param restaurantId The restaurant slug ID.
- * @returns Resolves to true if records were deleted, false otherwise.
- */
 export async function deleteByRestaurantId(restaurantId: string): Promise<boolean> {
   await dbConnect();
-  const result = await Order.deleteMany({ restaurantId });
+  const result = await Order.deleteMany({ restaurantId: sanitizeTenantId(restaurantId) });
   return result.deletedCount > 0;
 }
 
-/**
- * Retrieves all order documents matching a customer's phone number.
- * Enforces tenant isolation if restaurantId is provided.
- * 
- * @param restaurantId Optional scope parameter.
- * @param phone The target customer phone number.
- * @returns Array of normalized order records.
- */
+export async function deleteById(id: string): Promise<boolean> {
+  await dbConnect();
+  const result = await Order.deleteOne({ _id: id });
+  return result.deletedCount > 0;
+}
+
+export async function findByTrackingToken(trackingToken: string, restaurantId?: string): Promise<IOrder | null> {
+  await dbConnect();
+  if (!trackingToken) return null;
+  const query: any = { trackingToken };
+  if (restaurantId) {
+    query.restaurantId = sanitizeTenantId(restaurantId);
+  }
+  const doc = await Order.findOne(query);
+  return doc ? normalizeOrder(doc) : null;
+}
+
 export async function findByCustomerPhone(restaurantId: string | undefined, phone: string): Promise<IOrder[]> {
   await dbConnect();
   const query: any = { customerPhone: phone };
   if (restaurantId) {
-    query.restaurantId = restaurantId.toLowerCase();
+    query.restaurantId = sanitizeTenantId(restaurantId);
   }
   const docs = await Order.find(query).sort({ createdAt: -1 });
   return docs.map(normalizeOrder);

@@ -1,6 +1,7 @@
 import dbConnect from '@/lib/mongodb';
 import Customer from './model';
 import { ICustomer } from './types';
+import { sanitizeTenantId } from '@/lib/tenant';
 
 /**
  * Normalizes a raw Mongoose document representing a Customer into a standardized ICustomer plain object.
@@ -45,7 +46,7 @@ export function normalizeCustomer(doc: any): ICustomer {
 export async function findByPhone(restaurantId: string, phone: string): Promise<ICustomer | null> {
   await dbConnect();
   const doc = await Customer.findOne({
-    restaurantId,
+    restaurantId: sanitizeTenantId(restaurantId),
     phone: phone.trim(),
   });
   return doc ? normalizeCustomer(doc) : null;
@@ -71,7 +72,7 @@ export async function create(data: {
   const averageOrderValue = totalOrders > 0 ? Math.round(totalSpent / totalOrders) : 0;
 
   const doc = await Customer.create({
-    restaurantId: data.restaurantId,
+    restaurantId: sanitizeTenantId(data.restaurantId),
     name: data.name.trim(),
     phone: data.phone.trim(),
     totalOrders,
@@ -112,12 +113,65 @@ export async function updateStats(
     updatePayload.favoriteCategory = favoriteCategory;
   }
   const doc = await Customer.findOneAndUpdate(
-    { _id: id, restaurantId },
+    { _id: id, restaurantId: sanitizeTenantId(restaurantId) },
     updatePayload,
     { new: true }
   );
   return doc ? normalizeCustomer(doc) : null;
 }
+
+/**
+ * Atomically increments customer totalOrders and totalSpent using $inc upsert.
+ * Guarantees consistency under high-concurrency parallel order placement.
+ */
+export async function incrementCustomerStats(
+  restaurantId: string,
+  name: string,
+  phone: string,
+  spent: number
+): Promise<ICustomer> {
+  await dbConnect();
+  const cleanRestId = sanitizeTenantId(restaurantId);
+  const cleanPhone = phone.trim();
+  const cleanName = name.trim();
+
+  let doc;
+  try {
+    doc = await Customer.findOneAndUpdate(
+      { restaurantId: cleanRestId, phone: cleanPhone },
+      {
+        $inc: { totalOrders: 1, totalSpent: spent },
+        $set: { name: cleanName, lastOrderDate: new Date() },
+        $setOnInsert: {
+          restaurantId: cleanRestId,
+          phone: cleanPhone,
+          favoriteCategory: '',
+          stampCount: 0,
+          hasPendingDiscount: false,
+          totalRedemptions: 0,
+        },
+      },
+      { returnDocument: 'after', upsert: true }
+    );
+  } catch (err: any) {
+    if (err?.code === 11000 || err?.message?.includes('E11000')) {
+      doc = await Customer.findOneAndUpdate(
+        { restaurantId: cleanRestId, phone: cleanPhone },
+        {
+          $inc: { totalOrders: 1, totalSpent: spent },
+          $set: { name: cleanName, lastOrderDate: new Date() },
+        },
+        { returnDocument: 'after' }
+      );
+    } else {
+      throw err;
+    }
+  }
+
+  const normalized = normalizeCustomer(doc);
+  return normalized;
+}
+
 
 /**
  * Searches for customer profiles matching a phone number query inside a restaurant's scope.
@@ -130,7 +184,7 @@ export async function updateStats(
 export async function search(restaurantId: string, searchPhone?: string): Promise<ICustomer[]> {
   await dbConnect();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const query: any = { restaurantId };
+  const query: any = { restaurantId: sanitizeTenantId(restaurantId) };
   if (searchPhone) {
     query.phone = { $regex: searchPhone.trim(), $options: 'i' };
   }
@@ -146,20 +200,13 @@ export async function search(restaurantId: string, searchPhone?: string): Promis
  */
 export async function count(restaurantId: string): Promise<number> {
   await dbConnect();
-  return Customer.countDocuments({ restaurantId });
+  return Customer.countDocuments({ restaurantId: sanitizeTenantId(restaurantId) });
 }
 
-/**
- * Finds multiple customer records matching a list of phone numbers inside a restaurant's scope.
- * 
- * @param restaurantId Scope parameter enforcing multi-tenant isolation.
- * @param phones Array of customer phone strings.
- * @returns An array of matching, normalized ICustomer records.
- */
 export async function findManyByPhones(restaurantId: string, phones: string[]): Promise<ICustomer[]> {
   await dbConnect();
   const docs = await Customer.find({
-    restaurantId,
+    restaurantId: sanitizeTenantId(restaurantId),
     phone: { $in: phones.map(p => p.trim()) },
   });
   return docs.map(normalizeCustomer);

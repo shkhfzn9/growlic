@@ -8,6 +8,7 @@ export interface IAdminDocument extends Document {
   phone: string;
   whatsappNumber?: string;
   designation: string;
+  businessCategory?: string;
   role: 'owner' | 'manager' | 'staff' | 'restaurant_admin' | 'super_admin';
   logoUrl?: string;
   primaryColor?: string;
@@ -38,8 +39,9 @@ const AdminSchema: Schema = new Schema<IAdminDocument>(
     restaurantId: { type: String, required: true, unique: true, index: true },
     restaurantName: { type: String, required: true },
     phone: { type: String, required: true },
-    whatsappNumber: { type: String, default: '9541234068' },
+    whatsappNumber: { type: String, default: '' },
     designation: { type: String, required: true },
+    businessCategory: { type: String, default: 'restaurant' },
     role: { type: String, enum: ['owner', 'manager', 'staff', 'restaurant_admin', 'super_admin'], default: 'staff', required: true },
     logoUrl: { type: String, default: '' },
     primaryColor: { type: String, default: '#000000' },

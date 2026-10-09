@@ -255,7 +255,28 @@ export default function OrderNotificationProvider({ children }: { children: Reac
         }
 
         if (result?.success) {
-          setActiveAlertOrders(result.orders || []);
+          // Exclude salon bookings from floating sound alert popups
+          const nonSalonOrders = (result.orders || []).filter((o: any) => {
+            const notes = o.notes || '';
+            const isSalonBooking =
+              notes.includes('📅 Booking Date:') ||
+              notes.includes('⏰ Time Slot:') ||
+              (o.items || []).some((item: any) => {
+                const cat = (item.category || item.name || '').toLowerCase();
+                return (
+                  cat.includes('hair') ||
+                  cat.includes('skin') ||
+                  cat.includes('spa') ||
+                  cat.includes('facial') ||
+                  cat.includes('treatment') ||
+                  cat.includes('salon') ||
+                  cat.includes('saloon') ||
+                  cat.includes('beauty')
+                );
+              });
+            return !isSalonBooking;
+          });
+          setActiveAlertOrders(nonSalonOrders);
           setActiveStaffCalls(result.staffCalls || []);
         }
       } catch (err) {
@@ -263,11 +284,18 @@ export default function OrderNotificationProvider({ children }: { children: Reac
       }
     };
 
-    // Run first check immediately on mount
+    // Run check on mount
     checkIncomingOrdersAndCalls();
 
-    // Polling interval every 5 seconds (active whenever admin is logged in)
-    const pollerInterval = setInterval(checkIncomingOrdersAndCalls, 5000);
+    const isSalonRoute = pathname?.includes('/appointments') || pathname?.includes('/salon');
+
+    // Polling is active ONLY while there are un-acknowledged alert orders or staff calls
+    let pollerInterval: NodeJS.Timeout | null = null;
+    const hasActiveAlerts = activeAlertOrders.length > 0 || activeStaffCalls.length > 0;
+
+    if (!isSalonRoute && hasActiveAlerts) {
+      pollerInterval = setInterval(checkIncomingOrdersAndCalls, 5000);
+    }
 
     // Setup BroadcastChannel for instant < 10ms real-time triggers across tabs
     let broadcastChannel: BroadcastChannel | null = null;
@@ -275,7 +303,7 @@ export default function OrderNotificationProvider({ children }: { children: Reac
       try {
         broadcastChannel = new BroadcastChannel('growlic_order_channel');
         broadcastChannel.onmessage = (event) => {
-          if (event.data?.type === 'NEW_ORDER_PLACED') {
+          if (event.data?.type === 'NEW_ORDER_PLACED' || event.data?.type === 'ORDER_STATUS_UPDATED') {
             checkIncomingOrdersAndCalls();
           }
         };
@@ -294,7 +322,9 @@ export default function OrderNotificationProvider({ children }: { children: Reac
     }
 
     return () => {
-      clearInterval(pollerInterval);
+      if (pollerInterval) {
+        clearInterval(pollerInterval);
+      }
       if (broadcastChannel) {
         broadcastChannel.close();
       }
@@ -302,7 +332,7 @@ export default function OrderNotificationProvider({ children }: { children: Reac
         window.removeEventListener('focus', handleActivity);
       }
     };
-  }, [auth.isLoggedIn, auth.restaurantId, acknowledgedIds, acknowledgedCallIds, isAdminRoute]);
+  }, [auth.isLoggedIn, auth.restaurantId, acknowledgedIds, acknowledgedCallIds, isAdminRoute, activeAlertOrders.length, activeStaffCalls.length]);
 
   // Stop alert for a specific order (Add to acknowledged lists)
   const acknowledgeOrder = (orderId: string) => {

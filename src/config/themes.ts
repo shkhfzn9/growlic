@@ -10,7 +10,23 @@ export interface ThemePreset {
   previewBg: string;
 }
 
+export interface BusinessCategory {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+}
+
+export const BUSINESS_CATEGORIES: BusinessCategory[] = [
+  { id: 'restaurant', name: 'Restaurants & Cafes', icon: '🍽️', description: 'Digital menus, table QR ordering & kitchen tracking' },
+  { id: 'salon', name: 'Beauty Salons & Spas', icon: '💇‍♀️', description: 'Service catalog, appointment booking & treatment packages' },
+  { id: 'detailing', name: 'Auto Detailing & Car Care', icon: '🚗', description: 'Coating packages, wash services & appointment tracker' },
+  { id: 'retail', name: 'Boutiques & Retail Stores', icon: '🛍️', description: 'Product storefront, catalog display & order checkout' },
+  { id: 'services', name: 'Services & Consulting', icon: '💼', description: 'Consultation packages, service booking & direct invoicing' },
+];
+
 export const THEME_PRESETS: ThemePreset[] = [
+  // Restaurants & Cafes
   {
     id: 'burgundy',
     name: 'Burgundy Classic',
@@ -44,10 +60,57 @@ export const THEME_PRESETS: ThemePreset[] = [
     accentColor: '#F59E0B',
     previewBg: 'linear-gradient(135deg, #064E3B 0%, #022C22 100%)',
   },
+  // Salons, Spas & Beauty
+  {
+    id: 'rose_quartz',
+    name: 'Rose Quartz & Plum',
+    category: 'Salons & Luxury Spas',
+    description: 'Luxe velvet plum gradient with delicate rose quartz & blush gold accents.',
+    primaryColor: '#EC4899',
+    gradientDark: '#831843',
+    gradientDarker: '#4C0519',
+    accentColor: '#F472B6',
+    previewBg: 'linear-gradient(135deg, #831843 0%, #4C0519 100%)',
+  },
+  {
+    id: 'velvet_noir',
+    name: 'Gold & Noir Velvet',
+    category: 'Premium Salons & Barbering',
+    description: 'High-end black velvet background with radiant champagne gold highlights.',
+    primaryColor: '#EAB308',
+    gradientDark: '#18181B',
+    gradientDarker: '#09090B',
+    accentColor: '#FACC15',
+    previewBg: 'linear-gradient(135deg, #18181B 0%, #09090B 100%)',
+  },
+  // Auto Detailing & Car Care Showrooms
+  {
+    id: 'carbon_crimson',
+    name: 'Carbon Fiber Crimson',
+    category: 'Auto Detailing & Car Care',
+    description: 'Aggressive dark carbon slate gradient with vibrant crimson red racing accents.',
+    primaryColor: '#EF4444',
+    gradientDark: '#18181B',
+    gradientDarker: '#09090B',
+    accentColor: '#F87171',
+    previewBg: 'linear-gradient(135deg, #18181B 0%, #09090B 100%)',
+  },
+  {
+    id: 'cyber_cyan',
+    name: 'Cyber Cyan Metallic',
+    category: 'Detailing & Wrap Studios',
+    description: 'Futuristic metallic deep navy backdrop with glowing electric cyan accents.',
+    primaryColor: '#06B6D4',
+    gradientDark: '#0F172A',
+    gradientDarker: '#020617',
+    accentColor: '#22D3EE',
+    previewBg: 'linear-gradient(135deg, #0F172A 0%, #020617 100%)',
+  },
+  // Retail, Boutiques & General Services
   {
     id: 'purple',
     name: 'Royal Violet',
-    category: 'Boutique & Luxury Eateries',
+    category: 'Boutiques & Luxury Retail',
     description: 'Regal deep violet gradient with coral rose accents.',
     primaryColor: '#8B5CF6',
     gradientDark: '#4C1D95',
@@ -58,7 +121,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   {
     id: 'amber',
     name: 'Sunset Amber',
-    category: 'Fast Casual, Burgers & Pizzas',
+    category: 'Boutiques & Fast Casual',
     description: 'Warm terracotta & burnt orange gradient with sunshine yellow accents.',
     primaryColor: '#EA580C',
     gradientDark: '#7C2D12',
@@ -69,7 +132,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   {
     id: 'navy',
     name: 'Ocean Deep',
-    category: 'Seafood & Coastal Dining',
+    category: 'Services & Coastal Dining',
     description: 'Rich nautical navy gradient with vibrant sky blue accents.',
     primaryColor: '#0284C7',
     gradientDark: '#0C4A6E',

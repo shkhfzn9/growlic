@@ -33,12 +33,9 @@ function getAuthDetails(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const queryRestId = searchParams.get('restaurantId');
     const auth = getAuthDetails(req);
-    const restaurantId = queryRestId || auth?.restaurantId;
-
-    if (!restaurantId) throw new AuthenticationError('Restaurant ID required');
+    if (!auth || !auth.restaurantId) throw new AuthenticationError('Unauthorized access');
+    const restaurantId = auth.restaurantId;
 
     await dbConnect();
 

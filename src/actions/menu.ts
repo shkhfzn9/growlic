@@ -323,3 +323,60 @@ export async function decreaseAllMenuPricesAction(amount: number = 1) {
   return adjustAllMenuPricesAction(-Math.abs(amount));
 }
 
+/**
+ * Server action to parse a menu/service image using Gemini Vision API.
+ * Requires admin session.
+ */
+export async function parseMenuImageAction(
+  base64Image: string,
+  mimeType = 'image/jpeg',
+  businessCategory = 'restaurant'
+) {
+  try {
+    const admin = await checkAdminAuth();
+    const isAllowed = await can('edit_menu', admin.token, admin.restaurantId);
+    if (!isAllowed) {
+      throw new Error('Forbidden: Insufficient permissions to scan menu');
+    }
+
+    const { parseMenuImageWithGemini } = await import('@/features/menu/services/aiMenuScanService');
+    const items = await parseMenuImageWithGemini(base64Image, mimeType, businessCategory);
+    return { success: true, items };
+  } catch (error) {
+    console.error('Error parsing menu image with AI action:', error);
+    const message = error instanceof Error ? error.message : 'Failed to scan menu image with AI';
+    throw new Error(message);
+  }
+}
+
+/**
+ * Server action to bulk insert multiple scanned and approved menu/service items into MongoDB.
+ * Revalidates Next.js cache.
+ */
+export async function bulkCreateMenuItemsAction(
+  items: Array<{ name: string; description?: string; price: number; category: string; image?: string }>
+) {
+  try {
+    const admin = await checkAdminAuth();
+    const isAllowed = await can('edit_menu', admin.token, admin.restaurantId);
+    if (!isAllowed) {
+      throw new Error('Forbidden: Insufficient permissions to add items');
+    }
+
+    const createdDocs = await menuService.bulkCreateMenuItems(admin.restaurantId, items);
+
+    // Audit log
+    await logAction(admin.restaurantId, admin.userId, 'MENU_UPDATED', null, { count: createdDocs.length });
+
+    revalidateTag(`menu-${admin.restaurantId}`, 'max');
+    revalidatePath(`/menu/${admin.restaurantId}`);
+    revalidatePath('/admin/menu');
+
+    return { success: true, count: createdDocs.length, items: JSON.parse(JSON.stringify(createdDocs)) };
+  } catch (error) {
+    console.error('Error bulk creating menu items action:', error);
+    const message = error instanceof Error ? error.message : 'Failed to save menu items';
+    throw new Error(message);
+  }
+}
+

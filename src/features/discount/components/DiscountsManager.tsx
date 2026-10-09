@@ -32,6 +32,8 @@ import {
 } from 'lucide-react';
 import { ICoupon, IDiscountSettings, IDiscountAnalytics } from '../types';
 import { saveDiscountTier, deleteDiscountTier, saveComboRule, deleteComboRule } from '@/actions/upsell';
+import { getRestaurantDetails } from '@/actions/auth';
+import { getDomainAddonInfo } from '@/config/businessVocabulary';
 
 interface SpendTier {
   _id: string;
@@ -64,6 +66,7 @@ interface MenuItem {
 export default function DiscountsManager() {
   const auth = useSelector((state: RootState) => state.auth);
 
+  const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
   const [activeTab, setActiveTab] = useState<'audit' | 'addons' | 'overview' | 'coupons' | 'tiers' | 'combos' | 'items'>('audit');
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -118,19 +121,44 @@ export default function DiscountsManager() {
   // Combo Rule Form State (Create & Edit)
   const [editingComboId, setEditingComboId] = useState<string | null>(null);
   const [comboMessage, setComboMessage] = useState('');
-  const [comboConditionCat, setComboConditionCat] = useState('Classic Momos');
+  const [comboConditionCat, setComboConditionCat] = useState('');
   const [comboExcludeCat, setComboExcludeCat] = useState('');
   const [comboRewardType, setComboRewardType] = useState<'free_item' | 'percent_off_item' | 'percent_off_order'>('free_item');
-  const [comboRewardTarget, setComboRewardTarget] = useState('Tokyo Soups');
+  const [comboRewardTarget, setComboRewardTarget] = useState('');
   const [savingCombo, setSavingCombo] = useState(false);
   const [showComboForm, setShowComboForm] = useState(false);
 
   const [maxCapInput, setMaxCapInput] = useState<number | ''>(0);
 
+  const hasSalonItems = menuItems.some((i) =>
+    i.category?.toLowerCase().includes('hair') ||
+    i.category?.toLowerCase().includes('skin') ||
+    i.category?.toLowerCase().includes('spa') ||
+    i.category?.toLowerCase().includes('facial') ||
+    i.category?.toLowerCase().includes('nail') ||
+    i.category?.toLowerCase().includes('treatment')
+  );
+  const hasDetailingItems = menuItems.some((i) =>
+    i.category?.toLowerCase().includes('coating') ||
+    i.category?.toLowerCase().includes('wash') ||
+    i.category?.toLowerCase().includes('paint') ||
+    i.category?.toLowerCase().includes('polish')
+  );
+  const effectiveCategory = hasSalonItems ? 'salon' : hasDetailingItems ? 'detailing' : businessCategory;
+
+  const addonInfo = getDomainAddonInfo(effectiveCategory);
+
   const loadDiscountData = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/discounts');
+      const [res, details] = await Promise.all([
+        fetch('/api/admin/discounts'),
+        getRestaurantDetails(),
+      ]);
+      const bizCat = details?.businessCategory || 'restaurant';
+      if (details?.businessCategory) {
+        setBusinessCategory(details.businessCategory);
+      }
       const json = await res.json();
       if (json.success) {
         setSettings(json.data.settings);
@@ -139,8 +167,64 @@ export default function DiscountsManager() {
         }
         setCoupons(json.data.coupons || []);
         setSpendTiers(json.data.spendTiers || []);
-        setComboRules(json.data.comboRules || []);
-        setMenuItems(json.data.items || []);
+
+        const items: MenuItem[] = json.data.items || [];
+        setMenuItems(items);
+
+        const isSalonStore = bizCat === 'salon' || items.some((i) =>
+          i.category?.toLowerCase().includes('hair') ||
+          i.category?.toLowerCase().includes('skin') ||
+          i.category?.toLowerCase().includes('spa') ||
+          i.category?.toLowerCase().includes('facial') ||
+          i.category?.toLowerCase().includes('nail') ||
+          i.category?.toLowerCase().includes('treatment')
+        );
+        const isDetailingStore = bizCat === 'detailing' || items.some((i) =>
+          i.category?.toLowerCase().includes('coating') ||
+          i.category?.toLowerCase().includes('wash') ||
+          i.category?.toLowerCase().includes('paint') ||
+          i.category?.toLowerCase().includes('polish')
+        );
+        const activeBiz = isSalonStore ? 'salon' : isDetailingStore ? 'detailing' : bizCat;
+
+        const rawCombos: ComboRule[] = json.data.comboRules || [];
+        const sanitizedCombos = rawCombos.map((rule) => {
+          const isFoodRule =
+            rule.conditionCategory?.toLowerCase().includes('momo') ||
+            rule.rewardTarget?.toLowerCase().includes('drink') ||
+            rule.customerMessage?.toLowerCase().includes('momo') ||
+            rule.customerMessage?.toLowerCase().includes('drink');
+          if (isFoodRule && activeBiz === 'salon') {
+            return {
+              ...rule,
+              conditionCategory: 'Hair Styling & Treatment',
+              conditionExcludeCategory: 'Skin & Facial Care',
+              rewardTarget: 'Skin & Facial Care:50',
+              customerMessage: 'Free Hair Wash & Styling with any Hair Color!',
+            };
+          }
+          if (isFoodRule && activeBiz === 'detailing') {
+            return {
+              ...rule,
+              conditionCategory: 'Paint Protection & Coating',
+              conditionExcludeCategory: 'Wash & Polish',
+              rewardTarget: 'Wash & Polish:50',
+              customerMessage: 'Free Interior Detailing with Ceramic Coating!',
+            };
+          }
+          if (isFoodRule && activeBiz === 'retail') {
+            return {
+              ...rule,
+              conditionCategory: 'Apparel & Fashion',
+              conditionExcludeCategory: 'Footwear & Accessories',
+              rewardTarget: 'Footwear & Accessories:50',
+              customerMessage: 'Buy 2 Get 1 FREE on all Fashion Apparel!',
+            };
+          }
+          return rule;
+        });
+
+        setComboRules(sanitizedCombos);
         if (json.data.analytics) {
           setAnalytics(json.data.analytics);
         }
@@ -420,12 +504,13 @@ export default function DiscountsManager() {
   };
 
   const resetComboForm = () => {
+    const info = getDomainAddonInfo(effectiveCategory);
     setEditingComboId(null);
-    setComboMessage('');
-    setComboConditionCat('Classic Momos');
+    setComboMessage(info.messagePlaceholder);
+    setComboConditionCat(info.conditionCatPlaceholder.replace('e.g. ', ''));
     setComboExcludeCat('');
-    setComboRewardType('free_item');
-    setComboRewardTarget('Tokyo Soups');
+    setComboRewardType('percent_off_item');
+    setComboRewardTarget(info.rewardTargetPlaceholder.replace('e.g. ', '') + ':50');
     setShowComboForm(false);
   };
 
@@ -971,7 +1056,7 @@ export default function DiscountsManager() {
                 </div>
                 <div>
                   <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-black tracking-tight">Special Add-on Cart Boosters</h2>
+                    <h2 className="text-xl font-black tracking-tight">{addonInfo.title}</h2>
                     <span
                       className={`text-[10px] font-extrabold tracking-widest uppercase px-3 py-1 rounded-full border ${
                         settings.specialAddonsEnabled !== false
@@ -984,8 +1069,8 @@ export default function DiscountsManager() {
                   </div>
                   <p className="text-xs text-white/70 mt-1 max-w-xl">
                     {settings.specialAddonsEnabled !== false
-                      ? `Special add-on snacks (Chicken Popcorn, Peri Peri Strips) are currently offered on customer checkout carts at ${settings.specialAddonDiscountPercent ?? 30}% OFF.`
-                      : 'SPECIAL ADD-ONS STOPPED: Customer checkout carts will NOT display any impulse add-on snacks.'}
+                      ? `${addonInfo.desc} (${addonInfo.items}) are currently offered on checkout at ${settings.specialAddonDiscountPercent ?? 30}% OFF.`
+                      : 'SPECIAL ADD-ONS STOPPED: Checkout page will NOT display any impulse add-ons.'}
                   </p>
                 </div>
               </div>
@@ -1023,7 +1108,7 @@ export default function DiscountsManager() {
                 <Percent className="w-5 h-5 text-[#C0181A]" /> Choose Add-on Discount Percentage
               </h3>
               <p className="text-xs text-neutral-500 mt-1">
-                Select the promotional discount percentage applied to impulse snacks on the customer checkout screen.
+                Select the promotional discount percentage applied to impulse add-on items on the checkout screen.
               </p>
             </div>
 
@@ -1052,7 +1137,7 @@ export default function DiscountsManager() {
             </div>
 
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs font-semibold text-amber-900">
-              💡 <strong>Live Cart Calculation:</strong> A snack item with base price ₹140 (like Chicken Popcorn or Peri Peri Strips) will be presented to customers for <strong>₹{Math.round(140 * (1 - (settings.specialAddonDiscountPercent ?? 30) / 100))}</strong> ({settings.specialAddonDiscountPercent ?? 30}% OFF).
+              💡 <strong>Live Cart Calculation:</strong> An add-on item with base price ₹140 ({addonInfo.items}) will be presented to customers for <strong>₹{Math.round(140 * (1 - (settings.specialAddonDiscountPercent ?? 30) / 100))}</strong> ({settings.specialAddonDiscountPercent ?? 30}% OFF).
             </div>
           </div>
         </div>
@@ -1706,7 +1791,7 @@ export default function DiscountsManager() {
                 <label className="text-[11px] font-extrabold uppercase text-neutral-600 tracking-wider">Customer Message Banner *</label>
                 <input
                   type="text"
-                  placeholder="e.g. Buy Momos & get 20% off Drinks!"
+                  placeholder={`e.g. ${addonInfo.messagePlaceholder}`}
                   value={comboMessage}
                   onChange={(e) => setComboMessage(e.target.value)}
                   className="bg-neutral-50 border border-neutral-300 focus:border-[#C0181A] rounded-xl px-4 py-2.5 text-sm text-neutral-900 outline-none"
@@ -1719,7 +1804,7 @@ export default function DiscountsManager() {
                   <label className="text-[11px] font-extrabold uppercase text-neutral-600 tracking-wider">Condition Category</label>
                   <input
                     type="text"
-                    placeholder="e.g. Classic Momos"
+                    placeholder={addonInfo.conditionCatPlaceholder}
                     value={comboConditionCat}
                     onChange={(e) => setComboConditionCat(e.target.value)}
                     className="bg-neutral-50 border border-neutral-300 focus:border-[#C0181A] rounded-xl px-3 py-2.5 text-xs text-neutral-900 outline-none"
@@ -1744,10 +1829,10 @@ export default function DiscountsManager() {
                   <label className="text-[11px] font-extrabold uppercase text-neutral-600 tracking-wider">Reward Target Category</label>
                   <input
                     type="text"
-                    placeholder="e.g. Tokyo Soups, beverages:20"
+                    placeholder={addonInfo.rewardTargetPlaceholder}
                     value={comboRewardTarget}
                     onChange={(e) => setComboRewardTarget(e.target.value)}
-                    className="bg-neutral-50 border border-neutral-300 focus:border-[#C0181A] rounded-xl px-3 py-2.5 text-xs text-neutral-900 outline-none"
+                    className="bg-neutral-50 border border-neutral-[#C0181A] rounded-xl px-3 py-2.5 text-xs text-neutral-900 outline-none"
                     required
                   />
                 </div>

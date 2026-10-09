@@ -20,7 +20,7 @@ export interface Order {
   items: OrderItem[];
   subtotal: number;
   total: number;
-  status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+  status: 'received' | 'scheduled' | 'accepted' | 'confirmed' | 'in_progress' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'rejected';
   notes?: string;
   estimatedTime?: number;
   actualPrepTimeMinutes?: number;

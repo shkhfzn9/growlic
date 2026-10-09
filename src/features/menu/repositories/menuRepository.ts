@@ -1,6 +1,7 @@
 import dbConnect from '@/lib/mongodb';
 import Menu from '../model';
 import { IMenuItem } from '../types';
+import { sanitizeTenantId } from '@/lib/tenant';
 
 /**
  * Normalizes a raw Mongoose document representing a Menu item into a plain IMenuItem object.
@@ -51,21 +52,21 @@ export function normalizeMenuItem(doc: any): IMenuItem {
  */
 export async function findAll(restaurantId: string): Promise<IMenuItem[]> {
   await dbConnect();
-  const docs = await Menu.find({ restaurantId }).sort({ category: 1, name: 1 }).lean();
+  const docs = await Menu.find({ restaurantId: sanitizeTenantId(restaurantId) }).sort({ category: 1, name: 1 }).lean();
   return docs.map(normalizeMenuItem);
 }
 
-/**
- * Retrieves a single menu item by its database ID within a specific restaurant scope.
- * 
- * @param restaurantId Scope parameter enforcing multi-tenant isolation.
- * @param id The menu item database ID string.
- * @returns The normalized IMenuItem object if found, or null otherwise.
- */
 export async function findById(restaurantId: string, id: string): Promise<IMenuItem | null> {
   await dbConnect();
-  const doc = await Menu.findOne({ _id: id, restaurantId }).lean();
-  return doc ? normalizeMenuItem(doc) : null;
+  if (!id || typeof id !== 'string') return null;
+  const cleanRestId = sanitizeTenantId(restaurantId);
+  if (!/^[0-9a-fA-F]{24}$/.test(id)) return null;
+  try {
+    const doc = await Menu.findOne({ _id: id, restaurantId: cleanRestId }).lean();
+    return doc ? normalizeMenuItem(doc) : null;
+  } catch (err) {
+    return null;
+  }
 }
 
 /**
@@ -77,7 +78,7 @@ export async function findById(restaurantId: string, id: string): Promise<IMenuI
 export async function create(data: Partial<IMenuItem> & { restaurantId: string; category: string; name: string; price: number }): Promise<IMenuItem> {
   await dbConnect();
   const doc = await Menu.create({
-    restaurantId: data.restaurantId,
+    restaurantId: sanitizeTenantId(data.restaurantId),
     category: data.category,
     name: data.name,
     description: data.description || '',
@@ -97,6 +98,44 @@ export async function create(data: Partial<IMenuItem> & { restaurantId: string; 
     chefNote: data.chefNote || '',
   });
   return normalizeMenuItem(doc);
+}
+
+/**
+ * Inserts multiple menu items into MongoDB inside a bulk operation under the specified restaurant tenant.
+ * 
+ * @param restaurantId Scope parameter enforcing multi-tenant isolation.
+ * @param items Array of menu item objects to create.
+ * @returns Array of newly created and normalized IMenuItem objects.
+ */
+export async function bulkCreate(
+  restaurantId: string,
+  items: Array<Omit<IMenuItem, '_id'>>
+): Promise<IMenuItem[]> {
+  await dbConnect();
+  const cleanRestId = sanitizeTenantId(restaurantId);
+  const docsToInsert = items.map((item) => ({
+    restaurantId: cleanRestId,
+    category: item.category,
+    name: item.name,
+    description: item.description || '',
+    image: item.image || '',
+    price: Number(item.price),
+    available: item.available !== undefined ? item.available : true,
+    active: item.active !== undefined ? item.active : true,
+    pairsWithCategories: item.pairsWithCategories || [],
+    images: item.images || [],
+    preparation: item.preparation || '',
+    ingredients: item.ingredients || [],
+    nutrition: item.nutrition || { calories: 0, protein: 0, carbs: 0, fat: 0 },
+    spiceLevel: item.spiceLevel || 0,
+    portionSize: item.portionSize || '',
+    prepTimeMin: item.prepTimeMin || 0,
+    prepTimeMax: item.prepTimeMax || 0,
+    chefNote: item.chefNote || '',
+  }));
+
+  const docs = await Menu.insertMany(docsToInsert);
+  return docs.map(normalizeMenuItem);
 }
 
 /**

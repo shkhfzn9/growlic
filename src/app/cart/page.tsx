@@ -14,6 +14,9 @@ import { CustomerNavbar } from '@/components/layout';
 import { resolveMenuImage } from '@/lib/menu-images';
 import { getPersonalizedRecommendations, getGapUnlockingRecommendations, getBestAddOnsRecommendations, ScoredRecommendation } from '@/features/recommendations';
 import { getActiveTheme, saveActiveTheme } from '@/config/themes';
+import SalonBookingForm from '@/features/salonBooking/components/SalonBookingForm';
+import { formatSalonBookingNotes } from '@/features/salonBooking/service';
+import { SalonBookingData } from '@/features/salonBooking/types';
 
 const DISH_PLACEHOLDER = '/dish_placeholder.jpg';
 
@@ -138,6 +141,34 @@ function CartContent() {
     allowStacking: true,
   });
 
+  const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
+  const [salonBookingData, setSalonBookingData] = useState<SalonBookingData | null>(null);
+
+  const hasSalonItems = cart.items.some((i) => {
+    const cat = i.category?.toLowerCase() || '';
+    return (
+      cat.includes('hair') ||
+      cat.includes('skin') ||
+      cat.includes('spa') ||
+      cat.includes('facial') ||
+      cat.includes('nail') ||
+      cat.includes('treatment') ||
+      cat.includes('salon') ||
+      cat.includes('saloon') ||
+      cat.includes('beauty') ||
+      cat.includes('service') ||
+      cat.includes('massage') ||
+      cat.includes('wax') ||
+      cat.includes('makeup')
+    );
+  });
+  const isSalonBusiness =
+    businessCategory?.toLowerCase() === 'salon' ||
+    businessCategory?.toLowerCase() === 'saloon' ||
+    businessCategory?.toLowerCase() === 'beauty' ||
+    hasSalonItems;
+  const effectiveCategory = isSalonBusiness ? 'salon' : businessCategory;
+
   const [couponInput, setCouponInput] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<{
     code: string;
@@ -234,6 +265,9 @@ function CartContent() {
         .then((context) => {
           if (context.admin) {
             setRestaurantName(context.admin.restaurantName || '');
+            if (context.admin.businessCategory) {
+              setBusinessCategory(context.admin.businessCategory);
+            }
             const gDark = context.admin.themeGradientDark || '#8B0000';
             const gDarker = context.admin.themeGradientDarker || '#6B0000';
             const accent = context.admin.themeAccentColor || '#F5C518';
@@ -397,13 +431,15 @@ function CartContent() {
           (c) => c.toLowerCase().includes('drink') || c.toLowerCase().includes('beverage')
         );
 
+        const firstAvailableCat = menuCategories[0] || 'General';
+
         if (excludeCat && (excludeCat.toLowerCase().includes('drink') || excludeCat.toLowerCase().includes('beverage')) && !drinksExist) {
-          resolvedExcludeCat = 'Tokyo Soups';
+          resolvedExcludeCat = firstAvailableCat;
         }
 
         const isTargetDrinks = rewardTarget.toLowerCase().includes('drink') || rewardTarget.toLowerCase().includes('beverage');
         if (isTargetDrinks && !drinksExist) {
-          resolvedRewardTargetCat = 'Tokyo Soups';
+          resolvedRewardTargetCat = firstAvailableCat;
         }
 
         let hasRewardInCart = false;
@@ -847,13 +883,33 @@ function CartContent() {
 
     try {
       const targetRestaurantId = cart.restaurantId || resolvedRestId || 'tokyo-momos';
+
+      let finalNotes = notes.trim();
+      let appointmentDetailsPayload = undefined;
+
+      if (effectiveCategory === 'salon') {
+        const bData = salonBookingData || {
+          bookingDate: new Date().toISOString().split('T')[0],
+          bookingTime: '10:30 AM',
+          specialistName: 'Any Available Specialist',
+          notes: notes.trim(),
+        };
+        finalNotes = formatSalonBookingNotes(bData);
+        appointmentDetailsPayload = {
+          bookingDate: bData.bookingDate,
+          bookingTime: bData.bookingTime,
+          specialistName: bData.specialistName,
+          userNotes: bData.notes || '',
+        };
+      }
+
       const orderPayload = {
         restaurantId: targetRestaurantId,
         customerName: name.trim(),
         customerPhone: phone.trim(),
         customerOldPhone: originalCachedPhone ? originalCachedPhone.trim() : undefined,
         tableId: cart.tableId || undefined,
-        orderType,
+        orderType: effectiveCategory === 'salon' ? ('dine_in' as const) : orderType,
         paymentMode,
         items: cart.items.map((item) => ({
           menuItemId: item.id,
@@ -864,7 +920,8 @@ function CartContent() {
         })),
         subtotal: subtotal,
         total: finalDiscountedTotal,
-        notes: notes.trim() || undefined,
+        notes: finalNotes || undefined,
+        appointmentDetails: appointmentDetailsPayload,
       };
 
       const createdOrder = await createOrder(orderPayload);
@@ -997,7 +1054,7 @@ function CartContent() {
               <div className="flex flex-col gap-4">
                 {/* 1. Render Discount Tiers */}
                 {discountTiers.filter(t => t.active !== false).map((tier) => {
-                  const sampleItem = menuItems.find(m => tier.categoryScope ? m.category === tier.categoryScope : m.category === 'Classic Momos');
+                  const sampleItem = menuItems.find(m => tier.categoryScope ? m.category === tier.categoryScope : true) || menuItems[0];
                   const imageSrc = sampleItem ? getItemImage(sampleItem.image, sampleItem.name) : DISH_PLACEHOLDER;
                   return (
                     <div key={tier._id} className="bg-white rounded-3xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-gray-100 flex items-center justify-between gap-4">
@@ -1573,52 +1630,60 @@ function CartContent() {
                   </div>
                 )}
 
-                {/* Row 1: Order Type Selection (3 Options) */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[0.68rem] uppercase font-extrabold text-bg-dark tracking-[0.03em] flex items-center justify-between">
-                    <span>Order Type *</span>
-                    <span className="text-[10px] text-text-dark/40 font-semibold lowercase">Select 1 option</span>
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleOrderTypeSelect('dine_in')}
-                      className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${
-                        orderType === 'dine_in'
-                          ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-sm font-bold ring-2 ring-[#C0181A]/20'
-                          : 'bg-surface text-text-dark border-text-dark/10 hover:border-[#C0181A]/50 font-medium'
-                      }`}
-                    >
-                      <span className="text-sm mb-0.5">🍽️</span>
-                      <span className="text-xs font-black">Dine In</span>
-                      <span className={`text-[9px] ${orderType === 'dine_in' ? 'text-white/80' : 'text-text-dark/50'}`}>At table</span>
-                    </button>
+                {/* Row 1: Order / Booking Selection */}
+                {effectiveCategory === 'salon' ? (
+                  <SalonBookingForm
+                    restaurantId={resolvedRestId}
+                    onBookingChange={setSalonBookingData}
+                    disabled={loading}
+                  />
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[0.68rem] uppercase font-extrabold text-bg-dark tracking-[0.03em] flex items-center justify-between">
+                      <span>Order Type *</span>
+                      <span className="text-[10px] text-text-dark/40 font-semibold lowercase">Select 1 option</span>
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOrderTypeSelect('dine_in')}
+                        className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${
+                          orderType === 'dine_in'
+                            ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-sm font-bold ring-2 ring-[#C0181A]/20'
+                            : 'bg-surface text-text-dark border-text-dark/10 hover:border-[#C0181A]/50 font-medium'
+                        }`}
+                      >
+                        <span className="text-sm mb-0.5">🍽️</span>
+                        <span className="text-xs font-black">Dine In</span>
+                        <span className={`text-[9px] ${orderType === 'dine_in' ? 'text-white/80' : 'text-text-dark/50'}`}>At table</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleOrderTypeSelect('takeaway')}
-                      className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${
-                        orderType === 'takeaway'
-                          ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-sm font-bold ring-2 ring-[#C0181A]/20'
-                          : 'bg-surface text-text-dark border-text-dark/10 hover:border-[#C0181A]/50 font-medium'
-                      }`}
-                    >
-                      <span className="text-sm mb-0.5">🥡</span>
-                      <span className="text-xs font-black">Takeaway</span>
-                      <span className={`text-[9px] ${orderType === 'takeaway' ? 'text-white/80' : 'text-text-dark/50'}`}>Self pickup</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOrderTypeSelect('takeaway')}
+                        className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${
+                          orderType === 'takeaway'
+                            ? 'bg-[#C0181A] text-white border-[#C0181A] shadow-sm font-bold ring-2 ring-[#C0181A]/20'
+                            : 'bg-surface text-text-dark border-text-dark/10 hover:border-[#C0181A]/50 font-medium'
+                        }`}
+                      >
+                        <span className="text-sm mb-0.5">🥡</span>
+                        <span className="text-xs font-black">Takeaway</span>
+                        <span className={`text-[9px] ${orderType === 'takeaway' ? 'text-white/80' : 'text-text-dark/50'}`}>Self pickup</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleOrderTypeSelect('delivery')}
-                      className="flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer bg-gray-50 text-gray-400 border-gray-200 hover:border-amber-400 relative overflow-hidden"
-                    >
-                      <span className="text-sm mb-0.5 opacity-60">🛵</span>
-                      <span className="text-xs font-black line-through opacity-70">Delivery</span>
-                      <span className="text-[8px] font-extrabold text-amber-700 uppercase tracking-tighter bg-amber-100 px-1 py-0.2 rounded mt-0.5">Unavailable</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOrderTypeSelect('delivery')}
+                        className="flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer bg-gray-50 text-gray-400 border-gray-200 hover:border-amber-400 relative overflow-hidden"
+                      >
+                        <span className="text-sm mb-0.5 opacity-60">🛵</span>
+                        <span className="text-xs font-black line-through opacity-70">Delivery</span>
+                        <span className="text-[8px] font-extrabold text-amber-700 uppercase tracking-tighter bg-amber-100 px-1 py-0.2 rounded mt-0.5">Unavailable</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Row 2: Payment Mode Selection (2 Options) */}
                 <div className="flex flex-col gap-1.5">
@@ -1655,17 +1720,19 @@ function CartContent() {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-1.5 border border-text-dark/5 bg-surface rounded-xl p-3">
-                  <label className="text-[0.65rem] font-bold text-text-dark/50 uppercase tracking-wider">Note to Chef (optional)</label>
-                  <textarea
-                    rows={2}
-                    placeholder="e.g. Make it extra spicy / No onions"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    disabled={loading}
-                    className="bg-white border border-text-dark/10 rounded-lg px-3 py-2 text-xs text-text-dark outline-none resize-none focus:border-primary placeholder:text-text-dark/30 font-medium"
-                  />
-                </div>
+                {effectiveCategory !== 'salon' && (
+                  <div className="flex flex-col gap-1.5 border border-text-dark/5 bg-surface rounded-xl p-3">
+                    <label className="text-[0.65rem] font-bold text-text-dark/50 uppercase tracking-wider">Note to Chef (optional)</label>
+                    <textarea
+                      rows={2}
+                      placeholder="e.g. Make it extra spicy / No onions"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      disabled={loading}
+                      className="bg-white border border-text-dark/10 rounded-lg px-3 py-2 text-xs text-text-dark outline-none resize-none focus:border-primary placeholder:text-text-dark/30 font-medium"
+                    />
+                  </div>
+                )}
                 
                 <p className="text-xs text-text-dark/50 text-center px-2">
                   Confirm your details above. Your details are cached on this device for a faster checkout.
@@ -1687,7 +1754,11 @@ function CartContent() {
                     {maintenanceInfo.enabled
                       ? '🚫 Ordering Disabled (Under Maintenance)'
                       : loading
-                      ? 'Placing Order...'
+                      ? effectiveCategory === 'salon'
+                        ? 'Booking Appointment...'
+                        : 'Placing Order...'
+                      : effectiveCategory === 'salon'
+                      ? 'Confirm & Book Appointment'
                       : 'Confirm & Place Order'}
                   </button>
 
@@ -1743,54 +1814,61 @@ function CartContent() {
                   </div>
                 )}
 
-                {/* Row 1: Order Type Selection (3 Options) */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[0.68rem] uppercase font-extrabold text-bg-dark tracking-[0.03em] flex items-center justify-between">
-                    <span>Order Type *</span>
-                    <span className="text-[10px] text-text-dark/40 font-semibold lowercase">Select 1 option</span>
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleOrderTypeSelect('dine_in')}
-                      className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${
-                        orderType === 'dine_in'
-                          ? 'text-white shadow-sm font-bold ring-2 ring-black/10'
-                          : 'bg-surface text-text-dark border-text-dark/10 font-medium'
-                      }`}
-                      style={orderType === 'dine_in' ? { backgroundColor: primaryColor, borderColor: primaryColor } : undefined}
-                    >
-                      <span className="text-sm mb-0.5">🍽️</span>
-                      <span className="text-xs font-black">Dine In</span>
-                      <span className={`text-[9px] ${orderType === 'dine_in' ? 'text-white/80' : 'text-text-dark/50'}`}>At table</span>
-                    </button>
+                {/* Row 1: Order / Booking Selection */}
+                {effectiveCategory === 'salon' ? (
+                  <SalonBookingForm
+                    onBookingChange={setSalonBookingData}
+                    disabled={loading}
+                  />
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[0.68rem] uppercase font-extrabold text-bg-dark tracking-[0.03em] flex items-center justify-between">
+                      <span>Order Type *</span>
+                      <span className="text-[10px] text-text-dark/40 font-semibold lowercase">Select 1 option</span>
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOrderTypeSelect('dine_in')}
+                        className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${
+                          orderType === 'dine_in'
+                            ? 'text-white shadow-sm font-bold ring-2 ring-black/10'
+                            : 'bg-surface text-text-dark border-text-dark/10 font-medium'
+                        }`}
+                        style={orderType === 'dine_in' ? { backgroundColor: primaryColor, borderColor: primaryColor } : undefined}
+                      >
+                        <span className="text-sm mb-0.5">🍽️</span>
+                        <span className="text-xs font-black">Dine In</span>
+                        <span className={`text-[9px] ${orderType === 'dine_in' ? 'text-white/80' : 'text-text-dark/50'}`}>At table</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleOrderTypeSelect('takeaway')}
-                      className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${
-                        orderType === 'takeaway'
-                          ? 'text-white shadow-sm font-bold ring-2 ring-black/10'
-                          : 'bg-surface text-text-dark border-text-dark/10 font-medium'
-                      }`}
-                      style={orderType === 'takeaway' ? { backgroundColor: primaryColor, borderColor: primaryColor } : undefined}
-                    >
-                      <span className="text-sm mb-0.5">🥡</span>
-                      <span className="text-xs font-black">Takeaway</span>
-                      <span className={`text-[9px] ${orderType === 'takeaway' ? 'text-white/80' : 'text-text-dark/50'}`}>Self pickup</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOrderTypeSelect('takeaway')}
+                        className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer ${
+                          orderType === 'takeaway'
+                            ? 'text-white shadow-sm font-bold ring-2 ring-black/10'
+                            : 'bg-surface text-text-dark border-text-dark/10 font-medium'
+                        }`}
+                        style={orderType === 'takeaway' ? { backgroundColor: primaryColor, borderColor: primaryColor } : undefined}
+                      >
+                        <span className="text-sm mb-0.5">🥡</span>
+                        <span className="text-xs font-black">Takeaway</span>
+                        <span className={`text-[9px] ${orderType === 'takeaway' ? 'text-white/80' : 'text-text-dark/50'}`}>Self pickup</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleOrderTypeSelect('delivery')}
-                      className="flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer bg-gray-50 text-gray-400 border-gray-200 hover:border-amber-400 relative overflow-hidden"
-                    >
-                      <span className="text-sm mb-0.5 opacity-60">🛵</span>
-                      <span className="text-xs font-black line-through opacity-70">Delivery</span>
-                      <span className="text-[8px] font-extrabold text-amber-700 uppercase tracking-tighter bg-amber-100 px-1 py-0.2 rounded mt-0.5">Unavailable</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOrderTypeSelect('delivery')}
+                        className="flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer bg-gray-50 text-gray-400 border-gray-200 hover:border-amber-400 relative overflow-hidden"
+                      >
+                        <span className="text-sm mb-0.5 opacity-60">🛵</span>
+                        <span className="text-xs font-black line-through opacity-70">Delivery</span>
+                        <span className="text-[8px] font-extrabold text-amber-700 uppercase tracking-tighter bg-amber-100 px-1 py-0.2 rounded mt-0.5">Unavailable</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Row 2: Payment Mode Selection (2 Options) */}
                 <div className="flex flex-col gap-1.5">
@@ -1829,17 +1907,19 @@ function CartContent() {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[0.7rem] uppercase font-bold text-bg-dark tracking-[0.02em]">Note to Chef (optional)</label>
-                  <textarea
-                    rows={2}
-                    placeholder="e.g. Make it extra spicy / No onions"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    disabled={loading}
-                    className="bg-surface border-[1.5px] border-transparent rounded-[10px] px-4 py-3 text-xs text-text-dark outline-none resize-none focus:border-primary placeholder:text-text-dark/40 font-medium"
-                  />
-                </div>
+                {effectiveCategory !== 'salon' && (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[0.7rem] uppercase font-bold text-bg-dark tracking-[0.02em]">Note to Chef (optional)</label>
+                    <textarea
+                      rows={2}
+                      placeholder="e.g. Make it extra spicy / No onions"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      disabled={loading}
+                      className="bg-surface border-[1.5px] border-transparent rounded-[10px] px-4 py-3 text-xs text-text-dark outline-none resize-none focus:border-primary placeholder:text-text-dark/40 font-medium"
+                    />
+                  </div>
+                )}
 
                 <button
                   type="submit"
@@ -1855,7 +1935,11 @@ function CartContent() {
                   {maintenanceInfo.enabled
                     ? '🚫 Ordering Disabled (Under Maintenance)'
                     : loading
-                    ? 'Placing Order...'
+                    ? effectiveCategory === 'salon'
+                      ? 'Booking Appointment...'
+                      : 'Placing Order...'
+                    : effectiveCategory === 'salon'
+                    ? 'Confirm & Book Appointment'
                     : 'Confirm & Place Order'}
                 </button>
 

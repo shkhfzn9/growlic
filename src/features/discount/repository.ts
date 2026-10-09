@@ -1,6 +1,7 @@
 import dbConnect from '@/lib/mongodb';
 import { Coupon, DiscountSettings } from './model';
 import { ICoupon, IDiscountSettings } from './types';
+import { sanitizeTenantId } from '@/lib/tenant';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normalizeCoupon(doc: any): ICoupon {
@@ -46,10 +47,11 @@ function normalizeSettings(doc: any): IDiscountSettings {
  */
 export async function getDiscountSettings(restaurantId: string): Promise<IDiscountSettings> {
   await dbConnect();
-  let settings = await DiscountSettings.findOne({ restaurantId });
+  const cleanRestId = sanitizeTenantId(restaurantId);
+  let settings = await DiscountSettings.findOne({ restaurantId: cleanRestId });
   if (!settings) {
     settings = await DiscountSettings.create({
-      restaurantId,
+      restaurantId: cleanRestId,
       masterEnabled: true,
       couponsEnabled: true,
       spendTiersEnabled: true,
@@ -85,7 +87,7 @@ export async function updateDiscountSettings(
  */
 export async function getCoupons(restaurantId: string): Promise<ICoupon[]> {
   await dbConnect();
-  const docs = await Coupon.find({ restaurantId }).sort({ createdAt: -1 });
+  const docs = await Coupon.find({ restaurantId: sanitizeTenantId(restaurantId) }).sort({ createdAt: -1 });
   return docs.map(normalizeCoupon);
 }
 

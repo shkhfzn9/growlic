@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { getRestaurantDetails } from '@/actions/auth';
+import { getVocabulary } from '@/config/businessVocabulary';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -18,6 +20,7 @@ import {
   Wallet,
   Percent,
   ClipboardList,
+  Calendar,
 } from 'lucide-react';
 
 interface MobileHeaderProps {
@@ -27,6 +30,7 @@ interface MobileHeaderProps {
 }
 
 const navLinks = [
+  { href: '/admin/appointments', label: 'Bookings & Schedule', icon: Calendar },
   { href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/expense', label: 'Expense Tracker', icon: Wallet },
@@ -40,10 +44,39 @@ const navLinks = [
   { href: '/admin/developer-promo', label: 'Developer Promo', icon: Code2 },
 ];
 
-
 export default function MobileHeader({ restaurantName, email, onLogout }: MobileHeaderProps) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
+
+  useEffect(() => {
+    const fetchBusinessInfo = async () => {
+      try {
+        const details = await getRestaurantDetails();
+        if (details?.businessCategory) {
+          setBusinessCategory(details.businessCategory);
+        } else if (details?.themePreset === 'rose_quartz' || details?.themePreset === 'velvet_noir') {
+          setBusinessCategory('salon');
+        } else if (details?.themePreset === 'carbon_crimson' || details?.themePreset === 'cyber_cyan') {
+          setBusinessCategory('detailing');
+        }
+      } catch (err) {
+        // Quiet fallback
+      }
+    };
+
+    fetchBusinessInfo();
+  }, []);
+
+  const vocab = getVocabulary(businessCategory);
+
+  const getLinkLabel = (link: { href: string; label: string }) => {
+    if (link.href === '/admin/appointments') return businessCategory === 'salon' ? 'Bookings & Schedule' : 'Appointments & Schedule';
+    if (link.href === '/admin/menu') return vocab.itemsNoun;
+    if (link.href === '/admin/orders') return vocab.ordersNoun;
+    if (link.href === '/admin/settings') return `Settings & ${vocab.tableNoun.split(' ')[0] || 'QR'}`;
+    return link.label;
+  };
 
   return (
     <>
@@ -71,6 +104,7 @@ export default function MobileHeader({ restaurantName, email, onLogout }: Mobile
             {navLinks.map((link) => {
               const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
               const Icon = link.icon;
+              const label = getLinkLabel(link);
               return (
                 <Link
                   key={link.href}
@@ -83,7 +117,7 @@ export default function MobileHeader({ restaurantName, email, onLogout }: Mobile
                   }`}
                 >
                   <Icon className="w-[18px] h-[18px]" />
-                  {link.label}
+                  {label}
                 </Link>
               );
             })}

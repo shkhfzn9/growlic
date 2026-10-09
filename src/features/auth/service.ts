@@ -4,6 +4,7 @@ import * as discountTierRepo from '@/features/menu/repositories/discountTierRepo
 import * as comboRuleRepo from '@/features/menu/repositories/comboRuleRepository';
 import * as pairingRuleRepo from '@/features/menu/repositories/pairingRuleRepository';
 import * as bannerRepo from '@/features/menu/repositories/bannerRepository';
+import { getDefaultBanners } from '@/config/businessVocabulary';
 import { hashPassword, comparePassword, signToken, verifyToken } from '@/lib/auth';
 import { AuthenticationError, ConflictError, ValidationError } from '@/shared/errors';
 import { IAdmin } from './types';
@@ -40,6 +41,8 @@ export async function getAdminByRestaurantId(restaurantId: string): Promise<IAdm
  * @param password The raw password input.
  * @returns An object containing the IAdmin profile and a signed JWT authorization string.
  */
+const DUMMY_HASH = '$2a$10$e857X/O6S/aEa1F3n/6gUO.4d6r1M/8.jV9N2Q.E1R8nQ7g.6eG6S';
+
 export async function authenticateAdmin(email: string, password?: string) {
   authenticateAdminValidation(email, password);
 
@@ -47,7 +50,8 @@ export async function authenticateAdmin(email: string, password?: string) {
   const result = await adminRepo.findWithPasswordByEmail(undefined, email);
   if (!result) {
     console.log('[SERVICE AUTH] Admin document not found for email:', email);
-    // Log failed login with fallback restaurant ID when admin is not registered
+    // Perform dummy bcrypt comparison to ensure constant-time response and prevent timing attacks
+    await comparePassword(password || 'dummy', DUMMY_HASH);
     await logAction('system', undefined, 'LOGIN_FAILED', null, { email });
     throw new AuthenticationError('Invalid credentials');
   }
@@ -107,9 +111,10 @@ export async function registerRestaurant(data: {
   password?: string;
   phone: string;
   designation: string;
+  businessCategory?: string;
 }) {
   const { phoneClean } = registerRestaurantValidation(data);
-  const { restaurantName, restaurantId, email, password, designation } = data;
+  const { restaurantName, restaurantId, email, password, designation, businessCategory = 'restaurant' } = data;
 
   const existingEmail = await adminRepo.findByEmail(restaurantId, email);
   if (existingEmail) {
@@ -127,6 +132,33 @@ export async function registerRestaurant(data: {
   else if (designationLower === 'manager') role = 'manager';
   else if (designationLower === 'staff') role = 'staff';
 
+  // Determine theme preset by business category
+  let defaultPreset = 'burgundy';
+  let defaultPrimary = '#C0181A';
+  let defaultDark = '#8B0000';
+  let defaultDarker = '#6B0000';
+  let defaultAccent = '#F5C518';
+
+  if (businessCategory === 'salon') {
+    defaultPreset = 'rose_quartz';
+    defaultPrimary = '#EC4899';
+    defaultDark = '#831843';
+    defaultDarker = '#4C0519';
+    defaultAccent = '#F472B6';
+  } else if (businessCategory === 'detailing') {
+    defaultPreset = 'carbon_crimson';
+    defaultPrimary = '#EF4444';
+    defaultDark = '#18181B';
+    defaultDarker = '#09090B';
+    defaultAccent = '#F87171';
+  } else if (businessCategory === 'retail') {
+    defaultPreset = 'purple';
+    defaultPrimary = '#8B5CF6';
+    defaultDark = '#4C1D95';
+    defaultDarker = '#2E1065';
+    defaultAccent = '#F43F5E';
+  }
+
   const hashedPassword = await hashPassword(password!);
   const newAdmin = await adminRepo.create({
     email,
@@ -134,161 +166,260 @@ export async function registerRestaurant(data: {
     restaurantId,
     restaurantName,
     phone: phoneClean,
+    whatsappNumber: phoneClean,
     designation,
     role,
+    businessCategory,
+    themePreset: defaultPreset,
+    primaryColor: defaultPrimary,
+    themeGradientDark: defaultDark,
+    themeGradientDarker: defaultDarker,
+    themeAccentColor: defaultAccent,
+    welcomeMessage: businessCategory === 'salon'
+      ? 'Welcome to our Luxury Salon & Spa!'
+      : businessCategory === 'detailing'
+      ? 'Welcome to our Auto Detailing Studio!'
+      : businessCategory === 'retail'
+      ? 'Welcome to our Boutique Store!'
+      : 'Welcome to our restaurant!',
   });
 
   const tenantId = newAdmin.restaurantId;
 
-  // Onboarding Seeds
-  const starterMenu = [
-    {
-      restaurantId: tenantId,
-      category: 'Classic Momos',
-      name: 'Veg Steamed Momos',
-      description: 'Authentic steamed dumplings stuffed with finely minced fresh seasonal vegetables and herbs.',
-      image: SVG_MOMO,
-      price: 129,
-      available: true,
-      pairsWithCategories: ['Drinks'],
-      active: true,
-    },
-    {
-      restaurantId: tenantId,
-      category: 'Classic Momos',
-      name: 'Chicken Fried Momos',
-      description: 'Crispy golden-fried momos filled with spiced succulent chicken mince. Served with hot chilli sauce.',
-      image: SVG_MOMO,
-      price: 159,
-      available: true,
-      pairsWithCategories: ['Drinks'],
-      active: true,
-    },
-    {
-      restaurantId: tenantId,
-      category: 'Biryani',
-      name: 'Veg Dum Biryani',
-      description: 'Slow-cooked aromatic basmati rice layered with fresh vegetables, saffron, and traditional spices.',
-      image: SVG_RICE,
-      price: 249,
-      available: true,
-      pairsWithCategories: ['Drinks'],
-      active: true,
-    },
-    {
-      restaurantId: tenantId,
-      category: 'Biryani',
-      name: 'Chicken Dum Biryani',
-      description: 'Classic chicken biryani slow-cooked on dum with aromatic spices and basmati rice.',
-      image: SVG_RICE,
-      price: 289,
-      available: true,
-      pairsWithCategories: ['Drinks'],
-      active: true,
-    },
-    {
-      restaurantId: tenantId,
-      category: 'Tandoori',
-      name: 'Paneer Tikka',
-      description: 'Cubes of paneer marinated in spiced yogurt and grilled in a traditional tandoor clay oven.',
-      image: SVG_SNACKS,
-      price: 199,
-      available: true,
-      pairsWithCategories: ['Drinks'],
-      active: true,
-    },
-    {
-      restaurantId: tenantId,
-      category: 'Tandoori',
-      name: 'Chicken Tandoori (Half)',
-      description: 'Tender chicken marinated in yogurt and tandoori spices, grilled to perfection in clay oven.',
-      image: SVG_SNACKS,
-      price: 269,
-      available: true,
-      pairsWithCategories: ['Drinks'],
-      active: true,
-    },
-    {
-      restaurantId: tenantId,
-      category: 'Drinks',
-      name: 'Fresh Lime Soda',
-      description: 'Chilled carbonated soda with squeezed fresh key lime juice, organic sugar syrup, and mint sprigs.',
-      image: SVG_BOWL,
-      price: 59,
-      available: true,
-      pairsWithCategories: [],
-      active: true,
-    },
-    {
-      restaurantId: tenantId,
-      category: 'Drinks',
-      name: 'Masala Chai',
-      description: 'Brewed black tea with a mixture of aromatic spices and milk.',
-      image: SVG_BOWL,
-      price: 39,
-      available: true,
-      pairsWithCategories: [],
-      active: true,
-    }
-  ];
+  // Business Specific Onboarding Starter Seeds
+  let starterMenu = [];
+
+  if (businessCategory === 'salon') {
+    starterMenu = [
+      {
+        restaurantId: tenantId,
+        category: 'Hair Treatments',
+        name: 'Signature Haircut & Styling',
+        description: 'Precision cut, wash, scalp massage, and professional blow-dry styling.',
+        image: '/dish_placeholder.jpg',
+        price: 599,
+        available: true,
+        pairsWithCategories: ['Spa Therapy'],
+        active: true,
+      },
+      {
+        restaurantId: tenantId,
+        category: 'Hair Treatments',
+        name: 'Keratin Smoothing Therapy',
+        description: 'Deep restorative keratin treatment for smooth, frizz-free, ultra-shiny hair.',
+        image: '/dish_placeholder.jpg',
+        price: 2499,
+        available: true,
+        pairsWithCategories: ['Spa Therapy'],
+        active: true,
+      },
+      {
+        restaurantId: tenantId,
+        category: 'Spa Therapy',
+        name: 'Hydra Glow Facial Spa',
+        description: 'Deep pore cleansing, exfoliation, hydration mask, and relaxing face massage.',
+        image: '/dish_placeholder.jpg',
+        price: 1299,
+        available: true,
+        pairsWithCategories: [],
+        active: true,
+      },
+    ];
+  } else if (businessCategory === 'detailing') {
+    starterMenu = [
+      {
+        restaurantId: tenantId,
+        category: 'Detailing Packages',
+        name: 'Ceramic Coating Protection (9H)',
+        description: '3-layer 9H nano-ceramic glass shield for ultra gloss, hydrophobic water repelling, and scratch defense.',
+        image: '/dish_placeholder.jpg',
+        price: 9999,
+        available: true,
+        pairsWithCategories: ['Wash & Polish'],
+        active: true,
+      },
+      {
+        restaurantId: tenantId,
+        category: 'Detailing Packages',
+        name: 'Deep Interior Spa & Sanitization',
+        description: 'Steam extraction, leather conditioning, dashboard dressing, and antibacterial UV sanitization.',
+        image: '/dish_placeholder.jpg',
+        price: 1999,
+        available: true,
+        pairsWithCategories: ['Wash & Polish'],
+        active: true,
+      },
+      {
+        restaurantId: tenantId,
+        category: 'Wash & Polish',
+        name: 'Premium Snow Foam Wash & Wax',
+        description: 'pH neutral snow foam pre-wash, 2-bucket hand wash, alloy wheel de-con, and synthetic spray sealant.',
+        image: '/dish_placeholder.jpg',
+        price: 799,
+        available: true,
+        pairsWithCategories: [],
+        active: true,
+      },
+    ];
+  } else {
+    // Default Restaurant & Cafe Starter Menu
+    starterMenu = [
+      {
+        restaurantId: tenantId,
+        category: 'Classic Momos',
+        name: 'Veg Steamed Momos',
+        description: 'Authentic steamed dumplings stuffed with finely minced fresh seasonal vegetables and herbs.',
+        image: SVG_MOMO,
+        price: 129,
+        available: true,
+        pairsWithCategories: ['Drinks'],
+        active: true,
+      },
+      {
+        restaurantId: tenantId,
+        category: 'Classic Momos',
+        name: 'Chicken Fried Momos',
+        description: 'Crispy golden-fried momos filled with spiced succulent chicken mince. Served with hot chilli sauce.',
+        image: SVG_MOMO,
+        price: 159,
+        available: true,
+        pairsWithCategories: ['Drinks'],
+        active: true,
+      },
+      {
+        restaurantId: tenantId,
+        category: 'Biryani',
+        name: 'Veg Dum Biryani',
+        description: 'Slow-cooked aromatic basmati rice layered with fresh vegetables, saffron, and traditional spices.',
+        image: SVG_RICE,
+        price: 249,
+        available: true,
+        pairsWithCategories: ['Drinks'],
+        active: true,
+      },
+      {
+        restaurantId: tenantId,
+        category: 'Drinks',
+        name: 'Fresh Lime Soda',
+        description: 'Chilled carbonated soda with squeezed fresh key lime juice, organic sugar syrup, and mint sprigs.',
+        image: SVG_BOWL,
+        price: 59,
+        available: true,
+        pairsWithCategories: [],
+        active: true,
+      },
+    ];
+  }
 
   await menuItemRepo.insertMany(tenantId, starterMenu);
 
-  await discountTierRepo.create({
-    restaurantId: tenantId,
-    minSpend: 399,
-    percentOff: 10,
-    categoryScope: null,
-    active: true,
-  });
+  // Onboarding Seeds for Domain-Specific Discounts & Banners
+  const seedBanners = getDefaultBanners(businessCategory, tenantId);
+  for (const b of seedBanners) {
+    await bannerRepo.create({
+      restaurantId: tenantId,
+      title: b.title,
+      subtitle: b.subtitle,
+      buttonText: b.buttonText,
+      buttonLink: b.buttonLink,
+      image: b.image,
+      active: true,
+    });
+  }
 
-  await comboRuleRepo.create({
-    restaurantId: tenantId,
-    conditionCategory: 'Classic Momos',
-    conditionExcludeCategory: 'Drinks',
-    rewardType: 'percent_off_item',
-    rewardTarget: 'Drinks:50',
-    customerMessage: 'Add a Drink at 50% OFF with any Momos!',
-    active: true,
-  });
-
-  await pairingRuleRepo.create({
-    restaurantId: tenantId,
-    triggerCategory: 'Classic Momos',
-    suggestCategories: ['Drinks'],
-    active: true,
-  });
-
-  // Onboarding Seeds for Banners
-  await bannerRepo.create({
-    restaurantId: tenantId,
-    title: "Free delivery for\ntoday's specials",
-    subtitle: "Up to 3 times per day",
-    buttonText: "Order now",
-    buttonLink: `/menu/${tenantId}`,
-    image: '/dish_placeholder.jpg',
-    active: true,
-  });
-
-  await bannerRepo.create({
-    restaurantId: tenantId,
-    title: "Get 10% OFF on\norders above ₹399!",
-    subtitle: "Discount applied automatically at checkout",
-    buttonText: "Browse Menu",
-    buttonLink: `/menu/${tenantId}`,
-    image: SVG_BOWL,
-    active: true,
-  });
-
-  await bannerRepo.create({
-    restaurantId: tenantId,
-    title: "Add a Drink at 50% OFF\nwith any Momos!",
-    subtitle: "Combo discount active today",
-    buttonText: "Order Momos",
-    buttonLink: `/menu/${tenantId}?category=Classic Momos`,
-    image: SVG_MOMO,
-    active: true,
-  });
+  if (businessCategory === 'salon') {
+    await discountTierRepo.create({
+      restaurantId: tenantId,
+      minSpend: 999,
+      percentOff: 10,
+      categoryScope: null,
+      active: true,
+    });
+    await comboRuleRepo.create({
+      restaurantId: tenantId,
+      conditionCategory: 'Hair Styling & Treatment',
+      conditionExcludeCategory: 'Skin & Facial Care',
+      rewardType: 'percent_off_item',
+      rewardTarget: 'Skin & Facial Care:50',
+      customerMessage: 'Free Hair Wash & Styling with any Hair Color!',
+      active: true,
+    });
+    await pairingRuleRepo.create({
+      restaurantId: tenantId,
+      triggerCategory: 'Hair Styling & Treatment',
+      suggestCategories: ['Skin & Facial Care'],
+      active: true,
+    });
+  } else if (businessCategory === 'detailing') {
+    await discountTierRepo.create({
+      restaurantId: tenantId,
+      minSpend: 1999,
+      percentOff: 10,
+      categoryScope: null,
+      active: true,
+    });
+    await comboRuleRepo.create({
+      restaurantId: tenantId,
+      conditionCategory: 'Paint Protection & Coating',
+      conditionExcludeCategory: 'Wash & Polish',
+      rewardType: 'percent_off_item',
+      rewardTarget: 'Wash & Polish:50',
+      customerMessage: 'Free Interior Detailing with Ceramic Coating!',
+      active: true,
+    });
+    await pairingRuleRepo.create({
+      restaurantId: tenantId,
+      triggerCategory: 'Paint Protection & Coating',
+      suggestCategories: ['Wash & Polish'],
+      active: true,
+    });
+  } else if (businessCategory === 'retail') {
+    await discountTierRepo.create({
+      restaurantId: tenantId,
+      minSpend: 499,
+      percentOff: 10,
+      categoryScope: null,
+      active: true,
+    });
+    await comboRuleRepo.create({
+      restaurantId: tenantId,
+      conditionCategory: 'Apparel & Clothing',
+      conditionExcludeCategory: 'Footwear & Accessories',
+      rewardType: 'percent_off_item',
+      rewardTarget: 'Footwear & Accessories:50',
+      customerMessage: 'Buy 2 Get 1 FREE on all Fashion Apparel!',
+      active: true,
+    });
+    await pairingRuleRepo.create({
+      restaurantId: tenantId,
+      triggerCategory: 'Apparel & Clothing',
+      suggestCategories: ['Footwear & Accessories'],
+      active: true,
+    });
+  } else {
+    await discountTierRepo.create({
+      restaurantId: tenantId,
+      minSpend: 399,
+      percentOff: 10,
+      categoryScope: null,
+      active: true,
+    });
+    await comboRuleRepo.create({
+      restaurantId: tenantId,
+      conditionCategory: 'Classic Momos',
+      conditionExcludeCategory: 'Drinks',
+      rewardType: 'percent_off_item',
+      rewardTarget: 'Drinks:50',
+      customerMessage: 'Add a Drink at 50% OFF with any Momos!',
+      active: true,
+    });
+    await pairingRuleRepo.create({
+      restaurantId: tenantId,
+      triggerCategory: 'Classic Momos',
+      suggestCategories: ['Drinks'],
+      active: true,
+    });
+  }
 
   return newAdmin;
 }
@@ -330,11 +461,11 @@ export async function revokeSession(restaurantId: string, token: string): Promis
 
 // Role-Based Authorization
 const ROLE_PERMISSIONS: Record<string, string[]> = {
-  owner: ['manage_users', 'change_pricing', 'view_analytics', 'edit_menu', 'manage_orders', 'update_order_status'],
-  manager: ['edit_menu', 'manage_orders', 'update_order_status'],
+  owner: ['manage_users', 'change_pricing', 'view_analytics', 'edit_menu', 'manage_orders', 'update_order_status', 'manage_branding', 'manage_settings'],
+  manager: ['edit_menu', 'manage_orders', 'update_order_status', 'manage_branding', 'manage_settings'],
   staff: ['update_order_status'],
-  restaurant_admin: ['manage_users', 'change_pricing', 'view_analytics', 'edit_menu', 'manage_orders', 'update_order_status'],
-  super_admin: [],
+  restaurant_admin: ['manage_users', 'change_pricing', 'view_analytics', 'edit_menu', 'manage_orders', 'update_order_status', 'manage_branding', 'manage_settings'],
+  super_admin: ['manage_users', 'change_pricing', 'view_analytics', 'edit_menu', 'manage_orders', 'update_order_status', 'manage_branding', 'manage_settings'],
 };
 
 /**
@@ -367,6 +498,7 @@ export async function can(permission: string, token: string, restaurantId: strin
 export async function updateRestaurantBranding(
   restaurantId: string,
   data: {
+    restaurantName?: string;
     logoUrl?: string;
     primaryColor?: string;
     welcomeMessage?: string;

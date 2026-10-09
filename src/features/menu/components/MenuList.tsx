@@ -13,6 +13,7 @@ import { getActiveBanners } from '@/actions/banners';
 import { getDeveloperPromo } from '@/actions/developerPromo';
 import ConsultationModal from '@/components/ui/ConsultationModal';
 import { getActiveTheme, saveActiveTheme } from '@/config/themes';
+import { getDefaultBanners } from '@/config/businessVocabulary';
 
 
 
@@ -166,6 +167,7 @@ interface MenuListProps {
     menuItems: MenuItem[];
   };
   menuContext?: any;
+  businessCategory?: string;
 }
 
 export default function MenuList({
@@ -180,6 +182,7 @@ export default function MenuList({
   welcomeMessage,
   upsellData,
   menuContext,
+  businessCategory,
 }: MenuListProps) {
   const dispatch = useDispatch();
   const cartIsEmpty = useSelector((state: RootState) => state.cart.items.length === 0);
@@ -311,32 +314,8 @@ export default function MenuList({
   };
 
 
-  const defaultBanners = [
-    {
-      _id: 'default-specials',
-      title: "Free delivery for\ntoday's specials",
-      subtitle: "Up to 3 times per day",
-      buttonText: "Order now",
-      buttonLink: `/menu/${restaurantId}`,
-      image: '/dish_placeholder.jpg'
-    },
-    {
-      _id: 'default-discount',
-      title: "Get 10% OFF on\norders above ₹399!",
-      subtitle: "Discount applied automatically at checkout",
-      buttonText: "Browse Menu",
-      buttonLink: `/menu/${restaurantId}`,
-      image: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjIiLz48dGV4dCB4PSI1MCUiIHk9IjU1JSIgZm9udC1mYW1pbHk9Im1vbm9zcGFjZSIgZm9udC1zaXplPSIzNCIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+8J+NuDwvdGV4dD48L3N2Zz4='
-    },
-    {
-      _id: 'default-combo',
-      title: "Add a Drink at 50% OFF\nwith any Momos!",
-      subtitle: "Combo discount active today",
-      buttonText: "Order Momos",
-      buttonLink: `/menu/${restaurantId}?category=Classic Momos`,
-      image: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjIiLz48dGV4dCB4PSI1MCUiIHk9IjU1JSIgZm9udC1mYW1pbHk9Im1vbm9zcGFjZSIgZm9udC1zaXplPSIzNCIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+8J+lnzwvdGV4dD48L3N2Zz4='
-    }
-  ];
+  const resolvedCategory = businessCategory || menuContext?.admin?.businessCategory || 'restaurant';
+  const defaultBanners = getDefaultBanners(resolvedCategory, restaurantId);
 
   const defaultDeveloperPromoItem = {
     _id: 'default-developer-promo',

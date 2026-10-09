@@ -17,16 +17,19 @@ async function checkAdminAuth() {
 
   const decoded = verifyToken(token);
   if (!decoded) {
+    cookieStore.delete('admin_token');
     throw new Error('Unauthorized: Invalid token');
   }
 
   const isValid = await validateSession(decoded.restaurantId, token);
   if (!isValid) {
+    cookieStore.delete('admin_token');
     throw new Error('Unauthorized: Session has expired or been revoked');
   }
 
   const admin = await getAdminByRestaurantId(decoded.restaurantId);
   if (!admin) {
+    cookieStore.delete('admin_token');
     throw new Error('Unauthorized: Admin account not found');
   }
 
@@ -37,6 +40,7 @@ async function checkAdminAuth() {
  * Server action to save branding configuration details.
  */
 export async function saveRestaurantBranding(data: {
+  restaurantName?: string;
   logoUrl?: string;
   primaryColor?: string;
   welcomeMessage?: string;
@@ -85,13 +89,11 @@ export async function getRestaurantDetails() {
     // Fetch the fresh DB admin document (which contains the branding fields)
     const freshAdmin = await getAdminByRestaurantId(admin.restaurantId);
     if (!freshAdmin) {
-      throw new Error('Restaurant details not found');
+      return null;
     }
     return JSON.parse(JSON.stringify(freshAdmin));
-  } catch (error) {
-    console.error('Error fetching restaurant details:', error);
-    const message = error instanceof Error ? error.message : 'Failed to retrieve settings details';
-    throw new Error(message);
+  } catch {
+    return null;
   }
 }
 

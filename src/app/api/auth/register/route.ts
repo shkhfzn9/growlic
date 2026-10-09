@@ -12,7 +12,7 @@ import { handleRouteError } from '@/shared/errors';
  */
 export async function POST(req: Request) {
   try {
-    const { restaurantName, restaurantId, email, password, phone, designation } = await req.json();
+    const { restaurantName, restaurantId, email, password, phone, designation, businessCategory } = await req.json();
 
     const newAdmin = await registerRestaurant({
       restaurantName,
@@ -21,11 +21,12 @@ export async function POST(req: Request) {
       password,
       phone,
       designation,
+      businessCategory,
     });
 
     return NextResponse.json({
       success: true,
-      message: 'Restaurant registered and default starter menu seeded successfully!',
+      message: 'Business registered and starter setup seeded successfully!',
       restaurantId: newAdmin.restaurantId,
     });
   } catch (error) {

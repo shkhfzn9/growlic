@@ -5,7 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { updateMenuItem, getMenuItems } from '@/actions/menu';
+import { getRestaurantDetails } from '@/actions/auth';
 import Link from 'next/link';
+import { getVocabulary } from '@/config/businessVocabulary';
+import BusinessFormFieldsContainer from './businessForms/BusinessFormFieldsContainer';
 
 interface MenuItem {
   _id: string;
@@ -138,6 +141,7 @@ export default function EditItemForm({ item }: EditItemFormProps) {
   const router = useRouter();
   const auth = useSelector((state: RootState) => state.auth);
 
+  const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
   const [name, setName] = useState(item.name);
   const [description, setDescription] = useState(item.description);
   const [price, setPrice] = useState(item.price.toString());
@@ -145,6 +149,32 @@ export default function EditItemForm({ item }: EditItemFormProps) {
   const [customCategory, setCustomCategory] = useState('');
   const [image, setImage] = useState(item.image);
   const [available, setAvailable] = useState(item.available);
+
+  useEffect(() => {
+    const fetchBusinessInfo = async () => {
+      try {
+        const details = await getRestaurantDetails();
+        if (details?.businessCategory) {
+          setBusinessCategory(details.businessCategory);
+        } else if (details?.themePreset === 'rose_quartz' || details?.themePreset === 'velvet_noir') {
+          setBusinessCategory('salon');
+        } else if (details?.themePreset === 'carbon_crimson' || details?.themePreset === 'cyber_cyan') {
+          setBusinessCategory('detailing');
+        }
+      } catch (err) {
+        console.error('Failed to load business details:', err);
+      }
+    };
+
+    fetchBusinessInfo();
+  }, []);
+
+  const activeCategoryStr = (category === 'new' ? customCategory : category || item.category).toLowerCase();
+  const isSalonCat = activeCategoryStr.includes('hair') || activeCategoryStr.includes('spa') || activeCategoryStr.includes('facial') || activeCategoryStr.includes('nail') || activeCategoryStr.includes('treatment') || businessCategory === 'salon';
+  const isDetailingCat = activeCategoryStr.includes('coating') || activeCategoryStr.includes('detailing') || activeCategoryStr.includes('polish') || activeCategoryStr.includes('wrap') || businessCategory === 'detailing';
+
+  const effectiveCategory = isSalonCat ? 'salon' : isDetailingCat ? 'detailing' : businessCategory;
+  const vocab = getVocabulary(effectiveCategory);
   
   const [preparation, setPreparation] = useState(item.preparation || '');
   const [ingredients, setIngredients] = useState((item.ingredients || []).join(', '));
@@ -413,7 +443,7 @@ export default function EditItemForm({ item }: EditItemFormProps) {
     <div className="font-mono-custom flex flex-col gap-6 max-w-xl mx-auto">
       {/* Header bar */}
       <div className="border-b border-black pb-4 flex justify-between items-baseline">
-        <h1 className="text-xl font-bold uppercase">Edit Menu Item</h1>
+        <h1 className="text-xl font-bold uppercase">{item._id ? vocab.editItemTitle : vocab.addItemTitle}</h1>
         <Link href="/admin/menu" className="text-xs uppercase underline">
           ← Cancel
         </Link>
@@ -429,10 +459,18 @@ export default function EditItemForm({ item }: EditItemFormProps) {
       <form onSubmit={handleSubmit} className="border border-black p-6 bg-white flex flex-col gap-4">
         {/* Name */}
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-bold uppercase">Item Name</label>
+          <label className="text-xs font-bold uppercase">{vocab.itemNoun} Name</label>
           <input
             type="text"
-            placeholder="e.g. Steamed Pork Momos"
+            placeholder={
+              effectiveCategory === 'salon'
+                ? 'e.g. Keratin Hair Spa & Therapy'
+                : effectiveCategory === 'detailing'
+                ? 'e.g. 9H Ceramic Coating Shield'
+                : effectiveCategory === 'retail'
+                ? 'e.g. Premium Heavyweight Cotton Hoodie'
+                : 'e.g. Steamed Pork Momos'
+            }
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={loading}
@@ -445,7 +483,15 @@ export default function EditItemForm({ item }: EditItemFormProps) {
         <div className="flex flex-col gap-1">
           <label className="text-xs font-bold uppercase">Description</label>
           <textarea
-            placeholder="Describe the item ingredients, preparation, spicy level..."
+            placeholder={
+              effectiveCategory === 'salon'
+                ? 'e.g. Deep conditioning keratin treatment for smooth, frizz-free hair with natural shine...'
+                : effectiveCategory === 'detailing'
+                ? 'e.g. Multi-layer nano ceramic coating with 2-year hydrophobic paint protection...'
+                : effectiveCategory === 'retail'
+                ? 'e.g. 100% heavy fleece organic cotton hoodie with reinforced double stitching...'
+                : 'e.g. Hand-rolled Tibetan momos stuffed with spiced minced meat, served with hot garlic dip...'
+            }
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             disabled={loading}
@@ -459,7 +505,15 @@ export default function EditItemForm({ item }: EditItemFormProps) {
           <label className="text-xs font-bold uppercase">Price (₹)</label>
           <input
             type="number"
-            placeholder="149"
+            placeholder={
+              effectiveCategory === 'salon'
+                ? '1499'
+                : effectiveCategory === 'detailing'
+                ? '8999'
+                : effectiveCategory === 'retail'
+                ? '1299'
+                : '189'
+            }
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             disabled={loading}
@@ -470,7 +524,7 @@ export default function EditItemForm({ item }: EditItemFormProps) {
 
         {/* Category Selector */}
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-bold uppercase">Category</label>
+          <label className="text-xs font-bold uppercase">{vocab.categoryNoun}</label>
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -489,7 +543,15 @@ export default function EditItemForm({ item }: EditItemFormProps) {
           {(category === 'new' || categories.length === 0) && (
             <input
               type="text"
-              placeholder="e.g. Desserts"
+              placeholder={
+                effectiveCategory === 'salon'
+                  ? 'e.g. Hair Care & Treatments'
+                  : effectiveCategory === 'detailing'
+                  ? 'e.g. Ceramic & Paint Protection'
+                  : effectiveCategory === 'retail'
+                  ? 'e.g. Apparel & Footwear'
+                  : 'e.g. Desserts & Beverages'
+              }
               value={customCategory}
               onChange={(e) => setCustomCategory(e.target.value)}
               disabled={loading}
@@ -499,178 +561,39 @@ export default function EditItemForm({ item }: EditItemFormProps) {
           )}
         </div>
 
-        {/* Preparation */}
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-bold uppercase">Preparation Details</label>
-          <textarea
-            placeholder="Describe how the dish is cooked or prepared..."
-            value={preparation}
-            onChange={(e) => setPreparation(e.target.value)}
-            disabled={loading}
-            rows={3}
-            className="w-full text-xs border border-black p-2 rounded-none resize-none"
-          />
-        </div>
-
-        {/* Ingredients */}
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-bold uppercase">Ingredients (Comma-separated)</label>
-          <input
-            type="text"
-            placeholder="e.g. Flour, Soy Sauce, Chicken"
-            value={ingredients}
-            onChange={(e) => setIngredients(e.target.value)}
-            disabled={loading}
-            className="w-full text-xs"
-          />
-          <span className="text-[10px] text-zinc-400 uppercase">Separate ingredients with commas. Allergen keywords like wheat, soy, dairy, egg, peanut will be auto-flagged.</span>
-        </div>
-
-        {/* Nutrition Facts */}
-        <div className="flex flex-col gap-2">
-          <label className="text-xs font-bold uppercase">Nutrition Facts</label>
-          <div className="grid grid-cols-4 gap-2">
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] uppercase text-zinc-500">Calories</label>
-              <input
-                type="number"
-                placeholder="0"
-                value={calories}
-                onChange={(e) => setCalories(e.target.value)}
-                disabled={loading}
-                className="w-full text-xs"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] uppercase text-zinc-500">Protein (g)</label>
-              <input
-                type="number"
-                placeholder="0"
-                value={protein}
-                onChange={(e) => setProtein(e.target.value)}
-                disabled={loading}
-                className="w-full text-xs"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] uppercase text-zinc-500">Carbs (g)</label>
-              <input
-                type="number"
-                placeholder="0"
-                value={carbs}
-                onChange={(e) => setCarbs(e.target.value)}
-                disabled={loading}
-                className="w-full text-xs"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] uppercase text-zinc-500">Fat (g)</label>
-              <input
-                type="number"
-                placeholder="0"
-                value={fat}
-                onChange={(e) => setFat(e.target.value)}
-                disabled={loading}
-                className="w-full text-xs"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Spice Level */}
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-bold uppercase">Spice Level</label>
-          <select
-            value={spiceLevel}
-            onChange={(e) => setSpiceLevel(e.target.value)}
-            disabled={loading}
-            className="w-full text-xs border border-black p-2 rounded-none bg-white font-mono-custom"
-          >
-            <option value="0">0 - None / Mild</option>
-            <option value="1">1 - Medium</option>
-            <option value="2">2 - Hot</option>
-            <option value="3">3 - Very Spicy</option>
-          </select>
-        </div>
-
-        {/* Portion Size */}
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-bold uppercase">Portion Size</label>
-          <select
-            value={portionSize}
-            onChange={(e) => setPortionSize(e.target.value)}
-            disabled={loading}
-            className="w-full text-xs border border-black p-2 rounded-none bg-white font-mono-custom"
-          >
-            <option value="Good for 1">Good for 1</option>
-            <option value="Shareable for 2-3">Shareable for 2-3</option>
-            <option value="Shareable for 3-4">Shareable for 3-4</option>
-            <option value="custom">Custom Portion Size</option>
-          </select>
-
-          {portionSize === 'custom' && (
-            <input
-              type="text"
-              placeholder="e.g. Shareable starter for 2-3"
-              value={customPortionSize}
-              onChange={(e) => setCustomPortionSize(e.target.value)}
-              disabled={loading}
-              className="w-full text-xs mt-2"
-              required
-            />
-          )}
-        </div>
-
-        {/* Prep Time Range */}
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-bold uppercase">Prep Time Range (Minutes)</label>
-          <div className="flex gap-4 items-center">
-            <div className="flex-1 flex flex-col gap-0.5">
-              <label className="text-[9px] uppercase text-zinc-500 font-mono-custom">Min Minutes</label>
-              <input
-                type="number"
-                placeholder="10"
-                value={prepTimeMin}
-                onChange={(e) => setPrepTimeMin(e.target.value)}
-                disabled={loading}
-                className="w-full text-xs"
-                required
-              />
-            </div>
-            <span className="text-xs font-bold mt-3 font-mono-custom">to</span>
-            <div className="flex-1 flex flex-col gap-0.5">
-              <label className="text-[9px] uppercase text-zinc-500 font-mono-custom">Max Minutes</label>
-              <input
-                type="number"
-                placeholder="12"
-                value={prepTimeMax}
-                onChange={(e) => setPrepTimeMax(e.target.value)}
-                disabled={loading}
-                className="w-full text-xs"
-                required
-              />
-            </div>
-          </div>
-          <span className="text-[10px] text-zinc-400 uppercase mt-1">
-            Displayed to customer as: ~{prepTimeMin || 'X'}-{prepTimeMax || 'Y'} min, made fresh to order.
-          </span>
-        </div>
-
-        {/* Chef's Note */}
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-bold uppercase">Chef's Note (Optional)</label>
-          <input
-            type="text"
-            placeholder="e.g. '2-day fermented dough' or 'our most ordered momos, 3 years running'"
-            value={chefNote}
-            onChange={(e) => setChefNote(e.target.value)}
-            disabled={loading}
-            className="w-full text-xs"
-          />
-          <span className="text-[10px] text-zinc-400 uppercase">
-            A short insider note shown to customers in the detailed view. Leave empty to hide.
-          </span>
-        </div>
+        {/* Business-Specific Modular Fields */}
+        <BusinessFormFieldsContainer
+          businessCategory={effectiveCategory}
+          formData={{
+            preparation,
+            ingredients,
+            calories,
+            protein,
+            carbs,
+            fat,
+            spiceLevel,
+            portionSize,
+            customPortionSize,
+            prepTimeMin,
+            prepTimeMax,
+            chefNote,
+          }}
+          onChange={(field, value) => {
+            if (field === 'preparation') setPreparation(value);
+            else if (field === 'ingredients') setIngredients(value);
+            else if (field === 'calories') setCalories(value);
+            else if (field === 'protein') setProtein(value);
+            else if (field === 'carbs') setCarbs(value);
+            else if (field === 'fat') setFat(value);
+            else if (field === 'spiceLevel') setSpiceLevel(value);
+            else if (field === 'portionSize') setPortionSize(value);
+            else if (field === 'customPortionSize') setCustomPortionSize(value);
+            else if (field === 'prepTimeMin') setPrepTimeMin(value);
+            else if (field === 'prepTimeMax') setPrepTimeMax(value);
+            else if (field === 'chefNote') setChefNote(value);
+          }}
+          disabled={loading}
+        />
 
         {/* Slider Images List Manager */}
         <div className="flex flex-col gap-1 border-t border-dashed border-black pt-4">
@@ -684,6 +607,45 @@ export default function EditItemForm({ item }: EditItemFormProps) {
             className="text-xs w-full border border-black p-2"
           />
           <span className="text-[10px] text-zinc-400 uppercase">Upload extra images for the product slide show.</span>
+
+          {/* Preset Slider Image Selection */}
+          <div className="flex flex-col gap-1 mt-1">
+            <span className="text-[11px] font-semibold text-zinc-600">Or add a preset starter slider image:</span>
+            <div className="flex gap-2 flex-wrap">
+              {effectiveCategory === 'salon' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setExtraImages((prev) => prev.includes('/saloon_placeholder2.jpg') ? prev : [...prev, '/saloon_placeholder2.jpg'])}
+                    className="px-2.5 py-1 text-[11px] font-medium border border-zinc-300 rounded bg-zinc-50 hover:bg-zinc-100 transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/saloon_placeholder2.jpg" alt="" className="w-4 h-4 object-cover rounded" />
+                    <span>+ Salon Spa Treatment (/saloon_placeholder2.jpg)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExtraImages((prev) => prev.includes('/cosmetics.jpg') ? prev : [...prev, '/cosmetics.jpg'])}
+                    className="px-2.5 py-1 text-[11px] font-medium border border-zinc-300 rounded bg-zinc-50 hover:bg-zinc-100 transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/cosmetics.jpg" alt="" className="w-4 h-4 object-cover rounded" />
+                    <span>+ Hair Spa & Cosmetics (/cosmetics.jpg)</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setExtraImages((prev) => prev.includes('/dish_placeholder.jpg') ? prev : [...prev, '/dish_placeholder.jpg'])}
+                  className="px-2.5 py-1 text-[11px] font-medium border border-zinc-300 rounded bg-zinc-50 hover:bg-zinc-100 transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/dish_placeholder.jpg" alt="" className="w-4 h-4 object-cover rounded" />
+                  <span>+ Placeholder Image (/dish_placeholder.jpg)</span>
+                </button>
+              )}
+            </div>
+          </div>
           
           {extraImages.length > 0 && (
             <div className="grid grid-cols-5 gap-2 mt-2">
@@ -706,26 +668,99 @@ export default function EditItemForm({ item }: EditItemFormProps) {
         </div>
 
         {/* Image Uploader */}
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-bold uppercase">Item Image</label>
-          <div className="flex gap-4 items-center mt-1">
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleImageUpload}
-              disabled={loading}
-              className="text-xs flex-1 border border-black p-2"
-            />
-            {image && (
-              <div className="w-16 h-16 border border-black flex items-center justify-center bg-zinc-100 select-none">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={image} alt="Preview" className="w-full h-full object-cover" />
-              </div>
-            )}
+        <div className="flex flex-col gap-2 border-t border-dashed border-black pt-4">
+          <label className="text-xs font-bold uppercase">Primary {vocab.itemNoun} Image</label>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Dropdown Select for Placeholder Options */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold uppercase text-zinc-500">Preset Placeholder Dropdown</span>
+              <select
+                value={
+                  image === '/saloon_placeholder2.jpg' || image === '/cosmetics.jpg' || image === '/dish_placeholder.jpg'
+                    ? image
+                    : image
+                    ? 'custom'
+                    : effectiveCategory === 'salon'
+                    ? '/saloon_placeholder2.jpg'
+                    : '/dish_placeholder.jpg'
+                }
+                onChange={(e) => {
+                  if (e.target.value !== 'custom') {
+                    setImage(e.target.value);
+                  }
+                }}
+                disabled={loading}
+                className="w-full text-xs border border-black p-2 bg-white font-bold cursor-pointer"
+              >
+                {effectiveCategory === 'salon' ? (
+                  <>
+                    <option value="/saloon_placeholder2.jpg">✨ Salon Spa & Treatment (/saloon_placeholder2.jpg)</option>
+                    <option value="/cosmetics.jpg">💄 Hair Styling & Cosmetics (/cosmetics.jpg)</option>
+                    <option value="/dish_placeholder.jpg">🖼️ Generic Placeholder (/dish_placeholder.jpg)</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="/dish_placeholder.jpg">🖼️ Generic Placeholder (/dish_placeholder.jpg)</option>
+                    <option value="/saloon_placeholder2.jpg">✨ Salon Spa & Treatment (/saloon_placeholder2.jpg)</option>
+                    <option value="/cosmetics.jpg">💄 Hair Styling & Cosmetics (/cosmetics.jpg)</option>
+                  </>
+                )}
+                {image && image !== '/saloon_placeholder2.jpg' && image !== '/cosmetics.jpg' && image !== '/dish_placeholder.jpg' && (
+                  <option value="custom">📁 Custom Uploaded Image</option>
+                )}
+              </select>
+            </div>
+
+            {/* Custom File Upload */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold uppercase text-zinc-500">Upload Custom Image</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                disabled={loading}
+                className="text-xs w-full border border-black p-1.5 bg-zinc-50"
+              />
+            </div>
           </div>
-          <span className="text-[10px] text-zinc-400 mt-1 uppercase">
-            Upload new local image (Max 1MB) or keep current.
-          </span>
+
+          {/* Quick Choice Buttons & Preview */}
+          <div className="flex items-center justify-between gap-3 border border-black p-2.5 bg-zinc-50 mt-1">
+            <div className="flex gap-2 flex-wrap items-center">
+              <span className="text-[10px] font-bold uppercase text-zinc-500">Quick Pick:</span>
+              <button
+                type="button"
+                onClick={() => setImage('/saloon_placeholder2.jpg')}
+                className={`px-2 py-1 text-[11px] font-bold border transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  image === '/saloon_placeholder2.jpg' ? 'border-black bg-black text-white' : 'border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-100'
+                }`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/saloon_placeholder2.jpg" alt="" className="w-4 h-4 object-cover" />
+                <span>Salon Spa Treatment</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setImage('/cosmetics.jpg')}
+                className={`px-2 py-1 text-[11px] font-bold border transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  image === '/cosmetics.jpg' ? 'border-black bg-black text-white' : 'border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-100'
+                }`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/cosmetics.jpg" alt="" className="w-4 h-4 object-cover" />
+                <span>Hair Styling & Cosmetics</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-[10px] font-bold uppercase text-zinc-500">Current:</span>
+              <div className="w-10 h-10 border border-black overflow-hidden bg-white shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={image || '/saloon_placeholder2.jpg'} alt="Preview" className="w-full h-full object-cover" />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Availability checkbox */}

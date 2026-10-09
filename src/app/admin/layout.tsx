@@ -68,8 +68,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             />
           </>
         )}
-        <main className="flex-1 p-4 md:p-8 overflow-y-auto min-h-screen">
-          <div className="max-w-[1200px] mx-auto">{children}</div>
+        <main className="flex-1 p-3 sm:p-4 md:p-8 overflow-y-auto min-h-[calc(100vh-53px)] md:min-h-screen max-w-full overflow-x-hidden">
+          <div className="max-w-[1200px] mx-auto w-full">{children}</div>
         </main>
       </div>
     </OrderNotificationProvider>

@@ -1,10 +1,25 @@
 import * as orderRepo from './repository';
 import * as customerRepo from '@/features/customer/repository';
-import { NotFoundError } from '@/shared/errors';
+import * as menuRepo from '@/features/menu/repositories/menuRepository';
+import { NotFoundError, ValidationError } from '@/shared/errors';
 import { IOrder } from './types';
 import { validateCreateOrderPayload, validateOrderId, validateRestaurantId } from './validation';
 import { getAdminByRestaurantId } from '@/features/auth';
 import { sendNewOrderPush, sendStaffCallPush } from '@/lib/send-push';
+
+export const ALLOWED_STATUS_TRANSITIONS: Record<string, string[]> = {
+  received: ['accepted', 'confirmed', 'scheduled', 'in_progress', 'preparing', 'ready', 'completed', 'cancelled', 'rejected'],
+  scheduled: ['accepted', 'confirmed', 'in_progress', 'preparing', 'ready', 'completed', 'cancelled', 'rejected'],
+  accepted: ['confirmed', 'in_progress', 'preparing', 'ready', 'completed', 'cancelled', 'rejected'],
+  confirmed: ['in_progress', 'accepted', 'preparing', 'ready', 'completed', 'cancelled', 'rejected'],
+  in_progress: ['confirmed', 'accepted', 'preparing', 'ready', 'completed', 'cancelled', 'rejected'],
+  preparing: ['ready', 'completed', 'cancelled', 'rejected'],
+  ready: ['completed', 'cancelled', 'rejected'],
+  completed: [],
+  cancelled: [],
+  rejected: [],
+};
+
 
 /**
  * Places a new order inside the system.
@@ -23,23 +38,28 @@ export async function createOrder(data: {
   paymentMode?: 'cash' | 'online';
   items: Array<{
     menuItemId: string;
-    name: string;
-    price: number;
+    name?: string;
+    price?: number;
     quantity: number;
     image?: string;
     originatedFromNudge?: boolean;
     nudgeType?: 'cross_sell' | 'threshold_discount' | 'combo_freebie';
     nudgeRuleId?: string;
   }>;
-  subtotal: number;
-  total: number;
+  subtotal?: number;
+  total?: number;
   notes?: string;
+  appointmentDetails?: IOrder['appointmentDetails'];
 }): Promise<IOrder> {
   validateCreateOrderPayload(data);
-  const { restaurantId, customerName, customerPhone, customerOldPhone, tableId, orderType, paymentMode, items, subtotal, total, notes } = data;
+  const { customerName, customerPhone, customerOldPhone, tableId, orderType, paymentMode, items, notes, appointmentDetails } = data;
+  const restaurantId = orderRepo.sanitizeTenantId(data.restaurantId);
 
   const admin = await getAdminByRestaurantId(restaurantId);
-  if (admin && admin.maintenanceModeEnabled) {
+  if (!admin) {
+    throw new NotFoundError(`Restaurant tenant '${restaurantId}' not found`);
+  }
+  if (admin.maintenanceModeEnabled) {
     throw new Error(admin.maintenanceMessage || 'Kitchen is currently under maintenance. Ordering is temporarily paused.');
   }
 
@@ -47,20 +67,60 @@ export async function createOrder(data: {
   const trimmedName = customerName.trim();
   const trimmedOldPhone = customerOldPhone?.trim();
 
-  // 1. Handle profile updates if they override their cached details
+  // Recompute prices, names, images, line subtotals, and order total strictly from DB menu items
+  const validatedItems: IOrder['items'] = [];
+  let calculatedSubtotal = 0;
+
+  for (const item of items) {
+    const dbItem = await menuRepo.findById(restaurantId, item.menuItemId);
+    if (!dbItem || dbItem.restaurantId !== restaurantId || dbItem.available === false || dbItem.active === false) {
+      throw new Error(`Menu item '${item.menuItemId}' is invalid or unavailable for tenant '${restaurantId}'`);
+    }
+    const lineTotal = dbItem.price * item.quantity;
+    calculatedSubtotal += lineTotal;
+    validatedItems.push({
+      menuItemId: dbItem._id,
+      name: dbItem.name,
+      price: dbItem.price,
+      quantity: item.quantity,
+      image: dbItem.image || '',
+      originatedFromNudge: item.originatedFromNudge,
+      nudgeType: item.nudgeType,
+      nudgeRuleId: item.nudgeRuleId,
+    });
+  }
+
+  const calculatedTotal = calculatedSubtotal;
+
+  // 1. Double-booking concurrency check & activeSlotKey generation for Salon appointments
+  let activeSlotKey: string | null = null;
+  if (appointmentDetails?.bookingDate && appointmentDetails?.bookingTime) {
+    const specName = appointmentDetails.specialistName?.trim() || '';
+    if (specName) {
+      activeSlotKey = `${restaurantId}:${appointmentDetails.bookingDate}:${appointmentDetails.bookingTime}:${specName.toLowerCase()}`;
+    } else {
+      const activeUnassignedCount = await orderRepo.countActiveUnassignedAppointments(
+        restaurantId,
+        appointmentDetails.bookingDate,
+        appointmentDetails.bookingTime
+      );
+      if (activeUnassignedCount >= 5) {
+        throw new Error('This time slot has reached maximum booking capacity. Please choose another time slot.');
+      }
+    }
+  }
+
+  // 2. Handle profile updates if they override their cached details
   if (trimmedOldPhone && trimmedOldPhone !== trimmedPhone) {
     const oldCustomer = await customerRepo.findByPhone(restaurantId, trimmedOldPhone);
     if (oldCustomer) {
       const newPhoneExists = await customerRepo.findByPhone(restaurantId, trimmedPhone);
       if (!newPhoneExists) {
-        // Update the existing customer document with the new name and phone number
         await customerRepo.updateNameAndPhone(restaurantId, oldCustomer._id, trimmedName, trimmedPhone);
-        // Retroactively update past orders to the new details
         await orderRepo.updateOrdersCustomerDetails(restaurantId, trimmedOldPhone, trimmedName, trimmedPhone);
       }
     }
   } else {
-    // Phone number is the same (or no old phone provided), but they might have changed their name
     const existingCustomer = await customerRepo.findByPhone(restaurantId, trimmedPhone);
     if (existingCustomer && existingCustomer.name !== trimmedName) {
       await customerRepo.updateName(restaurantId, existingCustomer._id, trimmedName);
@@ -68,41 +128,48 @@ export async function createOrder(data: {
     }
   }
 
-  // 2. Create order
-  const order = await orderRepo.create({
-    restaurantId,
-    customerName,
-    customerPhone,
-    tableId,
-    orderType,
-    paymentMode,
-    items,
-    subtotal,
-    total,
-    status: 'received',
-    notes,
-  });
-
-  // 3. Track customer spent and handle loyalty discount reset
-  const customer = await customerRepo.findByPhone(restaurantId, trimmedPhone);
-  if (customer) {
-    await customerRepo.updateStats(
+  // 3. Create order with Atomic DB Index Protection against race conditions
+  let order: IOrder;
+  try {
+    order = await orderRepo.create({
       restaurantId,
-      customer._id,
-      customer.totalOrders + 1,
-      customer.totalSpent + total
+      customerName: trimmedName,
+      customerPhone: trimmedPhone,
+      tableId,
+      orderType,
+      paymentMode,
+      items: validatedItems,
+      subtotal: calculatedSubtotal,
+      total: calculatedTotal,
+      status: 'received',
+      notes,
+      appointmentDetails,
+      activeSlotKey,
+    });
+  } catch (createErr: any) {
+    if (createErr?.code === 11000 || createErr?.message?.includes('E11000')) {
+      throw new Error('This appointment slot with the selected specialist is already booked. Please choose another time slot.');
+    }
+    throw createErr;
+  }
+
+  // 4. Track customer spent using atomic $inc upsert
+  try {
+    const customer = await customerRepo.incrementCustomerStats(
+      restaurantId,
+      trimmedName,
+      trimmedPhone,
+      calculatedTotal
     );
     if (customer.hasPendingDiscount) {
       await customerRepo.resetPendingDiscount(restaurantId, customer._id);
     }
-  } else {
-    await customerRepo.create({
-      restaurantId: restaurantId,
-      name: trimmedName,
-      phone: trimmedPhone,
-      totalOrders: 1,
-      totalSpent: total,
-    });
+  } catch (statsErr) {
+    // Atomicity guarantee: delete order on customer stats failure so both succeed or both roll back
+    if (order && order._id) {
+      await orderRepo.deleteById(order._id);
+    }
+    throw statsErr;
   }
 
   // Trigger FCM Push Notification asynchronously (non-blocking) to all registered restaurant devices
@@ -182,6 +249,13 @@ export async function updateOrderStatus(
   const order = await orderRepo.findById(restaurantId, id);
   if (!order || order.restaurantId !== restaurantId) {
     throw new NotFoundError('Unauthorized or order not found');
+  }
+
+  if (order.status !== status) {
+    const allowed = ALLOWED_STATUS_TRANSITIONS[order.status] || [];
+    if (!allowed.includes(status)) {
+      throw new ValidationError(`Invalid order status transition from '${order.status}' to '${status}'`);
+    }
   }
 
   const updated = await orderRepo.updateStatus(restaurantId, id, status, delayData, rejectionReason);
@@ -294,4 +368,65 @@ export async function getNotificationAlerts(
 ) {
   return orderRepo.getNotificationAlerts(restaurantId, acknowledgedOrderIds, acknowledgedCallIds);
 }
+
+/**
+ * Retrieves unauthenticated public order tracking information.
+ * Lookups order by trackingToken (or fallback by ObjectId if 24-char hex ID),
+ * returning strictly limited public tracking fields (first name only, no phone, no user notes).
+ */
+export async function getPublicOrderTrackInfo(tokenOrId: string, restaurantId?: string) {
+  if (!tokenOrId) return null;
+  const cleanRestId = restaurantId ? orderRepo.sanitizeTenantId(restaurantId) : undefined;
+
+  let order: IOrder | null = null;
+  order = await orderRepo.findByTrackingToken(tokenOrId, cleanRestId);
+
+  const enableObjectIdFallback = process.env.ENABLE_TRACK_OBJECTID_FALLBACK !== 'false';
+  if (!order && enableObjectIdFallback && /^[0-9a-fA-F]{24}$/.test(tokenOrId)) {
+    order = await orderRepo.findById(cleanRestId, tokenOrId);
+  }
+
+  if (!order) return null;
+
+  const admin = await getAdminByRestaurantId(order.restaurantId);
+  const storeWa = (admin?.whatsappNumber && admin?.whatsappNumber !== '9541234068')
+    ? admin.whatsappNumber
+    : (admin?.phone || admin?.whatsappNumber || '9541234068');
+
+  return {
+    _id: order._id,
+    trackingToken: order.trackingToken || order._id,
+    restaurantId: order.restaurantId,
+    customerFirstName: order.customerName ? order.customerName.trim().split(' ')[0] : 'Customer',
+    customerPhone: '', // OMITTED for privacy
+    notes: '', // OMITTED for privacy
+    status: order.status,
+    estimatedTime: order.estimatedTime ?? 0,
+    actualPrepTimeMinutes: order.actualPrepTimeMinutes ?? 0,
+    delayMinutes: order.delayMinutes ?? 0,
+    isDelayed: !!order.isDelayed,
+    items: (order.items || []).map((item) => ({
+      menuItemId: item.menuItemId,
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+      image: item.image || '',
+    })),
+    subtotal: order.subtotal,
+    total: order.total,
+    createdAt: order.createdAt,
+    restaurantWhatsApp: storeWa,
+    rejectionReason: order.rejectionReason || '',
+  };
+}
+
+export async function getBookedSlotsForDate(
+  restaurantId: string,
+  bookingDate: string,
+  specialistName?: string
+): Promise<string[]> {
+  validateRestaurantId(restaurantId);
+  return orderRepo.findBookedSlotsForDate(restaurantId, bookingDate, specialistName);
+}
+
 

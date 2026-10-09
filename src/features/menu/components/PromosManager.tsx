@@ -5,43 +5,29 @@ import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { getAdminBanners, saveBanner, deleteBanner } from '../services/menu.service';
 import { PageHeader, AdminButton } from '@/components/ui';
-import { Plus, Trash2, Megaphone, CheckCircle, Image as ImageIcon } from 'lucide-react';
+import { Plus, Trash2, Megaphone, CheckCircle, Image as ImageIcon, Pencil, X } from 'lucide-react';
 import { BannerData } from '../types/menu.types';
-
-// Preset SVGs matching starter catalog items
-const PRESETS = [
-  {
-    name: 'Steamed Momos Icon',
-    value: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjIiLz48dGV4dCB4PSI1MCUiIHk9IjU1JSIgZm9udC1mYW1pbHk9Im1vbm9zcGFjZSIgZm9udC1zaXplPSIzNCIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+8J+lnzwvdGV4dD48L3N2Zz4=',
-  },
-  {
-    name: 'Rice Icon',
-    value: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjIiLz48dGV4dCB4PSI1MCUiIHk9IjU1JSIgZm9udC1mYW1pbHk9Im1vbm9zcGFjZSIgZm9udC1zaXplPSIzNCIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+8J+fjzwvdGV4dD48L3N2Zz4=',
-  },
-  {
-    name: 'Drinks / Bowl Icon',
-    value: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjIiLz48dGV4dCB4PSI1MCUiIHk9IjU1JSIgZm9udC1mYW1pbHk9Im1vbm9zcGFjZSIgZm9udC1zaXplPSIzNCIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+8J+NuDwvdGV4dD48L3N2Zz4=',
-  },
-  {
-    name: 'Placeholder Dish Image',
-    value: '/dish_placeholder.jpg',
-  }
-];
+import { getRestaurantDetails } from '@/actions/auth';
+import { getDomainPresetImages } from '@/config/businessVocabulary';
 
 export default function PromosManager() {
   const auth = useSelector((state: RootState) => state.auth);
 
+  const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
   const [banners, setBanners] = useState<BannerData[]>([]);
+  const [editingBannerId, setEditingBannerId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [buttonText, setButtonText] = useState('Order Now');
   const [buttonLink, setButtonLink] = useState('');
-  const [image, setImage] = useState(PRESETS[3].value);
+  const [image, setImage] = useState('');
   const [active, setActive] = useState(true);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const domainPresets = getDomainPresetImages(businessCategory);
 
   const loadBanners = async () => {
     setLoading(true);
@@ -56,11 +42,60 @@ export default function PromosManager() {
   };
 
   useEffect(() => {
+    async function initCategoryAndData() {
+      try {
+        const details = await getRestaurantDetails();
+        if (details?.businessCategory) {
+          setBusinessCategory(details.businessCategory);
+          const presets = getDomainPresetImages(details.businessCategory);
+          if (presets.length > 0 && !image) {
+            setImage(presets[0].value);
+          }
+        } else {
+          const presets = getDomainPresetImages('restaurant');
+          if (presets.length > 0 && !image) {
+            setImage(presets[0].value);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to get restaurant details:', err);
+      }
+    }
+
     if (auth.isLoggedIn && auth.restaurantId) {
+      initCategoryAndData();
       loadBanners();
-      setButtonLink(`/menu/${auth.restaurantId}`);
+      if (!editingBannerId) {
+        setButtonLink(`/menu/${auth.restaurantId}`);
+      }
     }
   }, [auth.isLoggedIn, auth.restaurantId]);
+
+  const handleEdit = (banner: BannerData) => {
+    setEditingBannerId(banner._id);
+    setTitle(banner.title);
+    setSubtitle(banner.subtitle || '');
+    setButtonText(banner.buttonText || 'Order Now');
+    setButtonLink(banner.buttonLink || (auth.restaurantId ? `/menu/${auth.restaurantId}` : ''));
+    setImage(banner.image || domainPresets[0]?.value || '/dish_placeholder.jpg');
+    setActive(banner.active !== false);
+    setSaveSuccess(false);
+
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingBannerId(null);
+    setTitle('');
+    setSubtitle('');
+    setButtonText('Order Now');
+    setButtonLink(auth.restaurantId ? `/menu/${auth.restaurantId}` : '');
+    setImage(domainPresets[0]?.value || '/dish_placeholder.jpg');
+    setActive(true);
+    setSaveSuccess(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,6 +105,7 @@ export default function PromosManager() {
     setSaveSuccess(false);
     try {
       await saveBanner({
+        _id: editingBannerId || undefined,
         title,
         subtitle,
         buttonText,
@@ -78,11 +114,7 @@ export default function PromosManager() {
         active,
       });
 
-      setTitle('');
-      setSubtitle('');
-      setButtonText('Order Now');
-      setImage(PRESETS[3].value);
-      setActive(true);
+      handleCancelEdit();
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
       await loadBanners();
@@ -98,6 +130,9 @@ export default function PromosManager() {
     if (confirm('Are you sure you want to delete this promotion banner?')) {
       try {
         await deleteBanner(id);
+        if (editingBannerId === id) {
+          handleCancelEdit();
+        }
         await loadBanners();
       } catch (err) {
         console.error(err);
@@ -108,21 +143,37 @@ export default function PromosManager() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-8 pb-12">
-      {/* Create New Promo Form */}
+      {/* Create / Edit Promo Form */}
       <div className="flex-1 max-w-xl">
-        <PageHeader title="Promos & Ads" subtitle="Post advertisement banners for your menu page" />
+        <PageHeader title="Promos & Ads" subtitle="Post and edit advertisement banners for your menu page" />
 
         <form onSubmit={handleSubmit} className="bg-white border border-[#E2E6EA] rounded-xl p-6 flex flex-col gap-5 shadow-sm">
           <div>
-            <h2 className="text-[15px] font-semibold text-[#111827] flex items-center gap-2">
-              <Megaphone className="w-4 h-4 text-[#C0181A]" /> Post New Advertisement
-            </h2>
-            <p className="text-[13px] text-[#6B7280] mt-0.5">Fill in the fields below to create a new active banner</p>
+            <div className="flex items-center justify-between">
+              <h2 className="text-[15px] font-semibold text-[#111827] flex items-center gap-2">
+                <Megaphone className="w-4 h-4 text-[#C0181A]" />
+                {editingBannerId ? 'Edit Advertisement Banner' : 'Post New Advertisement'}
+              </h2>
+              {editingBannerId && (
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="text-xs font-semibold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" /> Cancel Edit
+                </button>
+              )}
+            </div>
+            <p className="text-[13px] text-[#6B7280] mt-0.5">
+              {editingBannerId
+                ? 'Update the fields below to modify this active banner'
+                : 'Fill in the fields below to create a new active banner'}
+            </p>
           </div>
 
           {saveSuccess && (
             <div className="flex items-center gap-2 bg-[#F0FDF4] border border-[#16A34A]/20 rounded-lg p-3 text-sm text-[#16A34A] font-medium">
-              <CheckCircle className="w-4 h-4" /> Advertisement banner posted successfully!
+              <CheckCircle className="w-4 h-4" /> Advertisement banner saved successfully!
             </div>
           )}
 
@@ -185,7 +236,7 @@ export default function PromosManager() {
               />
               <span className="text-[11px] text-[#6B7280]">Or select a preset starter image:</span>
               <div className="flex gap-2 flex-wrap">
-                {PRESETS.map((preset) => (
+                {domainPresets.map((preset) => (
                   <button
                     key={preset.name}
                     type="button"
@@ -216,9 +267,20 @@ export default function PromosManager() {
             </label>
           </div>
 
-          <AdminButton type="submit" loading={saving} className="mt-2 text-white bg-[#C0181A] hover:bg-[#8B0000]">
-            Create Banner
-          </AdminButton>
+          <div className="flex items-center gap-2 mt-2">
+            <AdminButton type="submit" loading={saving} className="flex-1 text-white bg-[#C0181A] hover:bg-[#8B0000]">
+              {editingBannerId ? 'Save / Update Banner' : 'Create Banner'}
+            </AdminButton>
+            {editingBannerId && (
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="px-4 py-2.5 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
         </form>
       </div>
 
@@ -235,9 +297,16 @@ export default function PromosManager() {
         ) : (
           <div className="flex flex-col gap-4">
             {banners.map((banner) => (
-              <div key={banner._id} className="bg-white border border-[#E2E6EA] rounded-xl p-4 flex items-center gap-4 relative shadow-sm">
+              <div
+                key={banner._id}
+                className={`bg-white border rounded-xl p-4 flex items-center gap-3 relative shadow-sm transition-all ${
+                  editingBannerId === banner._id
+                    ? 'border-[#C0181A] ring-2 ring-[#C0181A]/20 bg-red-50/20'
+                    : 'border-[#E2E6EA]'
+                }`}
+              >
                 {/* Image / Icon preview */}
-                <div className="w-16 h-16 rounded-lg overflow-hidden bg-neutral-100 shrink-0 flex items-center justify-center border border-neutral-200">
+                <div className="w-14 h-14 rounded-lg overflow-hidden bg-neutral-100 shrink-0 flex items-center justify-center border border-neutral-200">
                   {banner.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={banner.image} alt={banner.title} className="w-full h-full object-cover" />
@@ -246,7 +315,7 @@ export default function PromosManager() {
                   )}
                 </div>
 
-                <div className="flex-1 min-w-0 pr-8">
+                <div className="flex-1 min-w-0 pr-2">
                   <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full inline-block mb-1 ${
                     banner.active ? 'bg-green-100 text-green-800' : 'bg-neutral-100 text-neutral-600'
                   }`}>
@@ -259,14 +328,25 @@ export default function PromosManager() {
                   <p className="text-[10px] text-neutral-400 mt-1 truncate">Link: {banner.buttonLink || '(None)'}</p>
                 </div>
 
-                {/* Delete button */}
-                <button
-                  onClick={() => handleDelete(banner._id)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-neutral-100 text-neutral-400 hover:text-red-600 transition-colors"
-                  title="Delete advertisement banner"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {/* Edit & Delete Action Buttons */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleEdit(banner)}
+                    className="p-2 rounded-lg hover:bg-neutral-100 text-neutral-600 hover:text-indigo-600 transition-colors cursor-pointer"
+                    title="Edit advertisement banner"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(banner._id)}
+                    className="p-2 rounded-lg hover:bg-neutral-100 text-neutral-400 hover:text-red-600 transition-colors cursor-pointer"
+                    title="Delete advertisement banner"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>

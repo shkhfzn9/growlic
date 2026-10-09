@@ -59,6 +59,43 @@ export async function createMenuItem(restaurantId: string, data: Partial<IMenuIt
 }
 
 /**
+ * Bulk creates multiple menu items inside the specified restaurant tenant.
+ * Validates that all items contain valid category, name, and price fields.
+ * 
+ * @param restaurantId The identifier of the restaurant tenant.
+ * @param items Array of menu item objects to create.
+ * @returns Array of newly created menu item objects.
+ */
+export async function bulkCreateMenuItems(
+  restaurantId: string,
+  items: Array<{ name: string; description?: string; price: number; category: string; image?: string }>
+): Promise<IMenuItem[]> {
+  if (!restaurantId) {
+    throw new ValidationError('Restaurant ID is required');
+  }
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new ValidationError('At least one item is required for bulk creation');
+  }
+
+  const sanitized = items.map((item) => {
+    if (!item.name || !item.category || item.price === undefined || isNaN(Number(item.price))) {
+      throw new ValidationError(`Invalid item payload for "${item.name || 'unnamed'}"`);
+    }
+    return {
+      name: item.name.trim(),
+      description: item.description?.trim() || '',
+      price: Number(item.price),
+      category: item.category.trim(),
+      image: item.image || '',
+      available: true,
+      active: true,
+    } as Omit<IMenuItem, '_id'>;
+  });
+
+  return menuRepo.bulkCreate(restaurantId, sanitized);
+}
+
+/**
  * Updates menu item configurations after validating ownership scopes.
  * 
  * @param id The database ID string of the target menu item.

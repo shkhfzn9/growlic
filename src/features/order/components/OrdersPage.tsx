@@ -8,25 +8,10 @@ import { useOrderNotification } from '@/components/providers';
 import { Clock, ArrowLeft, AlertTriangle, CheckCircle2, TrendingDown, MessageSquare, X, ShieldAlert } from 'lucide-react';
 import { OrderItem, Order } from '../types/order.types';
 
+import { getRestaurantDetails } from '@/actions/auth';
+import { getVocabulary, getDelayReasons, getRejectionReasons } from '@/config/businessVocabulary';
+
 type FilterStatus = 'all' | Order['status'] | 'delayed';
-
-const PRESET_DELAY_REASONS = [
-  'Kitchen Rush & Heavy Wok Load',
-  'Ingredient Shortage / Prep Refill',
-  'Special Customer Customization',
-  'Staff Shortage during Peak Hour',
-  'Takeaway Packaging Queue',
-  'Other / Custom Note',
-];
-
-const PRESET_REJECTION_REASONS = [
-  'Item Out of Stock / Unavailable',
-  'Kitchen Rush & Capacity Full',
-  'Special Request Unfulfillable',
-  'Restaurant Closing Soon',
-  'Invalid / Incorrect Contact Info',
-  'Other Reason (Write below)',
-];
 
 function getStatusVariant(status: Order['status']) {
   switch (status) {
@@ -45,6 +30,7 @@ function OrdersContent() {
   const highlightId = searchParams.get('highlight');
   const { acknowledgeOrder } = useOrderNotification();
 
+  const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [filter, setFilter] = useState<FilterStatus>('all');
@@ -54,6 +40,20 @@ function OrdersContent() {
   const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
 
+  useEffect(() => {
+    getRestaurantDetails()
+      .then((details) => {
+        if (details?.businessCategory) {
+          setBusinessCategory(details.businessCategory);
+        }
+      })
+      .catch((err) => console.error('Error loading business category for orders:', err));
+  }, []);
+
+  const vocab = getVocabulary(businessCategory);
+  const presetDelayReasons = getDelayReasons(businessCategory);
+  const presetRejectionReasons = getRejectionReasons(businessCategory);
+
   // Delay Tracking & Reason Modal states
   const [delayModalOpen, setDelayModalOpen] = useState(false);
   const [pendingDelayOrder, setPendingDelayOrder] = useState<{
@@ -62,14 +62,27 @@ function OrdersContent() {
     actualMins: number;
     delayMins: number;
   } | null>(null);
-  const [selectedDelayReason, setSelectedDelayReason] = useState(PRESET_DELAY_REASONS[0]);
+  const [selectedDelayReason, setSelectedDelayReason] = useState(presetDelayReasons[0]);
   const [customDelayReason, setCustomDelayReason] = useState('');
 
   // Order Rejection Audit Modal states
   const [rejectionModalOpen, setRejectionModalOpen] = useState(false);
   const [pendingRejectionOrder, setPendingRejectionOrder] = useState<Order | null>(null);
-  const [selectedRejectionReason, setSelectedRejectionReason] = useState(PRESET_REJECTION_REASONS[0]);
+  const [selectedRejectionReason, setSelectedRejectionReason] = useState(presetRejectionReasons[0]);
   const [customRejectionReason, setCustomRejectionReason] = useState('');
+
+  useEffect(() => {
+    if (presetDelayReasons.length > 0 && !presetDelayReasons.includes(selectedDelayReason)) {
+      setSelectedDelayReason(presetDelayReasons[0]);
+    }
+  }, [businessCategory, presetDelayReasons]);
+
+  useEffect(() => {
+    if (presetRejectionReasons.length > 0 && !presetRejectionReasons.includes(selectedRejectionReason)) {
+      setSelectedRejectionReason(presetRejectionReasons[0]);
+    }
+  }, [businessCategory, presetRejectionReasons]);
+
 
   const handleOrderSelect = useCallback((order: Order) => {
     setSelectedOrder(order);
@@ -184,6 +197,10 @@ function OrdersContent() {
   }, [filter, currentPage, highlightId]);
 
   useEffect(() => {
+    if (businessCategory === 'salon') {
+      return; // Do not run background polling for salon mode
+    }
+
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) {
         return;
@@ -191,7 +208,7 @@ function OrdersContent() {
       loadOrders(false);
     }, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [businessCategory]);
 
   // Execution helper for status updates with delay metadata and rejection reason
   const executeStatusUpdate = async (
@@ -231,7 +248,7 @@ function OrdersContent() {
     // Check if rejecting / cancelling order
     if (nextStatus === 'cancelled') {
       setPendingRejectionOrder(targetOrder);
-      setSelectedRejectionReason(PRESET_REJECTION_REASONS[0]);
+      setSelectedRejectionReason(presetRejectionReasons[0]);
       setCustomRejectionReason('');
       setRejectionModalOpen(true);
       return;
@@ -250,7 +267,7 @@ function OrdersContent() {
           actualMins,
           delayMins,
         });
-        setSelectedDelayReason(PRESET_DELAY_REASONS[0]);
+        setSelectedDelayReason(presetDelayReasons[0]);
         setCustomDelayReason('');
         setDelayModalOpen(true);
         return;
@@ -326,8 +343,8 @@ function OrdersContent() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Orders & Kitchen Analytics"
-        subtitle="Track live orders, prep timers, delays & kitchen performance"
+        title={vocab.ordersNoun}
+        subtitle={`Track live ${vocab.orderNoun.toLowerCase()}s, prep timers, delays & ${vocab.prepArea.toLowerCase()} performance`}
         actions={
           <span className="inline-flex items-center gap-1.5 text-xs text-[#16A34A] font-medium bg-[#F0FDF4] px-2.5 py-1 rounded-full">
             <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] animate-pulse" />
@@ -747,7 +764,7 @@ function OrdersContent() {
                 Select Delay Reason (Required for Admin Analytics) *
               </label>
               <div className="flex flex-col gap-1.5">
-                {PRESET_DELAY_REASONS.map((reason) => (
+                {presetDelayReasons.map((reason) => (
                   <button
                     key={reason}
                     type="button"
@@ -772,7 +789,7 @@ function OrdersContent() {
               </label>
               <textarea
                 rows={2}
-                placeholder="e.g. Extra large order of 6 momo sizzlers overwhelmed wok station..."
+                placeholder={`e.g. Unforeseen delay at ${vocab.prepArea.toLowerCase()} station...`}
                 value={customDelayReason}
                 onChange={(e) => setCustomDelayReason(e.target.value)}
                 className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs text-gray-900 outline-none focus:border-indigo-600 transition-colors resize-none"
@@ -825,7 +842,7 @@ function OrdersContent() {
             <div className="flex flex-col gap-2">
               <label className="text-xs font-black uppercase text-gray-400 tracking-wider">Select Rejection Reason *</label>
               <div className="flex flex-col gap-1.5">
-                {PRESET_REJECTION_REASONS.map((reason) => {
+                {presetRejectionReasons.map((reason) => {
                   const isSelected = selectedRejectionReason === reason;
                   return (
                     <button
@@ -853,7 +870,7 @@ function OrdersContent() {
                   rows={2}
                   value={customRejectionReason}
                   onChange={(e) => setCustomRejectionReason(e.target.value)}
-                  placeholder="e.g. Out of gas / Chef unavailable..."
+                  placeholder={`e.g. Out of stock / ${vocab.prepStaff} unavailable...`}
                   className="w-full bg-gray-50 border border-gray-300 rounded-xl p-3 text-xs font-medium focus:border-red-600 outline-none"
                 />
               </div>

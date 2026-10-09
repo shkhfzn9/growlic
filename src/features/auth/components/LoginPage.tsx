@@ -33,13 +33,15 @@ function LoginForm() {
       const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password: password.trim() }),
       });
 
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Invalid credentials');
+        setError(data.error || 'Invalid email address or password. Please check your credentials or register a new business.');
+        setLoading(false);
+        return;
       }
 
       dispatch(
@@ -57,9 +59,8 @@ function LoginForm() {
       const redirectUrl = searchParams.get('redirect') || defaultRedirect;
       router.push(redirectUrl);
     } catch (err) {
-      console.error(err);
-      const message = err instanceof Error ? err.message : 'Login failed. Please try again.';
-      setError(message);
+      setError('Unable to connect to login service. Please check your connection.');
+    } finally {
       setLoading(false);
     }
   };
@@ -77,26 +78,31 @@ function LoginForm() {
             Growlic
             <span className="bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded tracking-normal leading-none">Beta</span>
           </h1>
-          <p className="text-white/50 text-sm mt-1">Admin Panel</p>
+          <p className="text-white/50 text-sm mt-1">Business Management Portal</p>
         </div>
 
         {/* Card */}
         <div className="bg-white rounded-2xl shadow-xl p-6">
           <h2 className="text-lg font-bold text-[#111827] text-center mb-1">Welcome Back</h2>
-          <p className="text-[#6B7280] text-sm text-center mb-6">Sign in to manage your restaurant</p>
+          <p className="text-[#6B7280] text-sm text-center mb-6">Sign in to manage your business profile</p>
 
           {error && (
-            <div className="bg-[#FEF2F2] text-[#DC2626] text-sm font-medium rounded-lg p-3 mb-4 border border-[#DC2626]/20">
-              {error}
+            <div className="bg-[#FEF2F2] text-[#DC2626] text-xs font-medium rounded-xl p-3 mb-4 border border-[#DC2626]/20 flex flex-col gap-1.5">
+              <span>{error}</span>
+              <Link href="/admin/register" className="text-[#C0181A] font-extrabold underline hover:text-[#901012]">
+                Click here to register a new account →
+              </Link>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <form onSubmit={handleSubmit} autoComplete="off" className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Email</label>
               <input
                 type="email"
-                placeholder="admin@growlic.com"
+                name="login_user_email"
+                autoComplete="off"
+                placeholder="e.g. owner@mybusiness.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
@@ -110,6 +116,8 @@ function LoginForm() {
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  name="login_user_password"
+                  autoComplete="current-password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

@@ -5,15 +5,56 @@ import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { getMenuItems, toggleMenuItemAvailability, deleteMenuItem } from '../services/menu.service';
 import { increaseAllMenuPricesAction, decreaseAllMenuPricesAction } from '@/actions/menu';
+import { getRestaurantDetails } from '@/actions/auth';
 import Link from 'next/link';
-import { Plus, Pencil, Trash2, ImageOff, Search, CheckCircle2, PackageX, PackageCheck, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, ImageOff, Search, CheckCircle2, PackageX, PackageCheck, AlertCircle, TrendingUp, TrendingDown, Sparkles } from 'lucide-react';
 import { PageHeader, AdminButton, EmptyState } from '@/components/ui';
 import { MenuItem } from '../types/menu.types';
+import { getVocabulary } from '@/config/businessVocabulary';
+import AiMenuScanModal from './AiMenuScanModal';
 
 export default function MenuPage() {
   const auth = useSelector((state: RootState) => state.auth);
+  const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [aiScanModalOpen, setAiScanModalOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchBusinessInfo = async () => {
+      try {
+        const details = await getRestaurantDetails();
+        if (details?.businessCategory) {
+          setBusinessCategory(details.businessCategory);
+        } else if (details?.themePreset === 'rose_quartz' || details?.themePreset === 'velvet_noir') {
+          setBusinessCategory('salon');
+        } else if (details?.themePreset === 'carbon_crimson' || details?.themePreset === 'cyber_cyan') {
+          setBusinessCategory('detailing');
+        }
+      } catch (err) {
+        console.error('Failed to load business details:', err);
+      }
+    };
+
+    fetchBusinessInfo();
+  }, []);
+
+  const hasSalonCats = useMemo(() => {
+    return items.some((i) => {
+      const cat = i.category.toLowerCase();
+      return cat.includes('hair') || cat.includes('spa') || cat.includes('facial') || cat.includes('nail') || cat.includes('treatment');
+    });
+  }, [items]);
+
+  const hasDetailingCats = useMemo(() => {
+    return items.some((i) => {
+      const cat = i.category.toLowerCase();
+      return cat.includes('coating') || cat.includes('detailing') || cat.includes('polish') || cat.includes('wrap');
+    });
+  }, [items]);
+
+  const effectiveCategory = hasSalonCats ? 'salon' : hasDetailingCats ? 'detailing' : businessCategory;
+  const vocab = getVocabulary(effectiveCategory);
   const [error, setError] = useState('');
   const [toastMsg, setToastMsg] = useState('');
   const [increasingPrices, setIncreasingPrices] = useState(false);
@@ -31,7 +72,7 @@ export default function MenuPage() {
       setError('');
     } catch (err) {
       console.error(err);
-      setError('Failed to load menu items.');
+      setError('Failed to load catalog items.');
     } finally {
       setLoading(false);
     }
@@ -44,32 +85,32 @@ export default function MenuPage() {
   }, [auth.restaurantId]);
 
   const handleIncreaseAllPrices = async () => {
-    if (!confirm('Increase prices of ALL menu items by ₹1 (e.g. ₹139 → ₹140)?')) return;
+    if (!confirm(`Increase prices of ALL ${vocab.itemsNoun.toLowerCase()} by ₹1?`)) return;
     setIncreasingPrices(true);
     try {
       const res = await increaseAllMenuPricesAction(1);
       if (res.success) {
-        setToastMsg(`Successfully updated menu prices! Increased by +₹1.`);
+        setToastMsg(`Successfully updated prices! Increased by +₹1.`);
         await loadMenu();
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to increase menu prices');
+      alert(err instanceof Error ? err.message : 'Failed to increase prices');
     } finally {
       setIncreasingPrices(false);
     }
   };
 
   const handleDecreaseAllPrices = async () => {
-    if (!confirm('Decrease prices of ALL menu items by ₹1 (e.g. ₹140 → ₹139)?')) return;
+    if (!confirm(`Decrease prices of ALL ${vocab.itemsNoun.toLowerCase()} by ₹1?`)) return;
     setDecreasingPrices(true);
     try {
       const res = await decreaseAllMenuPricesAction(1);
       if (res.success) {
-        setToastMsg(`Successfully updated menu prices! Decreased by -₹1.`);
+        setToastMsg(`Successfully updated prices! Decreased by -₹1.`);
         await loadMenu();
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to decrease menu prices');
+      alert(err instanceof Error ? err.message : 'Failed to decrease prices');
     } finally {
       setDecreasingPrices(false);
     }
@@ -84,8 +125,8 @@ export default function MenuPage() {
       );
       setToastMsg(
         newAvailable
-          ? `"${item.name}" marked as In Stock!`
-          : `"${item.name}" marked as Out of Stock! Customers can no longer add it.`
+          ? `"${item.name}" marked as Available!`
+          : `"${item.name}" marked as Unavailable! Customers can no longer add it.`
       );
       setTimeout(() => setToastMsg(''), 3500);
     } catch (err) {
@@ -95,11 +136,11 @@ export default function MenuPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this menu item?')) {
+    if (confirm(`Are you sure you want to delete this ${vocab.itemNoun.toLowerCase()}?`)) {
       try {
         await deleteMenuItem(id);
         setItems((prev) => prev.filter((item) => item._id !== id));
-        setToastMsg('Menu item deleted.');
+        setToastMsg(`${vocab.itemNoun} deleted.`);
         setTimeout(() => setToastMsg(''), 3000);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to delete item.';
@@ -147,8 +188,8 @@ export default function MenuPage() {
   return (
     <div className="flex flex-col gap-5 pb-16">
       <PageHeader
-        title="Menu & Stock Control"
-        subtitle="Manage menu items, prices, and instant item stock availability"
+        title={vocab.catalogTitle}
+        subtitle={vocab.catalogSubtitle}
         actions={
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
             <AdminButton
@@ -167,8 +208,16 @@ export default function MenuPage() {
             >
               -₹1 Decrease All
             </AdminButton>
+            <AdminButton
+              variant="secondary"
+              icon={<Sparkles className="w-4 h-4 text-purple-600 animate-pulse" />}
+              onClick={() => setAiScanModalOpen(true)}
+              className="bg-purple-50 hover:bg-purple-100 text-purple-950 border-purple-200"
+            >
+              ✨ AI Scan Menu Photo
+            </AdminButton>
             <Link href="/admin/menu/new">
-              <AdminButton icon={<Plus className="w-4 h-4" />}>Add Item</AdminButton>
+              <AdminButton icon={<Plus className="w-4 h-4" />}>{vocab.addItemTitle}</AdminButton>
             </Link>
           </div>
         }
@@ -357,6 +406,19 @@ export default function MenuPage() {
           </div>
         </div>
       )}
+
+      <AiMenuScanModal
+        isOpen={aiScanModalOpen}
+        onClose={() => setAiScanModalOpen(false)}
+        onSuccess={(count) => {
+          setToastMsg(`Successfully scanned & added ${count} ${vocab.itemNoun.toLowerCase()}${count > 1 ? 's' : ''} to store database!`);
+          loadMenu();
+          setTimeout(() => setToastMsg(''), 5000);
+        }}
+        businessCategory={effectiveCategory}
+        itemNoun={vocab.itemNoun}
+        catalogTitle={vocab.catalogTitle}
+      />
     </div>
   );
 }

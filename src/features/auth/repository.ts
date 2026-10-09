@@ -18,8 +18,9 @@ export function normalizeAdmin(doc: any): IAdmin {
     restaurantId: plain.restaurantId,
     restaurantName: plain.restaurantName,
     phone: plain.phone,
-    whatsappNumber: plain.whatsappNumber || '9541234068',
+    whatsappNumber: (plain.whatsappNumber && plain.whatsappNumber !== '9541111111') ? plain.whatsappNumber : (plain.phone || '9541286804'),
     designation: plain.designation,
+    businessCategory: plain.businessCategory || 'restaurant',
     role: plain.role || 'staff',
     logoUrl: plain.logoUrl || '',
     primaryColor: plain.primaryColor || '#000000',
@@ -130,8 +131,16 @@ export async function create(data: {
   restaurantId: string;
   restaurantName: string;
   phone: string;
+  whatsappNumber?: string;
   designation: string;
   role?: 'owner' | 'manager' | 'staff' | 'restaurant_admin' | 'super_admin';
+  businessCategory?: string;
+  themePreset?: string;
+  primaryColor?: string;
+  themeGradientDark?: string;
+  themeGradientDarker?: string;
+  themeAccentColor?: string;
+  welcomeMessage?: string;
 }): Promise<IAdmin> {
   await dbConnect();
 
@@ -149,8 +158,16 @@ export async function create(data: {
     restaurantId: data.restaurantId.toLowerCase(),
     restaurantName: data.restaurantName.trim(),
     phone: data.phone.trim(),
+    whatsappNumber: data.whatsappNumber ? data.whatsappNumber.trim() : data.phone.trim(),
     designation: data.designation.toLowerCase(),
     role: resolvedRole,
+    businessCategory: data.businessCategory || 'restaurant',
+    themePreset: data.themePreset || 'burgundy',
+    primaryColor: data.primaryColor || '#000000',
+    themeGradientDark: data.themeGradientDark || '#8B0000',
+    themeGradientDarker: data.themeGradientDarker || '#6B0000',
+    themeAccentColor: data.themeAccentColor || '#F5C518',
+    welcomeMessage: data.welcomeMessage || 'Welcome to our restaurant!',
   });
   return normalizeAdmin(doc);
 }
@@ -253,6 +270,7 @@ export async function revokeSession(
 export async function updateBranding(
   restaurantId: string,
   data: {
+    restaurantName?: string;
     logoUrl?: string;
     primaryColor?: string;
     welcomeMessage?: string;
@@ -274,6 +292,7 @@ export async function updateBranding(
   await dbConnect();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateFields: any = {};
+  if (data.restaurantName !== undefined) updateFields.restaurantName = data.restaurantName.trim();
   if (data.logoUrl !== undefined) updateFields.logoUrl = data.logoUrl;
   if (data.primaryColor !== undefined) updateFields.primaryColor = data.primaryColor;
   if (data.welcomeMessage !== undefined) updateFields.welcomeMessage = data.welcomeMessage;

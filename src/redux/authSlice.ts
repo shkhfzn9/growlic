@@ -81,8 +81,14 @@ const authSlice = createSlice({
         }
       }
     },
+    updateRestaurantName: (state, action: PayloadAction<string>) => {
+      state.restaurantName = action.payload;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('admin_restaurant_name', action.payload);
+      }
+    },
   },
 });
 
-export const { loginSuccess, logout, hydrateAuth } = authSlice.actions;
+export const { loginSuccess, logout, hydrateAuth, updateRestaurantName } = authSlice.actions;
 export default authSlice.reducer;

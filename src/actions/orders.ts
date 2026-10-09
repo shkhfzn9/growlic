@@ -9,6 +9,7 @@ import * as eventService from '@/features/analytics';
 import { validateSession, can, getAdminByRestaurantId } from '@/features/auth';
 import { logAction } from '@/features/audit';
 import * as customerRepo from '@/features/customer/repository';
+import { checkAndIncrementRateLimit } from '@/lib/rateLimiter';
 
 /**
  * Validates the admin's authentication cookie ('admin_token') and decodes its payload.
@@ -69,11 +70,16 @@ export async function createOrder(data: {
   subtotal: number;
   total: number;
   notes?: string;
+  appointmentDetails?: {
+    bookingDate: string;
+    bookingTime: string;
+    specialistId?: string;
+    specialistName?: string;
+    userNotes?: string;
+  };
 }) {
   try {
     const order = await orderService.createOrder(data);
-    // revalidatePath(`/admin/dashboard`);
-    // revalidatePath(`/admin/orders`);
     return JSON.parse(JSON.stringify(order));
   } catch (error) {
     console.error('Error creating order action:', error);
@@ -94,11 +100,36 @@ export async function getOrderById(id: string, restaurantId?: string) {
     if (!order) return null;
     const admin = await getAdminByRestaurantId(order.restaurantId || restaurantId || '');
     const plainOrder = JSON.parse(JSON.stringify(order));
-    plainOrder.restaurantWhatsApp = admin?.whatsappNumber || admin?.phone || '9541234068';
+    const storeWa = (admin?.whatsappNumber && admin?.whatsappNumber !== '9541234068') ? admin.whatsappNumber : (admin?.phone || admin?.whatsappNumber || '9541234068');
+    plainOrder.restaurantWhatsApp = storeWa;
     return plainOrder;
   } catch (error) {
     console.error('Error fetching order action:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch order';
+    throw new Error(message);
+  }
+}
+
+async function checkTrackRateLimit(ipOrKey: string): Promise<void> {
+  const limit = await checkAndIncrementRateLimit(`track:ip:${ipOrKey}`, 30, 60);
+  if (!limit.allowed) {
+    throw new Error('Too many tracking requests. Please try again later.');
+  }
+}
+
+/**
+ * Public unauthenticated order tracking Server Action with rate limiting.
+ * Returns only essential public tracking fields (first name only, items, status, ETA, no phone, no notes).
+ */
+export async function getPublicOrderTrackInfoAction(tokenOrId: string, restaurantId?: string) {
+  try {
+    await checkTrackRateLimit(tokenOrId || restaurantId || 'global');
+    const trackInfo = await orderService.getPublicOrderTrackInfo(tokenOrId, restaurantId);
+    if (!trackInfo) return null;
+    return JSON.parse(JSON.stringify(trackInfo));
+  } catch (error) {
+    console.error('Error fetching public order tracking info:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch tracking details';
     throw new Error(message);
   }
 }
@@ -139,7 +170,7 @@ export async function getAdminOrders(limit?: number, skip?: number, status?: str
  */
 export async function updateOrderStatus(
   id: string,
-  status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled',
+  status: 'received' | 'scheduled' | 'accepted' | 'confirmed' | 'in_progress' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'rejected',
   delayData?: {
     actualPrepTimeMinutes?: number;
     delayMinutes?: number;
@@ -150,7 +181,8 @@ export async function updateOrderStatus(
 ) {
   try {
     const admin = await checkAdminAuth();
-    const isAllowed = await can('update_order_status', admin.token, admin.restaurantId);
+    const isAllowed = (await can('update_order_status', admin.token, admin.restaurantId)) ||
+                      (await can('manage_orders', admin.token, admin.restaurantId));
     if (!isAllowed) {
       throw new Error('Forbidden: Insufficient permissions to update orders');
     }
@@ -443,6 +475,22 @@ export async function getAdminNotificationAlertsAction(
     }
     console.error('Error getting admin notification alerts:', error);
     return { success: false, orders: [], staffCalls: [] };
+  }
+}
+
+/**
+ * Server action to get already booked active appointment slots for a restaurant date & specialist.
+ */
+export async function getBookedSlotsAction(
+  restaurantId: string,
+  bookingDate: string,
+  specialistName?: string
+): Promise<string[]> {
+  try {
+    return await orderService.getBookedSlotsForDate(restaurantId, bookingDate, specialistName);
+  } catch (error) {
+    console.error('Error fetching booked slots:', error);
+    return [];
   }
 }
 

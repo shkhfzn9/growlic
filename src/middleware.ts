@@ -57,6 +57,11 @@ async function verifyTokenEdge(token: string, secret: string): Promise<any | nul
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Root path redirect
+  if (pathname === '/') {
+    return NextResponse.redirect(new URL('/menu/tokyo-momos', request.url));
+  }
+
   // 1. CORS Preflight & Header Handling for API routes
   if (pathname.startsWith('/api/')) {
     if (request.method === 'OPTIONS') {
@@ -87,7 +92,21 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 3. Restaurant Admin Route Protection: /admin/** (excluding login, register)
+  // 3. Restaurant Admin Root / Route Protection: /admin/**
+  if (pathname === '/admin') {
+    if (!token) {
+      return NextResponse.redirect(new URL('/admin/login', request.url));
+    }
+    const decoded = await verifyTokenEdge(token, JWT_SECRET);
+    if (!decoded) {
+      return NextResponse.redirect(new URL('/admin/login', request.url));
+    }
+    if (decoded.role === 'super_admin') {
+      return NextResponse.redirect(new URL('/super-admin', request.url));
+    }
+    return NextResponse.redirect(new URL('/admin/orders', request.url));
+  }
+
   const isAuthPage = pathname === '/admin/login' || pathname === '/admin/register';
   if (pathname.startsWith('/admin') && !isAuthPage) {
     if (!token) {
@@ -113,5 +132,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/super-admin/:path*', '/api/:path*'],
+  matcher: ['/', '/admin', '/admin/:path*', '/super-admin/:path*', '/api/:path*'],
 };

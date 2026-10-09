@@ -9,6 +9,14 @@ export interface IOrderItem {
   nudgeRuleId?: string;
 }
 
+export interface IAppointmentDetails {
+  bookingDate: string;
+  bookingTime: string;
+  specialistId?: string;
+  specialistName?: string;
+  userNotes?: string;
+}
+
 export interface IOrder {
   _id: string;
   restaurantId: string;
@@ -20,8 +28,10 @@ export interface IOrder {
   items: IOrderItem[];
   subtotal: number;
   total: number;
-  status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+  status: 'received' | 'scheduled' | 'accepted' | 'confirmed' | 'in_progress' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'rejected';
   notes?: string;
+  appointmentDetails?: IAppointmentDetails;
+  activeSlotKey?: string | null;
   estimatedTime?: number;
   actualPrepTimeMinutes?: number;
   delayMinutes?: number;
@@ -29,6 +39,7 @@ export interface IOrder {
   delayReason?: string;
   rejectionReason?: string;
   rejectedAt?: string;
+  trackingToken?: string;
   createdAt?: string;
   updatedAt?: string;
 }

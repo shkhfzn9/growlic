@@ -1,5 +1,5 @@
 import React from 'react';
-import { getOrderById } from '@/actions/orders';
+import { getPublicOrderTrackInfoAction } from '@/actions/orders';
 import { OrderTracker } from '@/features/order';
 import Link from 'next/link';
 import { AlertTriangle, Search } from 'lucide-react';
@@ -17,7 +17,7 @@ export default async function TrackPage({ params, searchParams }: PageProps) {
   let hasError = false;
 
   try {
-    order = await getOrderById(orderId, restaurantId);
+    order = await getPublicOrderTrackInfoAction(orderId, restaurantId);
   } catch (error) {
     console.error('Error loading track page:', error);
     hasError = true;

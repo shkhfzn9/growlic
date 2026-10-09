@@ -2,32 +2,11 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { authenticateAdmin } from '@/features/auth';
 import { handleRouteError } from '@/shared/errors';
-
-// Simple in-memory rate limiting store
-const rateLimitMap = new Map<string, { attempts: number; resetTime: number }>();
-const RATE_LIMIT_ATTEMPTS = 5;
-const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const record = rateLimitMap.get(ip);
-
-  if (!record) {
-    rateLimitMap.set(ip, { attempts: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
-    return false;
-  }
-
-  if (now > record.resetTime) {
-    rateLimitMap.set(ip, { attempts: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
-    return false;
-  }
-
-  record.attempts += 1;
-  return record.attempts > RATE_LIMIT_ATTEMPTS;
-}
+import { checkAndIncrementRateLimit, clearRateLimit } from '@/lib/rateLimiter';
 
 /**
  * REST API Endpoint to authenticate an admin using email/password.
+ * Performs throttling per IP and per account (email) using Mongo TTL store.
  * Sets the 'admin_token' httpOnly session cookie and returns admin metadata.
  * Delegates errors to handleRouteError.
  * 
@@ -36,18 +15,34 @@ function isRateLimited(ip: string): boolean {
  */
 export async function POST(req: Request) {
   try {
-    // 1. Enforce IP-based rate limiting
-    const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '127.0.0.1';
-    if (isRateLimited(ip)) {
+    const body = await req.json().catch(() => ({}));
+    const email = (body.email || '').toString().toLowerCase().trim();
+    const password = body.password;
+
+    const ipHeader = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '127.0.0.1';
+    const ip = ipHeader.split(',')[0].trim();
+
+    // 1. Enforce IP and Account rate limiting in Mongo TTL shared store
+    const ipLimitKey = `login:ip:${ip}`;
+    const accountLimitKey = email ? `login:account:${email}` : `login:account:empty`;
+
+    // Max 5 login attempts per 60 seconds
+    const ipLimit = await checkAndIncrementRateLimit(ipLimitKey, 5, 60);
+    const accountLimit = email ? await checkAndIncrementRateLimit(accountLimitKey, 5, 60) : { allowed: true };
+
+    if (!ipLimit.allowed || !accountLimit.allowed) {
       return NextResponse.json(
-        { error: 'Too many login attempts. Please try again in a minute.' },
+        { success: false, error: 'Too many login attempts. Please try again later.' },
         { status: 429 }
       );
     }
 
-    const { email, password } = await req.json();
-
     const { admin, token } = await authenticateAdmin(email, password);
+
+    // Clear account rate limit on successful authentication
+    if (email) {
+      await clearRateLimit(accountLimitKey).catch(() => {});
+    }
 
     const cookieStore = await cookies();
     cookieStore.set('admin_token', token, {

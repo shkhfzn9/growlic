@@ -11,6 +11,14 @@ export interface IOrderItem {
   nudgeRuleId?: string;
 }
 
+export interface IAppointmentDetails {
+  bookingDate: string;
+  bookingTime: string;
+  specialistId?: string;
+  specialistName?: string;
+  userNotes?: string;
+}
+
 export interface IOrderDocument extends Document {
   restaurantId: string;
   customerName: string;
@@ -21,8 +29,10 @@ export interface IOrderDocument extends Document {
   items: IOrderItem[];
   subtotal: number;
   total: number;
-  status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+  status: 'received' | 'scheduled' | 'accepted' | 'confirmed' | 'in_progress' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'rejected';
   notes?: string;
+  appointmentDetails?: IAppointmentDetails;
+  activeSlotKey?: string | null;
   estimatedTime?: number; // preparation time in minutes
   actualPrepTimeMinutes?: number;
   delayMinutes?: number;
@@ -30,6 +40,7 @@ export interface IOrderDocument extends Document {
   delayReason?: string;
   rejectionReason?: string;
   rejectedAt?: Date;
+  trackingToken?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -45,6 +56,14 @@ const OrderItemSchema: Schema = new Schema<IOrderItem>({
   nudgeRuleId: { type: String, default: null },
 });
 
+const AppointmentDetailsSchema: Schema = new Schema<IAppointmentDetails>({
+  bookingDate: { type: String, required: true },
+  bookingTime: { type: String, required: true },
+  specialistId: { type: String, default: '' },
+  specialistName: { type: String, default: '' },
+  userNotes: { type: String, default: '' },
+}, { _id: false });
+
 const OrderSchema: Schema = new Schema<IOrderDocument>(
   {
     restaurantId: { type: String, required: true, index: true },
@@ -58,11 +77,13 @@ const OrderSchema: Schema = new Schema<IOrderDocument>(
     total: { type: Number, required: true },
     status: {
       type: String,
-      enum: ['received', 'accepted', 'preparing', 'ready', 'completed', 'cancelled'],
+      enum: ['received', 'scheduled', 'accepted', 'confirmed', 'in_progress', 'preparing', 'ready', 'completed', 'cancelled', 'rejected'],
       default: 'received',
       index: true,
     },
     notes: { type: String, default: '' },
+    appointmentDetails: { type: AppointmentDetailsSchema, default: null },
+    activeSlotKey: { type: String, default: null },
     estimatedTime: { type: Number, default: 0 },
     actualPrepTimeMinutes: { type: Number, default: 0 },
     delayMinutes: { type: Number, default: 0 },
@@ -70,12 +91,22 @@ const OrderSchema: Schema = new Schema<IOrderDocument>(
     delayReason: { type: String, default: '' },
     rejectionReason: { type: String, default: '' },
     rejectedAt: { type: Date, default: null },
+    trackingToken: { type: String, unique: true, sparse: true, index: true },
   },
   { timestamps: true }
 );
 
 OrderSchema.index({ restaurantId: 1, createdAt: -1 });
 OrderSchema.index({ restaurantId: 1, status: 1, createdAt: -1 });
+
+// Valid Atomic Concurrency Lock: Partial Unique Index on activeSlotKey
+OrderSchema.index(
+  { activeSlotKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { activeSlotKey: { $type: 'string' } },
+  }
+);
 
 export interface IStaffCall {
   _id: string;

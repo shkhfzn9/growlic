@@ -108,6 +108,30 @@ export const PRODUCT_PAIRING_MATRIX: Array<{
     suggestedCategories: ['Momos Woksizzle', 'Drinks & Beverages'],
     reason: (name) => `Best enjoyed with ${name}`,
   },
+  {
+    keywords: ['haircut', 'styling', 'keratin', 'smoothening', 'hair color', 'highlights', 'hair spa', 'hair wash'],
+    suggestedAddOnKeywords: ['hair wash', 'scalp serum', 'facial', 'spa', 'head massage', 'blow dry'],
+    suggestedCategories: ['Skin & Facial Care', 'Nails & Beauty', 'Specialist Treatments'],
+    reason: (name) => `Recommended complementary treatment for ${name}`,
+  },
+  {
+    keywords: ['facial', 'glow', 'skin care', 'clean up', 'detox', 'de-tan'],
+    suggestedAddOnKeywords: ['eye pack', 'hair spa', 'manicure', 'pedicure', 'face mask'],
+    suggestedCategories: ['Hair Styling & Treatment', 'Nails & Beauty', 'Specialist Treatments'],
+    reason: (name) => `Popular combination with ${name}`,
+  },
+  {
+    keywords: ['ceramic', 'coating', 'ppf', 'paint protection', 'graphene'],
+    suggestedAddOnKeywords: ['interior detailing', 'glass coating', 'tire polish', 'foam wash', 'deodorizer'],
+    suggestedCategories: ['Wash & Polish', 'Interior Detailing', 'Protection Packages'],
+    reason: (name) => `Essential protection bundle with ${name}`,
+  },
+  {
+    keywords: ['shirt', 't-shirt', 'top', 'dress', 'jeans', 'trousers', 'apparel', 'jacket'],
+    suggestedAddOnKeywords: ['belt', 'wallet', 'bag', 'sunglasses', 'footwear', 'care kit'],
+    suggestedCategories: ['Accessories', 'Footwear', 'Bags & Luggage'],
+    reason: (name) => `Styling pairing for ${name}`,
+  },
 ];
 
 /**

@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { getRestaurantDetails } from '@/actions/auth';
+import { getVocabulary } from '@/config/businessVocabulary';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -18,6 +20,7 @@ import {
   ClipboardList,
   Wallet,
   Percent,
+  Calendar,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -27,6 +30,7 @@ interface SidebarProps {
 }
 
 const navLinks = [
+  { href: '/admin/appointments', label: 'Bookings & Schedule', icon: Calendar },
   { href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/expense', label: 'Expense Tracker', icon: Wallet },
@@ -40,10 +44,38 @@ const navLinks = [
   { href: '/admin/developer-promo', label: 'Developer Promo', icon: Code2 },
 ];
 
-
 export default function Sidebar({ restaurantName, email, onLogout }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
+
+  useEffect(() => {
+    const fetchBusinessInfo = async () => {
+      try {
+        const details = await getRestaurantDetails();
+        if (details?.businessCategory) {
+          setBusinessCategory(details.businessCategory);
+        } else if (details?.themePreset === 'rose_quartz' || details?.themePreset === 'velvet_noir') {
+          setBusinessCategory('salon');
+        } else if (details?.themePreset === 'carbon_crimson' || details?.themePreset === 'cyber_cyan') {
+          setBusinessCategory('detailing');
+        }
+      } catch (err) {
+        // Quiet fallback
+      }
+    };
+
+    fetchBusinessInfo();
+  }, []);
+
+  const vocab = getVocabulary(businessCategory);
+
+  const getLinkLabel = (link: { href: string; label: string }) => {
+    if (link.href === '/admin/menu') return vocab.itemsNoun;
+    if (link.href === '/admin/orders') return vocab.ordersNoun;
+    if (link.href === '/admin/settings') return `Settings & ${vocab.tableNoun.split(' ')[0] || 'QR'}`;
+    return link.label;
+  };
 
   return (
     <aside
@@ -79,11 +111,12 @@ export default function Sidebar({ restaurantName, email, onLogout }: SidebarProp
           {navLinks.map((link) => {
             const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
             const Icon = link.icon;
+            const label = getLinkLabel(link);
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                title={collapsed ? link.label : undefined}
+                title={collapsed ? label : undefined}
                 className={`flex items-center gap-3 rounded-lg transition-colors relative group ${
                   collapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
                 } ${
@@ -93,10 +126,10 @@ export default function Sidebar({ restaurantName, email, onLogout }: SidebarProp
                 }`}
               >
                 <Icon className="w-[18px] h-[18px] flex-shrink-0" />
-                {!collapsed && <span className="text-[14px] font-medium">{link.label}</span>}
+                {!collapsed && <span className="text-[14px] font-medium">{label}</span>}
                 {collapsed && (
                   <span className="absolute left-full ml-2 px-2 py-1 bg-[#111827] text-white text-xs font-medium rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 shadow-lg">
-                    {link.label}
+                    {label}
                   </span>
                 )}
               </Link>

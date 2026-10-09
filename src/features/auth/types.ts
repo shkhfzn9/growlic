@@ -6,6 +6,7 @@ export interface IAdmin {
   phone: string;
   whatsappNumber?: string;
   designation: string;
+  businessCategory?: string;
   role: 'owner' | 'manager' | 'staff' | 'restaurant_admin' | 'super_admin';
   logoUrl?: string;
   primaryColor?: string;

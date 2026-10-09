@@ -4,12 +4,13 @@ import React, { useEffect, useState } from 'react';
 import { getOrderById, getCustomerLoyaltyInfo } from '@/actions/orders';
 import { getDeveloperPromo } from '@/actions/developerPromo';
 import Link from 'next/link';
-import { Check, Clock, ChefHat, UtensilsCrossed, PartyPopper, XCircle, ExternalLink, Sparkles, MessageCircle, PhoneCall, CreditCard, QrCode, X, Camera, Smartphone, Image as ImageIcon } from 'lucide-react';
+import { Check, Clock, ChefHat, UtensilsCrossed, PartyPopper, XCircle, ExternalLink, Sparkles, MessageCircle, PhoneCall, CreditCard, QrCode, X, Camera, Smartphone, Image as ImageIcon, Wrench, Package, CheckCircle2 } from 'lucide-react';
 import { CustomerNavbar } from '@/components/layout';
 import ConsultationModal from '@/components/ui/ConsultationModal';
 import { TRACK_NUDGES } from '../constants/trackNudges';
 import { getRestaurantMenuContext } from '@/actions/menu';
 import { getActiveTheme, saveActiveTheme } from '@/config/themes';
+import { getVocabulary } from '@/config/businessVocabulary';
 
 interface OrderItem {
   menuItemId: string;
@@ -27,7 +28,7 @@ interface OrderData {
   items: OrderItem[];
   subtotal: number;
   total: number;
-  status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+  status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'scheduled' | 'confirmed';
   estimatedTime?: number;
   notes?: string;
   rejectionReason?: string;
@@ -37,6 +38,30 @@ interface OrderData {
 interface OrderTrackerProps {
   initialOrder: OrderData;
   orderId: string;
+}
+
+function getNudges(category: string) {
+  if (category === 'salon') {
+    return [
+      {
+        id: 'salon-relax',
+        text: '💇 Relax & get ready! Our specialists use top-tier styling products for your treatment.',
+      },
+      {
+        id: 'stamps-loyalty',
+        text: '🎁 Collect stamps on every booking! Redeem them for discounts on future treatments.',
+      },
+      {
+        id: 'stamps-tracker',
+        text: '✨ Track your appointment stamp rewards directly from the navbar.',
+      },
+      {
+        id: 'salon-complete',
+        text: '✂️ Once your status shows "Completed", your service is done! Enjoy your new look!',
+      },
+    ];
+  }
+  return TRACK_NUDGES;
 }
 
 const STATUS_STEPS: Array<{ key: OrderData['status']; label: string; icon: React.ReactNode }> = [
@@ -51,11 +76,10 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
   const [mounted, setMounted] = useState(false);
   const [currentNudgeIdx, setCurrentNudgeIdx] = useState(0);
 
-  const initialTheme = getActiveTheme(initialOrder.restaurantId);
-  const [themeGradientDark, setThemeGradientDark] = useState(initialTheme.themeGradientDark);
-  const [themeGradientDarker, setThemeGradientDarker] = useState(initialTheme.themeGradientDarker);
-  const [themeAccentColor, setThemeAccentColor] = useState(initialTheme.themeAccentColor);
-  const [primaryColor, setPrimaryColor] = useState(initialTheme.primaryColor);
+  const [themeGradientDark, setThemeGradientDark] = useState('#8B0000');
+  const [themeGradientDarker, setThemeGradientDarker] = useState('#6B0000');
+  const [themeAccentColor, setThemeAccentColor] = useState('#F5C518');
+  const [primaryColor, setPrimaryColor] = useState('#C0181A');
   const [loyaltyInfo, setLoyaltyInfo] = useState<{
     loyaltyEnabled: boolean;
     stampsRequired: number;
@@ -68,7 +92,12 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    const active = getActiveTheme(initialOrder.restaurantId);
+    setThemeGradientDark(active.themeGradientDark);
+    setThemeGradientDarker(active.themeGradientDarker);
+    setThemeAccentColor(active.themeAccentColor);
+    setPrimaryColor(active.primaryColor);
+  }, [initialOrder.restaurantId]);
 
   useEffect(() => {
     if (order.restaurantId) {
@@ -80,11 +109,16 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
     }
   }, [order.restaurantId]);
 
+  const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
+
   useEffect(() => {
     if (order?.restaurantId) {
       getRestaurantMenuContext(order.restaurantId)
         .then((context) => {
           if (context?.admin) {
+            if (context.admin.businessCategory) {
+              setBusinessCategory(context.admin.businessCategory);
+            }
             const gDark = context.admin.themeGradientDark || '#8B0000';
             const gDarker = context.admin.themeGradientDarker || '#6B0000';
             const accent = context.admin.themeAccentColor || '#F5C518';
@@ -121,20 +155,26 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
     }
   }, [order.customerPhone, order.restaurantId]);
 
+  const nudges = getNudges(businessCategory);
+
   useEffect(() => {
     const isPreparing = !['ready', 'completed', 'cancelled'].includes(order.status);
     if (!isPreparing) return;
 
     const interval = setInterval(() => {
-      setCurrentNudgeIdx((prev) => (prev + 1) % TRACK_NUDGES.length);
+      setCurrentNudgeIdx((prev) => (prev + 1) % nudges.length);
     }, 6000);
 
     return () => clearInterval(interval);
-  }, [order.status]);
+  }, [order.status, nudges.length]);
 
   useEffect(() => {
     if (order.status === 'completed' || order.status === 'cancelled') {
       return;
+    }
+
+    if (businessCategory === 'salon') {
+      return; // Do not run background polling for salon bookings
     }
 
     const interval = setInterval(async () => {
@@ -149,7 +189,7 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [orderId, order.status, order.restaurantId]);
+  }, [orderId, order.status, order.restaurantId, businessCategory]);
 
   useEffect(() => {
     if (!order.estimatedTime || ['ready', 'completed', 'cancelled'].includes(order.status)) {
@@ -183,30 +223,84 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  const vocab = getVocabulary(businessCategory);
+
+  const getStep2Config = () => {
+    switch (businessCategory.toLowerCase()) {
+      case 'salon':
+        return { label: 'In Service', icon: <Sparkles className="w-4 h-4" /> };
+      case 'detailing':
+        return { label: 'In Progress', icon: <Wrench className="w-4 h-4" /> };
+      case 'retail':
+        return { label: 'Packing', icon: <Package className="w-4 h-4" /> };
+      case 'restaurant':
+      default:
+        return { label: 'Preparing', icon: <ChefHat className="w-4 h-4" /> };
+    }
+  };
+
+  const step2 = getStep2Config();
+
+  const statusSteps = businessCategory === 'salon'
+    ? [
+        { key: 'received' as const, label: 'Pending Approval', icon: <Clock className="w-4 h-4" /> },
+        { key: 'accepted' as const, label: 'Accepted & Confirmed', icon: <Check className="w-4 h-4 text-emerald-500" /> },
+      ]
+    : [
+        { key: 'accepted' as const, label: 'Accepted', icon: <Clock className="w-4 h-4" /> },
+        { key: 'preparing' as const, label: step2.label, icon: step2.icon },
+        { key: 'completed' as const, label: 'Completed', icon: <PartyPopper className="w-4 h-4" /> },
+      ];
+
   const getStatusSubtext = () => {
     switch (order.status) {
       case 'received':
-        return 'Order received. Awaiting kitchen approval.';
+        switch (businessCategory.toLowerCase()) {
+          case 'salon': return 'Booking received. Awaiting admin approval.';
+          case 'detailing': return 'Appointment received. Awaiting bay assignment.';
+          case 'retail': return 'Order received. Awaiting fulfillment approval.';
+          default: return 'Order received. Awaiting kitchen approval.';
+        }
       case 'accepted':
-        return 'Order approved. Preparing ingredients...';
+        switch (businessCategory.toLowerCase()) {
+          case 'salon': return 'Booking accepted & confirmed!';
+          case 'detailing': return 'Appointment confirmed. Preparing detailing compounds...';
+          case 'retail': return 'Order confirmed. Preparing product items...';
+          default: return 'Order approved. Preparing ingredients...';
+        }
       case 'preparing':
-        return 'Freshly cooking your order now.';
+        switch (businessCategory.toLowerCase()) {
+          case 'salon': return 'Your treatment/service is currently in progress.';
+          case 'detailing': return 'Your detailing service is currently in progress.';
+          case 'retail': return 'Your items are being packed & quality checked.';
+          default: return 'Freshly cooking your order now.';
+        }
       case 'ready':
       case 'completed':
-        return 'Your meal is hot and ready for pickup!';
+        switch (businessCategory.toLowerCase()) {
+          case 'salon': return 'Your service is complete! Thank you for visiting us.';
+          case 'detailing': return 'Your detailing job is finished & ready!';
+          case 'retail': return 'Your order is packed & ready!';
+          default: return 'Your meal is hot and ready for pickup!';
+        }
       case 'cancelled':
-        return 'Order has been cancelled.';
+        return `${vocab.orderNoun} has been cancelled.`;
       default:
-        return 'Tracking your order status...';
+        return `Tracking your ${vocab.orderNoun.toLowerCase()} status...`;
     }
   };
 
   const timeLeft = getTimeLeft();
 
   const getStepIndex = (status: OrderData['status']) => {
-    if (status === 'cancelled' || status === 'received') return -1;
+    if (status === 'cancelled') return -1;
+    if (businessCategory === 'salon') {
+      if (status === 'received' || status === 'scheduled') return 0;
+      return 1; // accepted, confirmed, completed
+    }
+    if (status === 'received') return -1;
     if (status === 'ready') return 2; // Map ready (legacy) to Completed step
-    return STATUS_STEPS.findIndex((step) => step.key === status);
+    return statusSteps.findIndex((step) => step.key === status);
   };
 
   const currentStepIndex = getStepIndex(order.status);
@@ -220,22 +314,41 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
   const elapsedMs = now - new Date(order.createdAt).getTime();
   const isUnacceptedOver5Min = (order.status === 'received' || order.status === 'accepted') && elapsedMs >= 5 * 60 * 1000;
 
+  const stripMd = (str?: string | null) => (str || '').replace(/[*_~`[\]()#]/g, '').trim();
+
+  const cleanCustomerName = stripMd(order.customerName);
+  const cleanNotes = stripMd(order.notes);
+
   const orderItemsFormatted = order.items
-    .map((item) => `• *${item.name}* ×${item.quantity} - ₹${item.price * item.quantity}`)
+    .map((item) => `• *${stripMd(item.name)}* ×${item.quantity} - ₹${item.price * item.quantity}`)
     .join('\n');
 
-  const currentTrackUrl = typeof window !== 'undefined' ? window.location.href : '';
+  const currentTrackUrl = mounted && typeof window !== 'undefined' ? window.location.href : '';
 
-  const whatsappMessageText = `Hello! I just placed an order on your digital menu:
+  const whatsappMessageText = businessCategory === 'salon'
+    ? `Hello! I just booked an appointment on your catalog:
+
+*Booking ID:* #${displayId} (${order._id})
+*Client:* ${cleanCustomerName}
+*Phone:* ${order.customerPhone}
+
+*Services Booked:*
+${orderItemsFormatted}
+
+*Total Amount:* ₹${order.total}${cleanNotes ? `\n*Note:* ${cleanNotes}` : ''}
+
+Please confirm my booking appointment!
+*Track Booking:* ${currentTrackUrl}`
+    : `Hello! I just placed an order on your digital menu:
 
 *Order ID:* #${displayId} (${order._id})
-*Customer:* ${order.customerName}
+*Customer:* ${cleanCustomerName}
 *Phone:* ${order.customerPhone}
 
 *Items:*
 ${orderItemsFormatted}
 
-*Total Amount:* ₹${order.total}${order.notes ? `\n*Note:* ${order.notes}` : ''}
+*Total Amount:* ₹${order.total}${cleanNotes ? `\n*Note:* ${cleanNotes}` : ''}
 
 Please confirm and prepare my order!
 *Track Order:* ${currentTrackUrl}`;
@@ -265,9 +378,11 @@ Please confirm and prepare my order!
         <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.10)] p-6 w-full max-w-md flex flex-col gap-5">
           {/* Header */}
           <div className="text-center">
-            <span className="text-[0.65rem] font-bold uppercase tracking-wider" style={{ color: primaryColor }}>Live Status Tracker</span>
+            <span className="text-[0.65rem] font-bold uppercase tracking-wider" style={{ color: primaryColor }}>
+              Live {businessCategory === 'salon' ? 'Booking' : 'Status'} Tracker
+            </span>
             <h1 className="font-black text-2xl text-text-dark uppercase tracking-tight mt-1">
-              Order #{displayId}
+              {vocab.orderNoun} #{displayId}
             </h1>
             <p className="text-[0.6rem] text-text-dark/40 mt-0.5">{order._id}</p>
           </div>
@@ -277,7 +392,9 @@ Please confirm and prepare my order!
             <div className="bg-red-50 border border-red-200/80 rounded-xl p-4 text-center flex flex-col items-center justify-center gap-1.5 shadow-xs">
               <div className="flex items-center justify-center gap-2">
                 <XCircle className="w-5 h-5 text-red-600 shrink-0" />
-                <span className="font-black text-sm text-red-600 uppercase tracking-wide">Order Cancelled</span>
+                <span className="font-black text-sm text-red-600 uppercase tracking-wide">
+                  {vocab.orderNoun} Cancelled
+                </span>
               </div>
               {order.rejectionReason ? (
                 <p className="text-xs text-red-800 font-semibold italic mt-0.5 max-w-xs">
@@ -285,22 +402,60 @@ Please confirm and prepare my order!
                 </p>
               ) : (
                 <p className="text-[11px] text-red-600/80 font-medium mt-0.5">
-                  This order was cancelled by the restaurant.
+                  This {vocab.orderNoun.toLowerCase()} was cancelled.
                 </p>
               )}
             </div>
           )}
 
-          {(order.status === 'ready' || order.status === 'completed') && (
-            <div className="bg-cta/20 rounded-xl p-4 text-center">
-              <span className="font-black text-sm text-text-dark uppercase">Your Order is Ready for Pickup!</span>
+          {/* Pending Status Banner for Salon with Blinking Animation */}
+          {(order.status === 'received' || order.status === 'scheduled') && businessCategory === 'salon' && (
+            <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 text-center flex flex-col items-center justify-center gap-2 shadow-xs animate-pulse">
+              <div className="flex items-center justify-center gap-2">
+                <span className="relative flex h-3 w-3 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                </span>
+                <span className="font-extrabold text-sm text-amber-950 uppercase tracking-wide">
+                  Booking Pending Approval
+                </span>
+              </div>
+              <p className="text-xs text-amber-900 font-medium">
+                Your appointment request has been submitted. Salon admin will review and accept shortly.
+              </p>
             </div>
           )}
 
-          {/* Countdown Timer */}
-          {order.status !== 'cancelled' && order.status !== 'completed' && order.status !== 'ready' && order.estimatedTime && (
+          {/* Accepted & Confirmed Status Banner for Salon */}
+          {(order.status === 'accepted' || order.status === 'confirmed' || order.status === 'completed') && businessCategory === 'salon' && (
+            <div className="bg-purple-50 border-2 border-purple-300 rounded-2xl p-4 text-center flex flex-col items-center justify-center gap-1.5 shadow-xs">
+              <div className="flex items-center justify-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-purple-700 shrink-0" />
+                <span className="font-black text-sm text-purple-950 uppercase tracking-wide">
+                  Your Booking has been Accepted & Confirmed!
+                </span>
+              </div>
+              <p className="text-xs text-purple-900 font-medium">
+                Your appointment slot is reserved. We look forward to welcoming you!
+              </p>
+            </div>
+          )}
+
+          {/* Legacy Restaurant Ready / Completed Banner */}
+          {(order.status === 'ready' || order.status === 'completed') && businessCategory !== 'salon' && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+              <span className="font-black text-sm text-emerald-950 uppercase">
+                Your Order is Ready for Pickup!
+              </span>
+            </div>
+          )}
+
+          {/* Countdown Timer (Hidden for Salon bookings since it's a scheduled appointment) */}
+          {businessCategory !== 'salon' && order.status !== 'cancelled' && order.status !== 'completed' && order.status !== 'ready' && order.estimatedTime && (
             <div className="bg-surface rounded-xl p-5 text-center">
-              <span className="text-[0.6rem] text-text-dark/50 uppercase tracking-wider font-bold block">Estimated Time</span>
+              <span className="text-[0.6rem] text-text-dark/50 uppercase tracking-wider font-bold block">
+                Estimated Time
+              </span>
               <span className="font-black text-4xl text-text-dark tracking-tight block mt-1" suppressHydrationWarning>
                 {mounted && timeLeft ? timeLeft : `${order.estimatedTime}:00`}
               </span>
@@ -369,7 +524,7 @@ Please confirm and prepare my order!
               </div>
 
               <p className="text-[9px] text-gray-500 font-semibold text-center mt-2 leading-relaxed">
-                Each order gets you closer to a free meal! {loyaltyInfo.stampsRequired - loyaltyInfo.stampCount} stamps left to unlock your discount.
+                Each {vocab.orderNoun.toLowerCase()} gets you closer to a reward! {loyaltyInfo.stampsRequired - loyaltyInfo.stampCount} stamps left to unlock your discount.
               </p>
             </div>
           )}
@@ -378,17 +533,18 @@ Please confirm and prepare my order!
           {!['ready', 'completed', 'cancelled'].includes(order.status) && (
             <div className="bg-[#FFFDF5] border border-[#F5C518]/30 rounded-xl p-3.5 shadow-sm overflow-hidden relative min-h-[56px] flex items-center justify-center transition-all duration-300">
               <div key={currentNudgeIdx} className="text-center text-xs text-amber-900 font-bold leading-relaxed animate-in fade-in slide-in-from-right-4 duration-350">
-                {TRACK_NUDGES[currentNudgeIdx].text}
+                {nudges[currentNudgeIdx]?.text}
               </div>
             </div>
           )}
 
-          {/* Progress Steps */}
+          {/* Progress Steps (2 Stages for Salon with blinking pending state) */}
           {order.status !== 'cancelled' && (
             <div className="flex flex-col gap-0 py-2">
-              {STATUS_STEPS.map((step, index) => {
+              {statusSteps.map((step, index) => {
                 const isCompleted = index <= currentStepIndex;
                 const isCurrent = index === currentStepIndex;
+                const isPendingStep = businessCategory === 'salon' && index === 0 && (order.status === 'received' || order.status === 'scheduled');
 
                 return (
                   <div key={step.key} className="flex items-center gap-3 relative">
@@ -400,55 +556,40 @@ Please confirm and prepare my order!
 
                     {/* Circle */}
                     <div
-                      className={`w-[30px] h-[30px] rounded-full flex items-center justify-center flex-shrink-0 transition-all ${isCompleted
+                      className={`w-[30px] h-[30px] rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
+                        isPendingStep
+                          ? 'bg-amber-500 text-white animate-pulse ring-4 ring-amber-300'
+                          : isCompleted
                           ? 'bg-primary text-white'
                           : 'bg-surface text-text-dark/30'
-                        } ${isCurrent ? 'ring-4 ring-primary/20' : ''}`}
+                      } ${isCurrent && !isPendingStep ? 'ring-4 ring-primary/20' : ''}`}
                     >
-                      {step.icon}
+                      {isPendingStep ? <Clock className="w-4 h-4 animate-spin" /> : step.icon}
                     </div>
 
                     {/* Label */}
-                    <span
-                      className={`text-sm ${isCurrent ? 'font-black text-text-dark' : isCompleted ? 'font-bold text-text-dark' : 'text-text-dark/40'
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-sm ${
+                          isCurrent ? 'font-black text-text-dark' : isCompleted ? 'font-bold text-text-dark' : 'text-text-dark/40'
                         }`}
-                    >
-                      {step.label}
-                    </span>
+                      >
+                        {step.label}
+                      </span>
+                      {isPendingStep && (
+                        <span className="flex h-2.5 w-2.5 relative">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                        </span>
+                      )}
+                    </div>
                   </div>
                 );
               })}
             </div>
           )}
 
-          {/* Pay Here Link Card */}
-          {!['ready', 'completed', 'cancelled'].includes(order.status) && (
-            <div className="border-t border-surface pt-4 flex flex-col items-center text-center">
-              <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-4 w-full flex flex-col items-center gap-2.5 shadow-sm">
-                <span className="text-[10px] bg-emerald-600 text-white px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider">
-                  Quick Online Payment
-                </span>
-                
-                <p className="text-xs font-black text-gray-900 leading-snug">
-                  Pay ₹{order.total} online to confirm order & start kitchen prep
-                </p>
 
-                <button
-                  onClick={() => setPaymentModalOpen(true)}
-                  className="w-full text-white font-black text-xs py-3.5 rounded-xl uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 cursor-pointer mt-1"
-                  style={{ backgroundColor: primaryColor }}
-                >
-                  <CreditCard className="w-4 h-4 text-yellow-300" />
-                  <span>Pay Here to Confirm Order (₹{order.total})</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </button>
-
-                <p className="text-[10px] text-emerald-800 font-semibold leading-relaxed">
-                  Tap to view payment QR and step-by-step payment instructions.
-                </p>
-              </div>
-            </div>
-          )}
 
           {/* Customer Details */}
           <div className="border-t border-surface pt-4">
@@ -457,15 +598,19 @@ Please confirm and prepare my order!
             <p className="text-xs text-text-dark/60">{order.customerPhone}</p>
             {order.notes && (
               <div className="mt-3 p-3 bg-[#FFFBEB] border border-[#F5C518]/20 rounded-xl text-xs text-[#D97706] font-semibold leading-relaxed">
-                <span className="font-extrabold uppercase block text-[9px] text-[#B45309] tracking-wider mb-0.5">Note to Chef:</span>
-                <p className="italic">"{order.notes}"</p>
+                <span className="font-extrabold uppercase block text-[9px] text-[#B45309] tracking-wider mb-0.5">
+                  {vocab.noteLabel || 'Specialist Note'}:
+                </span>
+                <p className="italic">&ldquo;{order.notes}&rdquo;</p>
               </div>
             )}
           </div>
 
           {/* Order Items */}
           <div className="border-t border-surface pt-4">
-            <h3 className="text-[0.65rem] font-bold uppercase text-bg-dark tracking-wider mb-2">Items</h3>
+            <h3 className="text-[0.65rem] font-bold uppercase text-bg-dark tracking-wider mb-2">
+              {vocab.itemsNoun || 'Services'}
+            </h3>
             <div className="flex flex-col gap-2">
               {order.items.map((item, idx) => (
                 <div key={idx} className="flex justify-between text-sm">
@@ -482,7 +627,7 @@ Please confirm and prepare my order!
             </div>
           </div>
 
-          {/* WhatsApp & Emergency Call Action Card (Placed below Order Total) */}
+          {/* WhatsApp & Emergency Contact Action Card (Placed below Order Total) */}
           {order.status !== 'cancelled' && order.status !== 'completed' && (
             <div className={`rounded-2xl p-4 flex flex-col gap-3 shadow-sm border transition-all ${
               isUnacceptedOver5Min
@@ -500,7 +645,9 @@ Please confirm and prepare my order!
                     }`}></span>
                   </span>
                   <span className="font-extrabold text-xs text-gray-900 uppercase tracking-wide">
-                    {isUnacceptedOver5Min ? 'Order Pending (> 5 Min)' : 'Direct Restaurant Connect'}
+                    {isUnacceptedOver5Min
+                      ? `${vocab.orderNoun} Pending (> 5 Min)`
+                      : `Direct ${businessCategory === 'salon' ? 'Salon' : 'Restaurant'} Connect`}
                   </span>
                 </div>
 
@@ -511,14 +658,14 @@ Please confirm and prepare my order!
 
               <p className="text-xs text-gray-700 font-semibold leading-relaxed">
                 {isUnacceptedOver5Min
-                  ? 'Your order has been pending for over 5 minutes! Tap below to send this exact order copy directly to the restaurant on WhatsApp or call for immediate confirmation.'
-                  : 'Tap below to send this order copy directly to the restaurant on WhatsApp or call for quick updates.'}
+                  ? `Your ${vocab.orderNoun.toLowerCase()} has been pending for over 5 minutes! Tap below to send this copy directly on WhatsApp or call for immediate confirmation.`
+                  : `Tap below to send this ${vocab.orderNoun.toLowerCase()} copy directly on WhatsApp or call for quick updates.`}
               </p>
 
               {/* Note for 5 minute contact */}
               <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-2.5 text-[10px] text-amber-900 font-bold leading-snug">
                 <span className="font-extrabold uppercase text-[#B45309] block mb-0.5">⚠️ Contact Note</span>
-                If order is not accepted in 5 min, please contact directly on WhatsApp or Call below.
+                If {vocab.orderNoun.toLowerCase()} is not accepted in 5 min, please contact directly on WhatsApp or Call below.
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2 mt-0.5">
@@ -530,16 +677,16 @@ Please confirm and prepare my order!
                   className="flex-1 bg-[#25D366] hover:bg-[#20bd5a] text-white font-extrabold text-xs py-3 px-3.5 rounded-xl uppercase tracking-wide flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all text-center"
                 >
                   <MessageCircle className="w-4 h-4 fill-current flex-shrink-0" />
-                  <span>Send Order on WhatsApp</span>
+                  <span>Send {vocab.orderNoun} on WhatsApp</span>
                 </a>
 
-                {/* Call Restaurant Button */}
+                {/* Call Button */}
                 <a
                   href={`tel:${cleanPhoneDigits}`}
                   className="bg-[#1E293B] hover:bg-slate-900 text-white font-extrabold text-xs py-3 px-3.5 rounded-xl uppercase tracking-wide flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all text-center flex-shrink-0"
                 >
                   <PhoneCall className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                  <span>Call</span>
+                  <span>Call {businessCategory === 'salon' ? 'Salon' : 'Restaurant'}</span>
                 </a>
               </div>
             </div>
@@ -611,12 +758,12 @@ Please confirm and prepare my order!
             </div>
           )}
 
-          {/* Back to Menu */}
+          {/* Back to Menu / Catalog */}
           <Link
             href={`/menu/${order.restaurantId}`}
             className="block text-center bg-surface text-text-dark font-bold text-sm py-3 rounded-xl hover:bg-surface/80 transition-colors"
           >
-            Back to Menu
+            {businessCategory === 'salon' ? 'Back to Services' : 'Back to Menu'}
           </Link>
         </div>
       </div>
@@ -644,7 +791,7 @@ Please confirm and prepare my order!
             </span>
 
             <h3 className="font-black text-xl text-gray-900 leading-tight">
-              Pay ₹{order.total} to Confirm Order
+              Pay ₹{order.total} to Confirm {vocab.orderNoun}
             </h3>
 
             {/* QR Code Container */}
@@ -684,7 +831,7 @@ Please confirm and prepare my order!
             </div>
 
             <p className="text-[11px] text-gray-500 font-medium leading-tight">
-              💡 Showing payment confirmation screenshot to staff starts kitchen prep immediately!
+              💡 Showing payment confirmation screenshot to staff confirms your {vocab.orderNoun.toLowerCase()} immediately!
             </p>
 
             <button

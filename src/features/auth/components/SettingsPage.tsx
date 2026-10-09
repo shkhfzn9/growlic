@@ -1,13 +1,15 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
+import { updateRestaurantName } from '@/redux/authSlice';
 import QRCode from 'qrcode';
 import { getRestaurantDetails, saveRestaurantBranding } from '@/actions/auth';
 import { PageHeader, AdminButton } from '@/components/ui';
-import { Plus, Trash2, Download, Printer, CheckCircle, Palette, Sparkles, Check, Smartphone, Sliders, ShoppingBag } from 'lucide-react';
+import { Plus, Trash2, Download, Printer, CheckCircle, Palette, Sparkles, Check, Smartphone, Sliders, ShoppingBag, ExternalLink, Copy, Store, Globe } from 'lucide-react';
 import { THEME_PRESETS, ThemePreset } from '@/config/themes';
+import { getVocabulary } from '@/config/businessVocabulary';
 
 export function getBaseAppUrl(): string {
   if (process.env.NEXT_PUBLIC_APP_URL) {
@@ -23,8 +25,11 @@ export function getBaseAppUrl(): string {
 }
 
 export default function SettingsPage() {
+  const dispatch = useDispatch();
   const auth = useSelector((state: RootState) => state.auth);
 
+  const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
+  const [restaurantName, setRestaurantName] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
   const [primaryColor, setPrimaryColor] = useState('#C0181A');
   const [welcomeMessage, setWelcomeMessage] = useState('Welcome to our restaurant!');
@@ -57,15 +62,23 @@ export default function SettingsPage() {
   const [newTableLabel, setNewTableLabel] = useState('');
   const [qrUrls, setQrUrls] = useState<Record<string, string>>({});
 
+  const [copiedStoreLink, setCopiedStoreLink] = useState(false);
+  const [copiedTableLink, setCopiedTableLink] = useState<Record<string, boolean>>({});
+
   useEffect(() => {
     const loadDetails = async () => {
       try {
         const details = await getRestaurantDetails();
         if (details) {
+          if (details.businessCategory) {
+            setBusinessCategory(details.businessCategory);
+          }
+          setRestaurantName(details.restaurantName || auth.restaurantName || '');
           setLogoUrl(details.logoUrl || '');
           setPrimaryColor(details.primaryColor || '#C0181A');
-          setWelcomeMessage(details.welcomeMessage || 'Welcome to our restaurant!');
-          setWhatsappNumber(details.whatsappNumber || details.phone || '9541234068');
+          setWelcomeMessage(details.welcomeMessage || 'Welcome to our store!');
+          const storeContact = (details.whatsappNumber && details.whatsappNumber !== '9541234068') ? details.whatsappNumber : (details.phone || '9541234068');
+          setWhatsappNumber(storeContact);
           setThemePreset(details.themePreset || 'burgundy');
           setThemeGradientDark(details.themeGradientDark || '#8B0000');
           setThemeGradientDarker(details.themeGradientDarker || '#6B0000');
@@ -75,7 +88,7 @@ export default function SettingsPage() {
           setStampsRequired(details.stampsRequired ?? 8);
           setDiscountPercentage(details.discountPercentage ?? 20);
           setMaintenanceModeEnabled(!!details.maintenanceModeEnabled);
-          setMaintenanceMessage(details.maintenanceMessage || 'Kitchen is currently under maintenance. Ordering will resume shortly.');
+          setMaintenanceMessage(details.maintenanceMessage || 'Store is currently under maintenance. Ordering will resume shortly.');
           setMaintenanceEstimatedRestore(details.maintenanceEstimatedRestore || '');
         }
       } catch (err) {
@@ -89,6 +102,12 @@ export default function SettingsPage() {
       if (stored) setTables(JSON.parse(stored));
     }
   }, [auth.isLoggedIn, auth.restaurantId]);
+
+  useEffect(() => {
+    if (auth.restaurantName && !restaurantName) {
+      setRestaurantName(auth.restaurantName);
+    }
+  }, [auth.restaurantName, restaurantName]);
 
   useEffect(() => {
     if (auth.restaurantId && tables.length > 0) {
@@ -147,6 +166,7 @@ export default function SettingsPage() {
     setSaveSuccess(false);
     try {
       await saveRestaurantBranding({ 
+        restaurantName: restaurantName.trim(),
         logoUrl, 
         primaryColor, 
         welcomeMessage,
@@ -163,6 +183,11 @@ export default function SettingsPage() {
         maintenanceMessage,
         maintenanceEstimatedRestore,
       });
+
+      if (restaurantName.trim()) {
+        dispatch(updateRestaurantName(restaurantName.trim()));
+      }
+
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
@@ -190,6 +215,7 @@ export default function SettingsPage() {
     setLoyaltySaveSuccess(false);
     try {
       await saveRestaurantBranding({
+        restaurantName: restaurantName.trim(),
         logoUrl,
         primaryColor,
         welcomeMessage,
@@ -206,6 +232,9 @@ export default function SettingsPage() {
         maintenanceMessage,
         maintenanceEstimatedRestore,
       });
+      if (restaurantName.trim()) {
+        dispatch(updateRestaurantName(restaurantName.trim()));
+      }
       setLoyaltySaveSuccess(true);
       setTimeout(() => setLoyaltySaveSuccess(false), 3000);
     } catch (err) {
@@ -222,6 +251,7 @@ export default function SettingsPage() {
     setMaintenanceSaveSuccess(false);
     try {
       await saveRestaurantBranding({
+        restaurantName: restaurantName.trim(),
         logoUrl,
         primaryColor,
         welcomeMessage,
@@ -238,6 +268,9 @@ export default function SettingsPage() {
         maintenanceMessage,
         maintenanceEstimatedRestore,
       });
+      if (restaurantName.trim()) {
+        dispatch(updateRestaurantName(restaurantName.trim()));
+      }
       setMaintenanceSaveSuccess(true);
       setTimeout(() => setMaintenanceSaveSuccess(false), 3000);
     } catch (err) {
@@ -257,18 +290,18 @@ export default function SettingsPage() {
     printWindow.document.write(`
       <html>
         <head>
-          <title>QR - ${auth.restaurantName || 'Menu'} - Table ${table}</title>
+          <title>QR - ${restaurantName || auth.restaurantName || 'Menu'} - Table ${table}</title>
           <style>
             body { font-family: 'Inter', system-ui, sans-serif; text-align: center; padding: 8% 5%; }
             .title { font-size: 24px; font-weight: bold; margin-bottom: 5px; }
             .table-label { font-size: 20px; font-weight: bold; margin-bottom: 25px; border: 2px solid #111; display: inline-block; padding: 5px 20px; border-radius: 8px; }
             .subtitle { font-size: 13px; color: #555; margin-bottom: 30px; }
             .qr-img { width: 320px; height: 320px; border: 2px solid #E2E6EA; padding: 10px; border-radius: 12px; }
-            .url { margin-top: 20px; font-size: 10px; color: #666; }
+            .url { margin-top: 20px; font-size: 10px; color: #666; word-break: break-all; }
           </style>
         </head>
         <body>
-          <div class="title">${auth.restaurantName || 'Restaurant Menu'}</div>
+          <div class="title">${restaurantName || auth.restaurantName || 'Restaurant Menu'}</div>
           <div class="table-label">Table ${table}</div>
           <div class="subtitle">Scan to order directly from your table</div>
           <img src="${qrUrl}" class="qr-img" />
@@ -280,9 +313,58 @@ export default function SettingsPage() {
     printWindow.document.close();
   };
 
+  const storePublicUrl = auth.restaurantId ? `${getBaseAppUrl()}/menu/${auth.restaurantId}` : '';
+
   return (
     <div className="flex flex-col gap-6 max-w-2xl pb-12">
-      <PageHeader title="Settings" subtitle="Configure business themes, branding, and table QR codes" />
+      <PageHeader title="Settings" subtitle="Configure business name, themes, branding, and table QR codes" />
+
+      {/* Store Access & Quick Link Banner */}
+      {storePublicUrl && (
+        <div className="bg-gradient-to-r from-[#111827] via-[#1F2937] to-[#111827] text-white border border-gray-800 rounded-xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-[#C0181A]/20 border border-[#C0181A]/40 flex items-center justify-center text-[#C0181A] shrink-0">
+              <Store className="w-5 h-5 text-white" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base font-extrabold text-white truncate">{restaurantName || auth.restaurantName || 'Your Store'}</h2>
+                <span className="text-[10px] font-bold uppercase bg-[#16A34A]/20 text-[#4ADE80] border border-[#16A34A]/30 px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+                  <Globe className="w-3 h-3" /> Digital Store
+                </span>
+              </div>
+              <p className="text-xs text-gray-300 mt-0.5 font-mono truncate">
+                {storePublicUrl}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(storePublicUrl);
+                setCopiedStoreLink(true);
+                setTimeout(() => setCopiedStoreLink(false), 2000);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors border border-white/15"
+            >
+              {copiedStoreLink ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+              {copiedStoreLink ? 'Copied!' : 'Copy Link'}
+            </button>
+
+            <a
+              href={storePublicUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-extrabold bg-[#C0181A] hover:bg-[#A01416] text-white rounded-lg shadow-sm transition-all active:scale-95"
+            >
+              <span>Open Store</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* Business Themes & Custom Branding */}
       <form onSubmit={handleSaveBranding} className="bg-white border border-[#E2E6EA] rounded-xl p-6 flex flex-col gap-6 shadow-sm">
@@ -290,9 +372,9 @@ export default function SettingsPage() {
           <div>
             <div className="flex items-center gap-2">
               <Palette className="w-5 h-5 text-[#C0181A]" />
-              <h2 className="text-base font-bold text-[#111827]">Business Themes & Appearance</h2>
+              <h2 className="text-base font-bold text-[#111827]">Store Info & Themes</h2>
             </div>
-            <p className="text-[13px] text-[#6B7280] mt-0.5">Select a curated aesthetic for your restaurant type or create custom color gradients.</p>
+            <p className="text-[13px] text-[#6B7280] mt-0.5">Edit store name, select business aesthetics, or configure custom theme colors.</p>
           </div>
           <span className="text-[11px] font-extrabold uppercase bg-[#FEF2F2] text-[#C0181A] px-2.5 py-1 rounded-full border border-[#C0181A]/10">
             Multi-Business
@@ -301,9 +383,25 @@ export default function SettingsPage() {
 
         {saveSuccess && (
           <div className="flex items-center gap-2 bg-[#F0FDF4] border border-[#16A34A]/20 rounded-lg p-3 text-sm text-[#16A34A] font-medium">
-            <CheckCircle className="w-4 h-4" /> Theme and branding settings saved successfully!
+            <CheckCircle className="w-4 h-4" /> Store details and theme settings saved successfully!
           </div>
         )}
+
+        {/* Store / Restaurant Name Field */}
+        <div className="flex flex-col gap-1.5 bg-[#F9FAFB] border border-[#E2E6EA] rounded-xl p-4">
+          <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#374151] flex items-center gap-1.5">
+            <Store className="w-3.5 h-3.5 text-[#C0181A]" /> Store / Business Name
+          </label>
+          <input
+            type="text"
+            placeholder="e.g. Tokyo Momos"
+            value={restaurantName}
+            onChange={(e) => setRestaurantName(e.target.value)}
+            className="px-3.5 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-white outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors font-semibold text-[#111827]"
+            required
+          />
+          <span className="text-xs text-[#6B7280]">This title will be displayed across your digital menu header, customer invoices, and QR cards.</span>
+        </div>
 
         {/* Theme Presets Grid */}
         <div className="flex flex-col gap-3">
@@ -390,11 +488,11 @@ export default function SettingsPage() {
                     <img src={logoUrl} alt="Logo" className="w-8 h-8 rounded-lg object-cover bg-white/20 border border-white/30" />
                   ) : (
                     <div className="w-8 h-8 rounded-lg bg-white/20 border border-white/30 flex items-center justify-center font-black text-xs">
-                      {auth.restaurantName ? auth.restaurantName.charAt(0) : 'R'}
+                      {restaurantName ? restaurantName.charAt(0) : (auth.restaurantName ? auth.restaurantName.charAt(0) : 'R')}
                     </div>
                   )}
                   <div>
-                    <h3 className="font-extrabold text-sm leading-tight text-white">{auth.restaurantName || 'Your Business Name'}</h3>
+                    <h3 className="font-extrabold text-sm leading-tight text-white">{restaurantName || auth.restaurantName || 'Your Business Name'}</h3>
                     <p className="text-[10px] text-white/80 line-clamp-1">{welcomeMessage || 'Welcome to our restaurant!'}</p>
                   </div>
                 </div>
@@ -582,7 +680,7 @@ export default function SettingsPage() {
         </div>
 
         <AdminButton type="submit" loading={saving} className="w-full">
-          Save Theme & Branding
+          Save Store Info & Theme
         </AdminButton>
       </form>
 
@@ -658,10 +756,10 @@ export default function SettingsPage() {
       <form onSubmit={handleSaveMaintenance} className="bg-white border border-[#E2E6EA] rounded-xl p-6 flex flex-col gap-5">
         <div>
           <h2 className="text-[15px] font-semibold text-[#111827] flex items-center gap-2">
-            <span>🛠️ Kitchen Maintenance & Pause Ordering</span>
+            <span>🛠️ {getVocabulary(businessCategory).maintenanceAlert} & Pause Ordering</span>
           </h2>
           <p className="text-[13px] text-[#6B7280] mt-0.5">
-            Temporarily pause customer ordering while keeping your QR code menu fully viewable as a digital menu.
+            Temporarily pause customer ordering while keeping your QR code storefront fully viewable as a digital catalog.
           </p>
         </div>
 
@@ -678,7 +776,7 @@ export default function SettingsPage() {
             </span>
             <span className="text-xs text-[#6B7280]">
               {maintenanceModeEnabled
-                ? 'QR scans will open the digital menu. Cart ordering is paused.'
+                ? 'QR scans will open the digital catalog. Cart ordering is paused.'
                 : 'Customers can add items to cart and place orders normally.'}
             </span>
           </div>
@@ -705,7 +803,7 @@ export default function SettingsPage() {
               </label>
               <textarea
                 rows={2}
-                placeholder="e.g. Kitchen is refilling supplies. Ordering will resume shortly."
+                placeholder={`e.g. ${getVocabulary(businessCategory).prepArea} is undergoing routine setup. Ordering will resume shortly.`}
                 value={maintenanceMessage}
                 onChange={(e) => setMaintenanceMessage(e.target.value)}
                 className="px-3 py-2.5 text-sm border border-amber-300/80 rounded-lg bg-white outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors"
@@ -740,7 +838,7 @@ export default function SettingsPage() {
       <div className="bg-white border border-[#E2E6EA] rounded-xl p-6 flex flex-col gap-5">
         <div>
           <h2 className="text-[15px] font-semibold text-[#111827]">Table QR Codes</h2>
-          <p className="text-[13px] text-[#6B7280] mt-0.5">Generate and print table-scoped QR codes for ordering</p>
+          <p className="text-[13px] text-[#6B7280] mt-0.5">Generate, test, and print table-scoped QR codes for ordering</p>
         </div>
 
         <div className="flex gap-2">
@@ -751,28 +849,67 @@ export default function SettingsPage() {
             onChange={(e) => setNewTableLabel(e.target.value.replace(/[^a-zA-Z0-9-]/g, ''))}
             className="flex-1 px-3 py-2.5 text-sm border border-[#E2E6EA] rounded-lg bg-[#F4F6F9] outline-none focus:ring-2 focus:ring-[#C0181A]/20 focus:border-[#C0181A] transition-colors"
           />
-          <AdminButton onClick={addTable} icon={<Plus className="w-4 h-4" />}>Add</AdminButton>
+          <AdminButton onClick={addTable} icon={<Plus className="w-4 h-4" />}>Add Table</AdminButton>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {tables.map((table) => {
             const tableQrUrl = qrUrls[table];
+            const tableTargetUrl = `${getBaseAppUrl()}/menu/${auth.restaurantId}?table=${encodeURIComponent(table)}`;
+            const isTableCopied = !!copiedTableLink[table];
+
             return (
               <div key={table} className="bg-[#F4F6F9] border border-[#E2E6EA] rounded-xl p-4 flex flex-col items-center gap-3">
                 <div className="flex justify-between items-center w-full">
-                  <span className="text-sm font-semibold text-[#111827]">Table {table}</span>
-                  <button onClick={() => removeTable(table)} className="text-[#DC2626] hover:bg-[#FEF2F2] p-1 rounded transition-colors">
+                  <span className="text-sm font-bold text-[#111827]">Table {table}</span>
+                  <button onClick={() => removeTable(table)} className="text-[#DC2626] hover:bg-[#FEF2F2] p-1 rounded transition-colors" title="Remove table">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
                 {tableQrUrl ? (
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="bg-white border border-[#E2E6EA] rounded-lg p-2">
+                  <div className="flex flex-col items-center gap-3 w-full">
+                    <div className="bg-white border border-[#E2E6EA] rounded-lg p-2 shadow-2xs">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={tableQrUrl} alt={`Table ${table} QR`} className="w-36 h-36" />
                     </div>
-                    <div className="flex gap-2">
+
+                    {/* Clickable Web Link Box */}
+                    <div className="w-full bg-white border border-[#E2E6EA] rounded-lg p-2 flex items-center justify-between gap-2 shadow-2xs">
+                      <a
+                        href={tableTargetUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] font-mono text-[#C0181A] hover:underline truncate flex items-center gap-1 flex-1 font-medium"
+                        title="Click to open menu for this table"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{tableTargetUrl}</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(tableTargetUrl);
+                          setCopiedTableLink(prev => ({ ...prev, [table]: true }));
+                          setTimeout(() => setCopiedTableLink(prev => ({ ...prev, [table]: false })), 2000);
+                        }}
+                        className="text-gray-500 hover:text-[#111827] p-1 rounded transition-colors shrink-0"
+                        title="Copy table link"
+                      >
+                        {isTableCopied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+
+                    {/* Quick Action Buttons */}
+                    <div className="flex flex-wrap gap-2 justify-center w-full">
+                      <a
+                        href={tableTargetUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#C0181A] text-white rounded-lg hover:bg-[#A01416] transition-colors shadow-xs"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" /> Access Store
+                      </a>
                       <a
                         href={tableQrUrl}
                         download={`table-${table}-qr.png`}
@@ -801,14 +938,32 @@ export default function SettingsPage() {
 
       {/* Restaurant Info */}
       <div className="bg-white border border-[#E2E6EA] rounded-xl p-6">
-        <h2 className="text-[15px] font-semibold text-[#111827] mb-4">Restaurant Details</h2>
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <span className="text-[#6B7280]">Restaurant Name</span>
-          <span className="font-medium text-[#111827]">{auth.restaurantName}</span>
-          <span className="text-[#6B7280]">Slug / ID</span>
-          <span className="font-mono text-[13px] text-[#111827]">{auth.restaurantId}</span>
-          <span className="text-[#6B7280]">Admin Email</span>
-          <span className="font-mono text-[13px] text-[#111827]">{auth.email}</span>
+        <h2 className="text-[15px] font-semibold text-[#111827] mb-4">Restaurant Account Details</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div>
+            <span className="text-[#6B7280] block text-xs">Store Name</span>
+            <span className="font-bold text-[#111827]">{restaurantName || auth.restaurantName}</span>
+          </div>
+          <div>
+            <span className="text-[#6B7280] block text-xs">Store Slug / Business ID</span>
+            <span className="font-mono text-[13px] text-[#111827]">{auth.restaurantId}</span>
+          </div>
+          <div>
+            <span className="text-[#6B7280] block text-xs">Admin Email</span>
+            <span className="font-mono text-[13px] text-[#111827]">{auth.email}</span>
+          </div>
+          <div>
+            <span className="text-[#6B7280] block text-xs">Store Direct Web Link</span>
+            <a
+              href={storePublicUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-[12px] text-[#C0181A] hover:underline flex items-center gap-1 truncate"
+            >
+              <span className="truncate">{storePublicUrl}</span>
+              <ExternalLink className="w-3 h-3 shrink-0" />
+            </a>
+          </div>
         </div>
       </div>
     </div>

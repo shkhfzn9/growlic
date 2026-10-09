@@ -33,7 +33,7 @@ const CustomerSchema: Schema = new Schema<ICustomerDocument>(
   { timestamps: true }
 );
 
-CustomerSchema.index({ restaurantId: 1, phone: 1 });
+CustomerSchema.index({ restaurantId: 1, phone: 1 }, { unique: true });
 
 const Customer: Model<ICustomerDocument> =
   mongoose.models.Customer || mongoose.model<ICustomerDocument>('Customer', CustomerSchema);
