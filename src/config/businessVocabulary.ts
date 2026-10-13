@@ -23,9 +23,9 @@ export interface BusinessVocabulary {
 export const VOCABULARIES: Record<string, BusinessVocabulary> = {
   salon: {
     catalogTitle: 'Service Catalog',
-    catalogSubtitle: 'Manage salon treatments, packages & pricing',
+    catalogSubtitle: 'Manage salon services, packages & pricing',
     itemNoun: 'Service',
-    itemsNoun: 'Services & Treatments',
+    itemsNoun: 'Services',
     categoryNoun: 'Service Category',
     prepArea: 'Service Station',
     prepStaff: 'Stylist / Therapist',
@@ -35,12 +35,12 @@ export const VOCABULARIES: Record<string, BusinessVocabulary> = {
     inHouseFulfillment: 'In-Salon Service',
     takeawayFulfillment: 'Home Visit Service',
     maintenanceAlert: 'Station Under Maintenance',
-    processDetailsLabel: 'Treatment & Service Process',
+    processDetailsLabel: 'Service Process & Details',
     suppliesLabel: 'Products & Serums Used',
     timeEstimateLabel: 'Estimated Service Time (Mins)',
     noteLabel: 'Specialist Note',
-    addItemTitle: 'Add New Service / Treatment',
-    editItemTitle: 'Edit Service / Treatment',
+    addItemTitle: 'Add New Service',
+    editItemTitle: 'Edit Service',
   },
   detailing: {
     catalogTitle: 'Detailing Package Catalog',

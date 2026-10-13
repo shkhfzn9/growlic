@@ -55,6 +55,24 @@ export default function OrderNotificationProvider({ children }: { children: Reac
   const [audioError, setAudioError] = useState(false);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
   const [mounted, setMounted] = useState(false);
+  const [alertFirstSeenTime, setAlertFirstSeenTime] = useState<number | null>(null);
+
+  // Synchronize alertFirstSeenTime when active alert orders/calls appear or clear
+  useEffect(() => {
+    const hasAlerts = activeAlertOrders.length > 0 || activeStaffCalls.length > 0;
+    if (hasAlerts) {
+      if (alertFirstSeenTime === null) {
+        setAlertFirstSeenTime(Date.now());
+      }
+    } else {
+      if (alertFirstSeenTime !== null) {
+        setAlertFirstSeenTime(null);
+      }
+    }
+  }, [activeAlertOrders.length, activeStaffCalls.length, alertFirstSeenTime]);
+
+  const elapsedSec = alertFirstSeenTime ? Math.floor((Date.now() - alertFirstSeenTime) / 1000) : 0;
+  const isTimedOut = elapsedSec >= 600; // 10 minutes timeout (auto-mute audio & pause polling)
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -199,7 +217,7 @@ export default function OrderNotificationProvider({ children }: { children: Reac
   useEffect(() => {
     const hasUnacknowledgedOrders = activeAlertOrders.length > 0;
     const hasUnacknowledgedCalls = activeStaffCalls.length > 0;
-    const shouldPlay = (hasUnacknowledgedOrders || hasUnacknowledgedCalls) && isAdminRoute;
+    const shouldPlay = (hasUnacknowledgedOrders || hasUnacknowledgedCalls) && isAdminRoute && !isTimedOut;
 
     if (shouldPlay && audioUnlocked) {
       if (audioError) {
@@ -289,12 +307,28 @@ export default function OrderNotificationProvider({ children }: { children: Reac
 
     const isSalonRoute = pathname?.includes('/appointments') || pathname?.includes('/salon');
 
-    // Polling is active ONLY while there are un-acknowledged alert orders or staff calls
-    let pollerInterval: NodeJS.Timeout | null = null;
+    // Determine polling interval based on adaptive decay schedule
+    let decayIntervalMs: number | null = null;
     const hasActiveAlerts = activeAlertOrders.length > 0 || activeStaffCalls.length > 0;
 
-    if (!isSalonRoute && hasActiveAlerts) {
-      pollerInterval = setInterval(checkIncomingOrdersAndCalls, 5000);
+    if (!isSalonRoute && hasActiveAlerts && !isTimedOut) {
+      if (elapsedSec < 30) {
+        decayIntervalMs = 5000;   // 0s - 30s: 5 sec
+      } else if (elapsedSec < 180) {
+        decayIntervalMs = 10000;  // 30s - 3m: 10 sec
+      } else if (elapsedSec < 300) {
+        decayIntervalMs = 15000;  // 3m - 5m: 15 sec
+      } else if (elapsedSec < 420) {
+        decayIntervalMs = 20000;  // 5m - 7m: 20 sec
+      } else if (elapsedSec < 600) {
+        decayIntervalMs = 30000;  // 7m - 10m: 30 sec
+      }
+      // > 10m: decayIntervalMs = null (Polling paused)
+    }
+
+    let pollerInterval: NodeJS.Timeout | null = null;
+    if (decayIntervalMs) {
+      pollerInterval = setInterval(checkIncomingOrdersAndCalls, decayIntervalMs);
     }
 
     // Setup BroadcastChannel for instant < 10ms real-time triggers across tabs
@@ -304,6 +338,7 @@ export default function OrderNotificationProvider({ children }: { children: Reac
         broadcastChannel = new BroadcastChannel('growlic_order_channel');
         broadcastChannel.onmessage = (event) => {
           if (event.data?.type === 'NEW_ORDER_PLACED' || event.data?.type === 'ORDER_STATUS_UPDATED') {
+            setAlertFirstSeenTime(Date.now()); // Reset backoff clock on new order event
             checkIncomingOrdersAndCalls();
           }
         };
@@ -312,8 +347,9 @@ export default function OrderNotificationProvider({ children }: { children: Reac
       }
     }
 
-    // Trigger check on window focus
+    // Trigger check on window focus & reset decay clock
     const handleActivity = () => {
+      setAlertFirstSeenTime(Date.now());
       checkIncomingOrdersAndCalls();
     };
 
@@ -332,7 +368,7 @@ export default function OrderNotificationProvider({ children }: { children: Reac
         window.removeEventListener('focus', handleActivity);
       }
     };
-  }, [auth.isLoggedIn, auth.restaurantId, acknowledgedIds, acknowledgedCallIds, isAdminRoute, activeAlertOrders.length, activeStaffCalls.length]);
+  }, [auth.isLoggedIn, auth.restaurantId, acknowledgedIds, acknowledgedCallIds, isAdminRoute, activeAlertOrders.length, activeStaffCalls.length, elapsedSec, isTimedOut]);
 
   // Stop alert for a specific order (Add to acknowledged lists)
   const acknowledgeOrder = (orderId: string) => {
@@ -526,6 +562,11 @@ export default function OrderNotificationProvider({ children }: { children: Reac
                             <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${payInfo.badgeBg}`}>
                               {payInfo.label}
                             </span>
+                            {isTimedOut && (
+                              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-600 text-white border border-red-700 uppercase tracking-wider animate-pulse">
+                                ⚠️ Missed Order (&gt;10m)
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-[#111827]">

@@ -19,6 +19,7 @@ export interface CartState {
   restaurantId: string | null;
   restaurantName: string | null;
   tableId?: string | null;
+  businessCategory?: string | null;
 }
 
 const initialState: CartState = {
@@ -28,6 +29,7 @@ const initialState: CartState = {
   restaurantId: null,
   restaurantName: null,
   tableId: null,
+  businessCategory: null,
 };
 
 const calculateTotals = (state: CartState) => {
@@ -42,6 +44,7 @@ const persistCartToStorage = (state: CartState) => {
       restaurantId: state.restaurantId,
       restaurantName: state.restaurantName,
       tableId: state.tableId,
+      businessCategory: state.businessCategory,
     }));
   }
 };
@@ -50,8 +53,8 @@ const cartSlice = createSlice({
   name: 'cart',
   initialState,
   reducers: {
-    addItem: (state, action: PayloadAction<{ item: Omit<CartItem, 'quantity'>; restaurantId: string; restaurantName: string }>) => {
-      const { item, restaurantId, restaurantName } = action.payload;
+    addItem: (state, action: PayloadAction<{ item: Omit<CartItem, 'quantity'>; restaurantId: string; restaurantName: string; businessCategory?: string }>) => {
+      const { item, restaurantId, restaurantName, businessCategory } = action.payload;
       
       // If adding item from a different restaurant, clear previous cart
       if (state.restaurantId && state.restaurantId !== restaurantId) {
@@ -60,6 +63,9 @@ const cartSlice = createSlice({
       
       state.restaurantId = restaurantId;
       state.restaurantName = restaurantName;
+      if (businessCategory) {
+        state.businessCategory = businessCategory;
+      }
 
       const existingItem = state.items.find((i) => i.id === item.id);
       if (existingItem) {

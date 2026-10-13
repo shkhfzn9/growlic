@@ -70,6 +70,13 @@ export default function Sidebar({ restaurantName, email, onLogout }: SidebarProp
 
   const vocab = getVocabulary(businessCategory);
 
+  const filteredNavLinks = navLinks.filter((link) => {
+    if (link.href === '/admin/appointments' && businessCategory === 'restaurant') {
+      return false;
+    }
+    return true;
+  });
+
   const getLinkLabel = (link: { href: string; label: string }) => {
     if (link.href === '/admin/menu') return vocab.itemsNoun;
     if (link.href === '/admin/orders') return vocab.ordersNoun;
@@ -108,7 +115,7 @@ export default function Sidebar({ restaurantName, email, onLogout }: SidebarProp
 
         {/* Navigation - Scrollable */}
         <nav className="flex flex-col gap-1 p-3 mt-1 overflow-y-auto flex-1 min-h-0 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.2)_transparent]">
-          {navLinks.map((link) => {
+          {filteredNavLinks.map((link) => {
             const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
             const Icon = link.icon;
             const label = getLinkLabel(link);

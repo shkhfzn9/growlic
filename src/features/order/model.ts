@@ -41,6 +41,12 @@ export interface IOrderDocument extends Document {
   rejectionReason?: string;
   rejectedAt?: Date;
   trackingToken?: string;
+  source?: 'qr_scan' | 'admin_counter';
+  placed_at?: Date;
+  ready_at?: Date | null;
+  prep_duration_seconds?: number | null;
+  whatsapp_notified?: boolean;
+  whatsapp_notified_at?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -67,11 +73,17 @@ const AppointmentDetailsSchema: Schema = new Schema<IAppointmentDetails>({
 const OrderSchema: Schema = new Schema<IOrderDocument>(
   {
     restaurantId: { type: String, required: true, index: true },
-    customerName: { type: String, required: true },
+    customerName: { type: String, default: 'Counter Guest' },
     customerPhone: { type: String, required: true, index: true },
     tableId: { type: String, default: null },
     orderType: { type: String, enum: ['dine_in', 'takeaway', 'delivery'], default: 'takeaway' },
     paymentMode: { type: String, enum: ['cash', 'online'], default: 'cash' },
+    source: { type: String, enum: ['qr_scan', 'admin_counter'], default: 'qr_scan', index: true },
+    placed_at: { type: Date, default: Date.now },
+    ready_at: { type: Date, default: null },
+    prep_duration_seconds: { type: Number, default: null },
+    whatsapp_notified: { type: Boolean, default: false },
+    whatsapp_notified_at: { type: Date, default: null },
     items: { type: [OrderItemSchema], required: true },
     subtotal: { type: Number, required: true },
     total: { type: Number, required: true },

@@ -5,10 +5,11 @@ import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { UtensilsCrossed, ShoppingBag, Receipt, Award, Bell, Loader2 } from 'lucide-react';
+import { UtensilsCrossed, ShoppingBag, Receipt, Award, Bell, Loader2, Sparkles } from 'lucide-react';
 import { callStaffAction } from '@/actions/orders';
 import { getRestaurantMenuContext } from '@/actions/menu';
 import { getActiveTheme, saveActiveTheme } from '@/config/themes';
+import { getVocabulary } from '@/config/businessVocabulary';
 
 interface CustomerNavbarProps {
   restaurantId?: string;
@@ -26,6 +27,9 @@ export default function CustomerNavbar({ restaurantId, menuContext }: CustomerNa
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  const businessCategory = cart.businessCategory || menuContext?.admin?.businessCategory || 'restaurant';
+  const vocab = getVocabulary(businessCategory);
 
   const [callStaffAllowed, setCallStaffAllowed] = useState(() => {
     if (menuContext && menuContext.admin) {
@@ -65,7 +69,7 @@ export default function CustomerNavbar({ restaurantId, menuContext }: CustomerNa
     } else if (lastOrder?.restaurantId) {
       currentRestaurantId = lastOrder.restaurantId;
     } else {
-      currentRestaurantId = 'tokyo-momos'; // Default fallback
+      currentRestaurantId = '';
     }
   }
 
@@ -134,14 +138,14 @@ export default function CustomerNavbar({ restaurantId, menuContext }: CustomerNa
         {/* Menu Link */}
         <Link
           suppressHydrationWarning
-          href={`/menu/${currentRestaurantId}`}
+          href={currentRestaurantId ? `/menu/${currentRestaurantId}` : '/'}
           className={`flex flex-col items-center gap-0.5 transition-all duration-200 active:scale-95 ${
             isMenuActive ? '' : 'text-white/60 hover:text-white'
           }`}
           style={isMenuActive ? { color: themeAccentColor } : undefined}
         >
-          <UtensilsCrossed className="w-5 h-5" />
-          <span className="text-[10px] font-bold uppercase tracking-wider">Menu</span>
+          {businessCategory === 'salon' ? <Sparkles className="w-5 h-5" /> : <UtensilsCrossed className="w-5 h-5" />}
+          <span className="text-[10px] font-bold uppercase tracking-wider">{vocab.itemsNoun}</span>
           <span
             suppressHydrationWarning
             className={`w-1 h-1 rounded-full transition-all duration-300 ${
@@ -247,7 +251,10 @@ export default function CustomerNavbar({ restaurantId, menuContext }: CustomerNa
             </div>
             <h3 className="font-extrabold text-lg text-gray-900 uppercase tracking-tight">Call Staff?</h3>
             <p className="text-xs text-gray-500 mt-2 leading-relaxed">
-              Ring the service alert to call a waiter to Table <span className="font-black text-[#C0181A]">{cart.tableId || 'Takeaway'}</span>?
+              Ring the service alert to request assistance at {vocab.tableNoun}{' '}
+              <span className="font-black text-[#C0181A]">
+                {cart.tableId || (businessCategory === 'salon' ? 'Station' : 'Takeaway')}
+              </span>?
             </p>
             <div className="flex gap-2.5 mt-5">
               <button
@@ -257,11 +264,12 @@ export default function CustomerNavbar({ restaurantId, menuContext }: CustomerNa
                 Cancel
               </button>
               <button
-                disabled={calling}
+                disabled={calling || !currentRestaurantId}
                 onClick={async () => {
+                  if (!currentRestaurantId) return;
                   setCalling(true);
                   try {
-                    await callStaffAction(currentRestaurantId || 'tokyo-momos', cart.tableId || 'Takeaway');
+                    await callStaffAction(currentRestaurantId, cart.tableId || (businessCategory === 'salon' ? 'Station' : 'Takeaway'));
                     setCallSuccess(true);
                     setShowCallConfirm(false);
                     setTimeout(() => setCallSuccess(false), 3000);
@@ -272,7 +280,7 @@ export default function CustomerNavbar({ restaurantId, menuContext }: CustomerNa
                     setCalling(false);
                   }
                 }}
-                className="flex-1 py-2.5 bg-[#C0181A] text-white text-xs font-bold rounded-xl active:scale-95 transition-all hover:bg-[#A01012] flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 bg-[#C0181A] text-white text-xs font-bold rounded-xl active:scale-95 transition-all hover:bg-[#A01012] flex items-center justify-center gap-1.5 disabled:opacity-50"
               >
                 {calling && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 Confirm

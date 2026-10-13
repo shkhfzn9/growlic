@@ -10,6 +10,7 @@ import { validateSession, can, getAdminByRestaurantId } from '@/features/auth';
 import { logAction } from '@/features/audit';
 import * as customerRepo from '@/features/customer/repository';
 import { checkAndIncrementRateLimit } from '@/lib/rateLimiter';
+import { orderTelemetry } from '@/lib/orderTelemetry';
 
 /**
  * Validates the admin's authentication cookie ('admin_token') and decodes its payload.
@@ -80,6 +81,7 @@ export async function createOrder(data: {
 }) {
   try {
     const order = await orderService.createOrder(data);
+    orderTelemetry.recordRequest(order._id, order.restaurantId, order.status || 'received');
     return JSON.parse(JSON.stringify(order));
   } catch (error) {
     console.error('Error creating order action:', error);
@@ -139,7 +141,7 @@ export async function getPublicOrderTrackInfoAction(tokenOrId: string, restauran
  * 
  * @returns Serialized, plain array of order history.
  */
-export async function getAdminOrders(limit?: number, skip?: number, status?: string) {
+export async function getAdminOrders(limit?: number, skip?: number, status?: string, source?: string) {
   try {
     const admin = await checkAdminAuth();
     const isAllowed = (await can('manage_orders', admin.token, admin.restaurantId)) ||
@@ -148,7 +150,7 @@ export async function getAdminOrders(limit?: number, skip?: number, status?: str
       return { orders: [], total: 0, totalCount: 0, unauthorized: true, error: 'Forbidden: Insufficient permissions to view orders' };
     }
 
-    const result = await orderService.getAdminOrders(admin.restaurantId, limit, skip, status);
+    const result = await orderService.getAdminOrders(admin.restaurantId, limit, skip, status, source);
     return JSON.parse(JSON.stringify(result));
   } catch (error) {
     if (error instanceof Error && error.message.includes('Unauthorized')) {
@@ -189,6 +191,11 @@ export async function updateOrderStatus(
 
     const existing = await orderService.getOrderById(id, admin.restaurantId);
     const order = await orderService.updateOrderStatus(id, admin.restaurantId, status, delayData, rejectionReason);
+
+    if (existing) {
+      orderTelemetry.recordStatusChange(id, existing.status, status);
+    }
+    orderTelemetry.recordRequest(id, admin.restaurantId, status);
 
     // Audit log order status change
     await logAction(admin.restaurantId, admin.userId, 'ORDER_STATUS_CHANGED', existing, order);
@@ -464,6 +471,12 @@ export async function getAdminNotificationAlertsAction(
       acknowledgedCallIds
     );
 
+    if (result?.orders) {
+      result.orders.forEach((o: any) => {
+        orderTelemetry.recordRequest(o._id.toString(), restaurantId, o.status || 'received');
+      });
+    }
+
     return {
       success: true,
       orders: JSON.parse(JSON.stringify(result.orders)),
@@ -491,6 +504,89 @@ export async function getBookedSlotsAction(
   } catch (error) {
     console.error('Error fetching booked slots:', error);
     return [];
+  }
+}
+
+/**
+ * Server action for ADMINS to create manual walk-in / counter orders.
+ * Strictly protected by checkAdminAuth() and can('manage_orders').
+ */
+export async function createCounterOrderAction(data: {
+  customerPhone: string;
+  customerName?: string;
+  orderType?: 'dine_in' | 'takeaway' | 'delivery';
+  paymentMode?: 'cash' | 'online';
+  tableId?: string;
+  items: Array<{
+    menuItemId: string;
+    quantity: number;
+  }>;
+  notes?: string;
+  markReadyDirectly?: boolean;
+}) {
+  try {
+    const admin = await checkAdminAuth();
+    const isAllowed = await can('manage_orders', admin.token, admin.restaurantId);
+    if (!isAllowed) {
+      throw new Error('Forbidden: Insufficient permissions to create counter orders');
+    }
+
+    const { normalizePhoneNumber, isValidPhoneNumber } = await import('@/lib/whatsappService');
+    const rawPhone = data.customerPhone.trim();
+    if (!isValidPhoneNumber(rawPhone)) {
+      throw new Error('Invalid phone number format. Please provide a valid 10-15 digit phone number.');
+    }
+    const cleanPhone = normalizePhoneNumber(rawPhone);
+    const now = new Date();
+    const isReady = !!data.markReadyDirectly;
+
+    const orderPayload = {
+      restaurantId: admin.restaurantId,
+      customerName: data.customerName?.trim() || 'Walk-in Customer',
+      customerPhone: cleanPhone,
+      orderType: data.orderType || 'takeaway',
+      paymentMode: data.paymentMode || 'cash',
+      tableId: data.tableId || undefined,
+      items: data.items,
+      notes: data.notes || '',
+      source: 'admin_counter' as const,
+      status: (isReady ? 'ready' : 'received') as any,
+      placed_at: now,
+      ready_at: isReady ? now : undefined,
+      prep_duration_seconds: isReady ? 0 : undefined,
+    };
+
+    const order = await orderService.createOrder(orderPayload);
+
+    // Telemetry & audit logging
+    orderTelemetry.recordRequest(order._id, admin.restaurantId, order.status);
+    await logAction(admin.restaurantId, admin.userId, 'COUNTER_ORDER_CREATED', null, { orderId: order._id, total: order.total, status: order.status });
+
+    revalidatePath('/admin/orders');
+    return { success: true, order: JSON.parse(JSON.stringify(order)) };
+  } catch (error) {
+    console.error('Error creating counter order action:', error);
+    const message = error instanceof Error ? error.message : 'Failed to create counter order';
+    throw new Error(message);
+  }
+}
+
+/**
+ * Server action to mark an order as notified via WhatsApp.
+ */
+export async function markOrderWhatsAppNotifiedAction(orderId: string) {
+  try {
+    const admin = await checkAdminAuth();
+    const updated = await orderService.markWhatsAppNotified(admin.restaurantId, orderId);
+    if (!updated) {
+      throw new Error('Order not found or update failed');
+    }
+    revalidatePath('/admin/orders');
+    return { success: true, order: JSON.parse(JSON.stringify(updated)) };
+  } catch (error) {
+    console.error('Error marking order WhatsApp notified action:', error);
+    const message = error instanceof Error ? error.message : 'Failed to update WhatsApp notification status';
+    throw new Error(message);
   }
 }
 

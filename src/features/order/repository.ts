@@ -57,6 +57,12 @@ export function normalizeOrder(doc: any): IOrder {
     rejectionReason: plain.rejectionReason || '',
     rejectedAt: plain.rejectedAt ? new Date(plain.rejectedAt).toISOString() : '',
     trackingToken: plain.trackingToken || '',
+    source: plain.source || 'qr_scan',
+    placed_at: plain.placed_at ? new Date(plain.placed_at).toISOString() : (plain.createdAt ? new Date(plain.createdAt).toISOString() : ''),
+    ready_at: plain.ready_at ? new Date(plain.ready_at).toISOString() : null,
+    prep_duration_seconds: plain.prep_duration_seconds ?? null,
+    whatsapp_notified: !!plain.whatsapp_notified,
+    whatsapp_notified_at: plain.whatsapp_notified_at ? new Date(plain.whatsapp_notified_at).toISOString() : null,
     createdAt: plain.createdAt ? new Date(plain.createdAt).toISOString() : '',
     updatedAt: plain.updatedAt ? new Date(plain.updatedAt).toISOString() : '',
   };
@@ -75,6 +81,11 @@ export async function create(data: {
   tableId?: string;
   orderType?: 'dine_in' | 'takeaway' | 'delivery';
   paymentMode?: 'cash' | 'online';
+  source?: 'qr_scan' | 'admin_counter';
+  placed_at?: Date;
+  ready_at?: Date;
+  prep_duration_seconds?: number;
+  whatsapp_notified?: boolean;
   items: Array<{
     menuItemId: string;
     name: string;
@@ -97,6 +108,8 @@ export async function create(data: {
   const cleanData = {
     ...data,
     restaurantId: sanitizeTenantId(data.restaurantId),
+    source: data.source || 'qr_scan',
+    placed_at: data.placed_at || new Date(),
     trackingToken: data.trackingToken || crypto.randomBytes(16).toString('hex'),
   };
   const docs = await Order.create([cleanData], options?.session ? { session: options.session } : undefined);
@@ -218,14 +231,26 @@ export async function findAll(
   restaurantId: string,
   limit?: number,
   skip?: number,
-  status?: string
+  status?: string,
+  source?: string
 ): Promise<{ orders: IOrder[]; totalCount: number }> {
   await dbConnect();
   const cleanRestId = sanitizeTenantId(restaurantId);
   const query: any = { restaurantId: cleanRestId };
+  if (source && source !== 'all') {
+    if (source === 'admin_counter') {
+      query.source = 'admin_counter';
+    } else if (source === 'qr_scan') {
+      query.source = { $ne: 'admin_counter' };
+    }
+  }
   if (status && status !== 'all') {
     if (status === 'delayed') {
       query.isDelayed = true;
+    } else if (status === 'missed') {
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+      query.status = 'received';
+      query.createdAt = { $lt: tenMinutesAgo };
     } else {
       query.status = status;
     }
@@ -277,10 +302,34 @@ export async function updateStatus(
   if (status === 'cancelled' || status === 'rejected') {
     payload.activeSlotKey = null;
   }
+  if (status === 'ready' || status === 'completed') {
+    const existing = await Order.findOne({ _id: id, restaurantId: sanitizeTenantId(restaurantId) });
+    if (existing && !existing.ready_at) {
+      const readyAt = new Date();
+      payload.ready_at = readyAt;
+      const placedAt = existing.placed_at || existing.createdAt;
+      if (placedAt) {
+        payload.prep_duration_seconds = Math.max(0, Math.round((readyAt.getTime() - new Date(placedAt).getTime()) / 1000));
+      }
+    }
+  }
 
   const doc = await Order.findOneAndUpdate(
     { _id: id, restaurantId: sanitizeTenantId(restaurantId) },
     payload,
+    { new: true }
+  );
+  return doc ? normalizeOrder(doc) : null;
+}
+
+/**
+ * Marks an order as notified via WhatsApp.
+ */
+export async function markWhatsAppNotified(restaurantId: string, id: string): Promise<IOrder | null> {
+  await dbConnect();
+  const doc = await Order.findOneAndUpdate(
+    { _id: id, restaurantId: sanitizeTenantId(restaurantId) },
+    { whatsapp_notified: true, whatsapp_notified_at: new Date() },
     { new: true }
   );
   return doc ? normalizeOrder(doc) : null;
@@ -470,6 +519,7 @@ export async function getNotificationAlerts(
     Order.countDocuments({
       restaurantId: cleanRestId,
       status: 'received',
+      source: { $ne: 'admin_counter' },
       _id: { $nin: acknowledgedOrderIds },
     }),
     StaffCall.countDocuments({
@@ -489,6 +539,7 @@ export async function getNotificationAlerts(
       ? Order.find({
           restaurantId: cleanRestId,
           status: 'received',
+          source: { $ne: 'admin_counter' },
           _id: { $nin: acknowledgedOrderIds },
         })
           .select('_id restaurantId customerName customerPhone tableId orderType paymentMode total items createdAt')

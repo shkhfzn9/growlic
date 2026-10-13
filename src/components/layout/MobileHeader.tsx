@@ -70,6 +70,13 @@ export default function MobileHeader({ restaurantName, email, onLogout }: Mobile
 
   const vocab = getVocabulary(businessCategory);
 
+  const filteredNavLinks = navLinks.filter((link) => {
+    if (link.href === '/admin/appointments' && businessCategory === 'restaurant') {
+      return false;
+    }
+    return true;
+  });
+
   const getLinkLabel = (link: { href: string; label: string }) => {
     if (link.href === '/admin/appointments') return businessCategory === 'salon' ? 'Bookings & Schedule' : 'Appointments & Schedule';
     if (link.href === '/admin/menu') return vocab.itemsNoun;
@@ -101,7 +108,7 @@ export default function MobileHeader({ restaurantName, email, onLogout }: Mobile
       {menuOpen && (
         <div className="md:hidden fixed top-[53px] inset-x-0 bottom-0 bg-[#1C2333] z-20 p-4 flex flex-col justify-between overflow-y-auto">
           <nav className="flex flex-col gap-1">
-            {navLinks.map((link) => {
+            {filteredNavLinks.map((link) => {
               const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
               const Icon = link.icon;
               const label = getLinkLabel(link);

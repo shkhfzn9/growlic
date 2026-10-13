@@ -3,7 +3,8 @@ export type AuditAction =
   | 'MENU_UPDATED'
   | 'LOGIN_SUCCESS'
   | 'LOGIN_FAILED'
-  | 'ORDER_STATUS_CHANGED';
+  | 'ORDER_STATUS_CHANGED'
+  | 'COUNTER_ORDER_CREATED';
 
 export interface IAuditLog {
   _id: string;

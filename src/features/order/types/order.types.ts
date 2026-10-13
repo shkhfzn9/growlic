@@ -22,6 +22,14 @@ export interface Order {
   total: number;
   status: 'received' | 'scheduled' | 'accepted' | 'confirmed' | 'in_progress' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'rejected';
   notes?: string;
+  appointmentDetails?: {
+    bookingDate: string;
+    bookingTime: string;
+    specialistId?: string;
+    specialistName?: string;
+    userNotes?: string;
+  };
+  businessCategory?: string;
   estimatedTime?: number;
   actualPrepTimeMinutes?: number;
   delayMinutes?: number;
@@ -29,6 +37,12 @@ export interface Order {
   delayReason?: string;
   rejectionReason?: string;
   rejectedAt?: string;
+  source?: 'qr_scan' | 'admin_counter';
+  placed_at?: string;
+  ready_at?: string | null;
+  prep_duration_seconds?: number | null;
+  whatsapp_notified?: boolean;
+  whatsapp_notified_at?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -49,6 +49,10 @@ export async function createOrder(data: {
   subtotal?: number;
   total?: number;
   notes?: string;
+  source?: 'qr_scan' | 'admin_counter';
+  status?: IOrder['status'];
+  ready_at?: Date;
+  prep_duration_seconds?: number;
   appointmentDetails?: IOrder['appointmentDetails'];
 }): Promise<IOrder> {
   validateCreateOrderPayload(data);
@@ -141,7 +145,10 @@ export async function createOrder(data: {
       items: validatedItems,
       subtotal: calculatedSubtotal,
       total: calculatedTotal,
-      status: 'received',
+      status: data.status || 'received',
+      ready_at: data.ready_at,
+      prep_duration_seconds: data.prep_duration_seconds,
+      source: data.source || 'qr_scan',
       notes,
       appointmentDetails,
       activeSlotKey,
@@ -218,10 +225,11 @@ export async function getAdminOrders(
   restaurantId: string,
   limit?: number,
   skip?: number,
-  status?: string
+  status?: string,
+  source?: string
 ): Promise<{ orders: IOrder[]; totalCount: number }> {
   validateRestaurantId(restaurantId);
-  return orderRepo.findAll(restaurantId, limit, skip, status);
+  return orderRepo.findAll(restaurantId, limit, skip, status, source);
 }
 
 /**
@@ -414,6 +422,12 @@ export async function getPublicOrderTrackInfo(tokenOrId: string, restaurantId?: 
     })),
     subtotal: order.subtotal,
     total: order.total,
+    businessCategory: admin?.businessCategory || 'restaurant',
+    appointmentDetails: order.appointmentDetails ? {
+      bookingDate: order.appointmentDetails.bookingDate,
+      bookingTime: order.appointmentDetails.bookingTime,
+      specialistName: order.appointmentDetails.specialistName || '',
+    } : undefined,
     createdAt: order.createdAt,
     restaurantWhatsApp: storeWa,
     rejectionReason: order.rejectionReason || '',
@@ -427,6 +441,11 @@ export async function getBookedSlotsForDate(
 ): Promise<string[]> {
   validateRestaurantId(restaurantId);
   return orderRepo.findBookedSlotsForDate(restaurantId, bookingDate, specialistName);
+}
+
+export async function markWhatsAppNotified(restaurantId: string, id: string): Promise<IOrder | null> {
+  validateRestaurantId(restaurantId);
+  return orderRepo.markWhatsAppNotified(restaurantId, id);
 }
 
 

@@ -74,6 +74,13 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // 2. Next.js Server Action requests should not be redirected to HTML pages.
+  // Their internal checkAdminAuth() handles authentication and returns standard Action responses.
+  const isServerAction = request.headers.has('next-action') || request.headers.has('x-action-id');
+  if (isServerAction) {
+    return NextResponse.next();
+  }
+
   const token = request.cookies.get('admin_token')?.value;
 
   // 2. Super Admin Route Protection: /super-admin/**

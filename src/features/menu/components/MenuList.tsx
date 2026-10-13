@@ -517,9 +517,10 @@ export default function MenuList({
         },
         restaurantId,
         restaurantName,
+        businessCategory: resolvedCategory,
       })
     );
-  }, [dispatch, restaurantId, restaurantName, cartIsEmpty]);
+  }, [dispatch, restaurantId, restaurantName, cartIsEmpty, resolvedCategory]);
 
   const handleRemoveOne = useCallback((itemId: string, currentQty: number) => {
     if (currentQty <= 1) {

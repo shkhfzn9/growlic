@@ -40,6 +40,12 @@ export interface IOrder {
   rejectionReason?: string;
   rejectedAt?: string;
   trackingToken?: string;
+  source?: 'qr_scan' | 'admin_counter';
+  placed_at?: string;
+  ready_at?: string | null;
+  prep_duration_seconds?: number | null;
+  whatsapp_notified?: boolean;
+  whatsapp_notified_at?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

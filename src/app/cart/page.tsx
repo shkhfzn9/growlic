@@ -141,7 +141,9 @@ function CartContent() {
     allowStacking: true,
   });
 
-  const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
+  const [businessCategory, setBusinessCategory] = useState<string>(() => {
+    return cart.businessCategory || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('qr_cart') || '{}').businessCategory : '') || 'restaurant';
+  });
   const [salonBookingData, setSalonBookingData] = useState<SalonBookingData | null>(null);
 
   const hasSalonItems = cart.items.some((i) => {

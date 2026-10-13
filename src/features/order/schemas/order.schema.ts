@@ -18,11 +18,12 @@ export const createOrderItemZodSchema = z.object({
 
 export const createOrderZodSchema = z.object({
   restaurantId: z.string().min(1, 'Restaurant ID is required'),
-  customerName: z.string().min(1, 'Customer name is required'),
+  customerName: z.string().optional().default('Counter Guest'),
   customerPhone: z.string().min(1, 'Customer phone is required').refine((phone) => {
     const clean = phone.trim().replace(/\D/g, '');
     return clean.length >= 8;
   }, { message: 'Please enter a valid phone number' }),
+  source: z.enum(['qr_scan', 'admin_counter']).optional(),
   customerOldPhone: z.string().optional(),
   tableId: z.string().optional(),
   orderType: z.enum(['dine_in', 'takeaway', 'delivery']).optional(),

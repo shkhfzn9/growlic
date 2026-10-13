@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { getOrderById, getCustomerLoyaltyInfo } from '@/actions/orders';
 import { getDeveloperPromo } from '@/actions/developerPromo';
 import Link from 'next/link';
-import { Check, Clock, ChefHat, UtensilsCrossed, PartyPopper, XCircle, ExternalLink, Sparkles, MessageCircle, PhoneCall, CreditCard, QrCode, X, Camera, Smartphone, Image as ImageIcon, Wrench, Package, CheckCircle2 } from 'lucide-react';
+import { Check, Clock, ChefHat, UtensilsCrossed, PartyPopper, XCircle, ExternalLink, Sparkles, MessageCircle, PhoneCall, CreditCard, QrCode, X, Camera, Smartphone, Image as ImageIcon, Wrench, Package, CheckCircle2, Scissors } from 'lucide-react';
 import { CustomerNavbar } from '@/components/layout';
 import ConsultationModal from '@/components/ui/ConsultationModal';
 import { TRACK_NUDGES } from '../constants/trackNudges';
@@ -109,7 +109,9 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
     }
   }, [order.restaurantId]);
 
-  const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
+  const [businessCategory, setBusinessCategory] = useState<string>(() => {
+    return (initialOrder as any)?.businessCategory || 'restaurant';
+  });
 
   useEffect(() => {
     if (order?.restaurantId) {
@@ -438,6 +440,30 @@ Please confirm and prepare my order!
               <p className="text-xs text-purple-900 font-medium">
                 Your appointment slot is reserved. We look forward to welcoming you!
               </p>
+            </div>
+          )}
+
+          {/* Salon Appointment Details Card */}
+          {(order as any).appointmentDetails && (
+            <div className="bg-white border border-purple-200/80 rounded-2xl p-4 shadow-xs flex flex-col gap-2.5">
+              <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 flex items-center gap-1.5">
+                <Scissors className="w-3.5 h-3.5" />
+                Reserved Appointment Details
+              </span>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-purple-50/60 rounded-xl p-2.5 border border-purple-100">
+                  <span className="text-[10px] font-bold text-gray-500 uppercase block">Date & Slot</span>
+                  <span className="font-extrabold text-gray-900">
+                    {(order as any).appointmentDetails.bookingDate} • {(order as any).appointmentDetails.bookingTime}
+                  </span>
+                </div>
+                <div className="bg-purple-50/60 rounded-xl p-2.5 border border-purple-100">
+                  <span className="text-[10px] font-bold text-gray-500 uppercase block">Specialist</span>
+                  <span className="font-extrabold text-gray-900 truncate block">
+                    {(order as any).appointmentDetails.specialistName || 'Any Available Specialist'}
+                  </span>
+                </div>
+              </div>
             </div>
           )}
 
