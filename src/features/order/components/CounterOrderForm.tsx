@@ -11,6 +11,7 @@ import { createCounterOrderAction } from '@/actions/orders';
 import { isValidPhoneNumber, generateWhatsAppOrderLink } from '@/lib/whatsappService';
 import {
   ArrowLeft,
+  ArrowRight,
   Plus,
   Minus,
   Trash2,
@@ -57,6 +58,9 @@ export default function CounterOrderForm() {
   const [paymentMode, setPaymentMode] = useState<'cash' | 'online'>('cash');
   const [notes, setNotes] = useState('');
   const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
+
+  // Mobile / Small Screen Navigation Tab
+  const [activeMobileTab, setActiveMobileTab] = useState<'menu' | 'ticket'>('menu');
 
   // Cart & Menu State
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -130,6 +134,10 @@ export default function CounterOrderForm() {
 
   const total = subtotal;
 
+  const totalItemCount = useMemo(() => {
+    return cart.reduce((sum, item) => sum + item.quantity, 0);
+  }, [cart]);
+
   // Cart Handlers
   const handleAddToCart = (item: MenuItem) => {
     setCart((prev) => {
@@ -182,17 +190,20 @@ export default function CounterOrderForm() {
     // Validate Phone Number
     const rawPhone = customerPhone.trim();
     if (!rawPhone) {
+      setActiveMobileTab('ticket');
       setError('Customer phone number is required for counter orders.');
       return;
     }
     if (!isValidPhoneNumber(rawPhone)) {
+      setActiveMobileTab('ticket');
       setError('Please provide a valid 10-15 digit phone number (e.g. 9876543210).');
       return;
     }
 
     // Validate Cart
     if (cart.length === 0) {
-      setError('Please add at least one menu item to the order ticket.');
+      setActiveMobileTab('menu');
+      setError('Please add at least one item to the order ticket.');
       return;
     }
 
@@ -222,6 +233,7 @@ export default function CounterOrderForm() {
         setCustomerName('');
         setNotes('');
         setTableId('');
+        setActiveMobileTab('menu');
       }
     } catch (err) {
       console.error('Failed to create counter order:', err);
@@ -245,7 +257,7 @@ export default function CounterOrderForm() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-4 sm:p-6 max-w-7xl mx-auto">
+    <div className="flex flex-col gap-6 p-4 sm:p-6 max-w-7xl mx-auto pb-28 lg:pb-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
         <div className="flex items-center gap-3">
@@ -326,10 +338,46 @@ export default function CounterOrderForm() {
         </div>
       )}
 
+      {/* Mobile / Small Screen Segmented View Switcher */}
+      <div className="lg:hidden flex bg-gray-100 p-1 rounded-2xl border border-gray-200 shadow-xs">
+        <button
+          type="button"
+          onClick={() => setActiveMobileTab('menu')}
+          className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+            activeMobileTab === 'menu'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <ShoppingBag className="w-4 h-4 text-red-600" />
+          <span>1. Items ({filteredItems.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveMobileTab('ticket')}
+          className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1.5 relative ${
+            activeMobileTab === 'ticket'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <User className="w-4 h-4 text-red-600" />
+          <span>2. Customer & Ticket</span>
+          {totalItemCount > 0 && (
+            <span className="bg-red-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full leading-none">
+              {totalItemCount}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* Main Form & Menu Grid */}
       <form onSubmit={handleSubmitOrder} className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Menu Picker & Items (8 Columns) */}
-        <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-4">
+        {/* Left Column: Menu Picker & Items (8 Columns on desktop, toggled on mobile) */}
+        <div className={`lg:col-span-7 xl:col-span-8 flex flex-col gap-4 ${
+          activeMobileTab === 'menu' ? 'flex' : 'hidden lg:flex'
+        }`}>
           {/* Search & Category Filter */}
           <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs flex flex-col gap-3">
             <div className="relative">
@@ -373,7 +421,7 @@ export default function CounterOrderForm() {
           </div>
 
           {/* Menu Items Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[580px] overflow-y-auto pr-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[65vh] sm:max-h-[580px] lg:max-h-[640px] overflow-y-auto pr-1">
             {filteredItems.map((item) => {
               const inCart = cart.find((i) => i.menuItemId === item._id);
               return (
@@ -416,8 +464,28 @@ export default function CounterOrderForm() {
           </div>
         </div>
 
-        {/* Right Column: Customer Details & Order Ticket (4-5 Columns) */}
-        <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-4 sticky top-6">
+        {/* Right Column: Customer Details & Order Ticket (4-5 Columns on desktop, toggled on mobile) */}
+        <div className={`lg:col-span-5 xl:col-span-4 flex flex-col gap-4 lg:sticky lg:top-6 ${
+          activeMobileTab === 'ticket' ? 'flex' : 'hidden lg:flex'
+        }`}>
+          {/* Mobile Back-to-Menu banner */}
+          <div className="lg:hidden flex items-center justify-between bg-gray-50 border border-gray-200 rounded-2xl p-3 shadow-xs">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
+              <span>Ticket:</span>
+              <span className="font-extrabold text-red-600">{totalItemCount} {totalItemCount === 1 ? 'item' : 'items'}</span>
+              <span>•</span>
+              <span className="font-extrabold text-gray-900">₹{total}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveMobileTab('menu')}
+              className="px-3 py-1.5 bg-gray-900 hover:bg-gray-800 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors shadow-xs"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>+ Add More Items</span>
+            </button>
+          </div>
+
           {/* Customer Input Card */}
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-xs flex flex-col gap-3.5">
             <h3 className="font-black text-xs uppercase tracking-wider text-gray-500 border-b border-gray-100 pb-2 flex items-center gap-1.5">
@@ -633,6 +701,39 @@ export default function CounterOrderForm() {
           </div>
         </div>
       </form>
+
+      {/* Mobile Floating Bar when on Menu Tab */}
+      {activeMobileTab === 'menu' && totalItemCount > 0 && (
+        <div className="lg:hidden fixed bottom-4 inset-x-4 z-40 animate-in slide-in-from-bottom-4 duration-200">
+          <div className="bg-gray-900 text-white rounded-2xl p-3.5 shadow-2xl border border-gray-800 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-red-600 flex items-center justify-center shrink-0 font-black text-sm text-white">
+                {totalItemCount}
+              </div>
+              <div className="min-w-0">
+                <span className="text-[10px] text-gray-400 uppercase font-black tracking-wider block">
+                  Current Ticket
+                </span>
+                <span className="text-sm font-black text-white truncate block">
+                  ₹{total}
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveMobileTab('ticket');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="px-4 py-2.5 bg-red-600 hover:bg-red-700 active:scale-95 text-white font-black text-xs rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+            >
+              <span>Customer & Ticket</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
