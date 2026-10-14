@@ -70,6 +70,24 @@ export async function findById(restaurantId: string, id: string): Promise<IMenuI
 }
 
 /**
+ * Batch retrieves menu items by array of IDs within a restaurant scope.
+ * Executes a single $in query with lean projection for maximum performance.
+ */
+export async function findByIds(restaurantId: string, ids: string[]): Promise<IMenuItem[]> {
+  await dbConnect();
+  if (!ids || ids.length === 0) return [];
+  const cleanRestId = sanitizeTenantId(restaurantId);
+  const validIds = Array.from(new Set(ids.filter((id) => typeof id === 'string' && /^[0-9a-fA-F]{24}$/.test(id))));
+  if (validIds.length === 0) return [];
+  try {
+    const docs = await Menu.find({ _id: { $in: validIds }, restaurantId: cleanRestId }).lean();
+    return docs.map(normalizeMenuItem);
+  } catch (err) {
+    return [];
+  }
+}
+
+/**
  * Creates and registers a new Menu Item in the database.
  * 
  * @param data Menu item properties such as categories, names, margins, and nutritional values.

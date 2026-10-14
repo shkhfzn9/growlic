@@ -142,6 +142,12 @@ This document provides a comprehensive audit of all cross-tenant overlaps identi
     - Salon: "💇 Walk-in / In-Salon", "📅 Scheduled Slot", "🏡 Home Service".
     - Restaurant: "🥡 Takeaway", "🍽️ Dine In", "🛵 Delivery".
   - Switched labels to "Station Number" and "Stylist / Service Notes".
+  - **Small-Screen & Mobile Responsiveness:** Fixed issue where customer details form and order ticket were hidden or jumped/disappeared when item count was high:
+    - Added high-visibility Mobile Segmented Tab Controller (`1. Items` vs `2. Customer & Ticket`) on screens `< lg`.
+    - Added Fixed Floating Bottom Cart Bar on mobile showing live count & subtotal (`₹{total}`) with 1-tap jump to Customer Details & Ticket.
+    - Added Mobile Quick-Return Banner in Ticket View (`← + Add More Items`) to toggle seamlessly back to menu items.
+    - Guarded `sticky` positioning to `lg:sticky lg:top-6`, eliminating mobile viewport scroll-clipping and flickering.
+    - Auto-switches to Customer & Ticket tab if phone validation fails on submit, keeping error in direct focus.
 
 ---
 

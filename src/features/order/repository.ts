@@ -218,14 +218,100 @@ export async function findById(restaurantId?: string, id?: string): Promise<IOrd
   return doc ? normalizeOrder(doc) : null;
 }
 
+// In-memory cache for restaurant-wide kitchen analytics (15-second TTL)
+interface KitchenStatsCacheEntry {
+  stats: {
+    onTimeRate: number;
+    delayedCount: number;
+    avgDelayMins: string;
+    totalProcessed: number;
+    totalCompleted: number;
+  };
+  expiresAt: number;
+}
+const kitchenStatsCache = new Map<string, KitchenStatsCacheEntry>();
+
+export async function getKitchenStats(restaurantId: string): Promise<KitchenStatsCacheEntry['stats']> {
+  const cleanRestId = sanitizeTenantId(restaurantId);
+  const now = Date.now();
+  const cached = kitchenStatsCache.get(cleanRestId);
+  if (cached && cached.expiresAt > now) {
+    return cached.stats;
+  }
+
+  await dbConnect();
+  try {
+    if (typeof (Order as any).aggregate !== 'function') {
+      return {
+        onTimeRate: 100,
+        delayedCount: 0,
+        avgDelayMins: '0',
+        totalProcessed: 0,
+        totalCompleted: 0,
+      };
+    }
+
+    const aggResult = await Order.aggregate([
+      { $match: { restaurantId: cleanRestId } },
+      {
+        $group: {
+          _id: null,
+          totalProcessed: { $sum: 1 },
+          totalCompleted: {
+            $sum: { $cond: [{ $in: ['$status', ['ready', 'completed']] }, 1, 0] }
+          },
+          delayedCount: {
+            $sum: { $cond: ['$isDelayed', 1, 0] }
+          },
+          totalDelayMinutes: {
+            $sum: { $ifNull: ['$delayMinutes', 0] }
+          }
+        }
+      }
+    ]);
+
+    const row = aggResult[0] || { totalProcessed: 0, totalCompleted: 0, delayedCount: 0, totalDelayMinutes: 0 };
+    const totalCompleted = row.totalCompleted || 0;
+    const delayedCount = row.delayedCount || 0;
+    const onTimeCount = Math.max(0, totalCompleted - delayedCount);
+    const onTimeRate = totalCompleted > 0 ? Math.round((onTimeCount / totalCompleted) * 100) : 100;
+    const avgDelayMins = delayedCount > 0 ? ((row.totalDelayMinutes || 0) / delayedCount).toFixed(1) : '0';
+
+    const calculatedStats = {
+      onTimeRate,
+      delayedCount,
+      avgDelayMins,
+      totalProcessed: row.totalProcessed || 0,
+      totalCompleted,
+    };
+
+    kitchenStatsCache.set(cleanRestId, {
+      stats: calculatedStats,
+      expiresAt: now + 15000,
+    });
+
+    return calculatedStats;
+  } catch (err) {
+    console.error('Failed to compute kitchen stats:', err);
+    return {
+      onTimeRate: 100,
+      delayedCount: 0,
+      avgDelayMins: '0',
+      totalProcessed: 0,
+      totalCompleted: 0,
+    };
+  }
+}
+
 /**
  * Retrieves orders associated with a specific restaurant tenant, paginated and optionally filtered.
+ * Runs query, count, and kitchen efficiency stats concurrently with lean projections.
  * 
  * @param restaurantId The restaurant slug ID.
  * @param limit Maximum number of orders to fetch.
  * @param skip Number of orders to skip.
  * @param status Optional order status filter.
- * @returns An object containing normalized IOrder objects and totalCount.
+ * @returns An object containing normalized IOrder objects, totalCount, and kitchen stats.
  */
 export async function findAll(
   restaurantId: string,
@@ -233,9 +319,14 @@ export async function findAll(
   skip?: number,
   status?: string,
   source?: string
-): Promise<{ orders: IOrder[]; totalCount: number }> {
+): Promise<{
+  orders: IOrder[];
+  totalCount: number;
+  stats?: KitchenStatsCacheEntry['stats'];
+}> {
   await dbConnect();
   const cleanRestId = sanitizeTenantId(restaurantId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const query: any = { restaurantId: cleanRestId };
   if (source && source !== 'all') {
     if (source === 'admin_counter') {
@@ -255,7 +346,7 @@ export async function findAll(
       query.status = status;
     }
   }
-  const totalCount = await Order.countDocuments(query);
+
   const findQuery = Order.find(query).sort({ createdAt: -1 });
   if (skip !== undefined) {
     findQuery.skip(skip);
@@ -263,10 +354,19 @@ export async function findAll(
   if (limit !== undefined) {
     findQuery.limit(limit);
   }
-  const docs = await findQuery;
+
+  // Concurrently execute query, document count, and kitchen analytics stats
+  const docsPromise = typeof (findQuery as any).lean === 'function' ? (findQuery as any).lean() : findQuery;
+  const [docs, totalCount, stats] = await Promise.all([
+    docsPromise,
+    Order.countDocuments(query),
+    getKitchenStats(cleanRestId),
+  ]);
+
   return {
     orders: docs.map(normalizeOrder),
-    totalCount
+    totalCount,
+    stats,
   };
 }
 

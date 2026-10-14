@@ -12,6 +12,11 @@ export interface WhatsAppNotificationPayload {
   orderId: string;
   restaurantName: string;
   total?: number;
+  items?: Array<{
+    name: string;
+    quantity: number;
+    price?: number;
+  }>;
 }
 
 /**
@@ -56,13 +61,30 @@ export function generateWhatsAppOrderLink(payload: WhatsAppNotificationPayload):
   if (!normalizedPhone) return '';
 
   const shortId = payload.orderId.length > 6 ? payload.orderId.slice(-6).toUpperCase() : payload.orderId;
-  const greetingName = payload.customerName && payload.customerName.trim() ? payload.customerName.trim() : 'Valued Customer';
+  const greetingName = payload.customerName && payload.customerName.trim() ? payload.customerName.trim() : 'there';
+  const cleanRestName = payload.restaurantName && payload.restaurantName.trim() && payload.restaurantName !== 'Restaurant'
+    ? payload.restaurantName.trim()
+    : 'our restaurant';
+
+  const items = payload.items || [];
+  const itemsList = items.length > 0
+    ? items.map((i) => `- ${i.name} x ${i.quantity}`).join('\n')
+    : '';
+  const totalQty = items.reduce((sum, i) => sum + (i.quantity || 1), 0);
 
   let message = '';
   if (payload.type === 'placed') {
-    message = `Hi ${greetingName}, thank you for your order at *${payload.restaurantName}*! Your order *#${shortId}* has been placed successfully.${payload.total ? ` Total: ₹${payload.total}.` : ''} Please pay at the counter.`;
+    if (itemsList) {
+      message = `Hi ${greetingName}! 👋\n\nThank you for ordering at *${cleanRestName}*.\n\n*Order #${shortId}* has been placed ✅\n\n🧾 *Your order*\n${itemsList}\n\n*Total items:* ${totalQty}${payload.total !== undefined ? `\n*Total:* ₹${payload.total}` : ''}\n*Payment:* Please pay at the counter for the order to get placed.\n\n💬 We would love to hear your feedback! How was your experience with us?`;
+    } else {
+      message = `Hi ${greetingName}! 👋\n\nThank you for ordering at *${cleanRestName}*.\n\n*Order #${shortId}* has been placed ✅${payload.total !== undefined ? `\n*Total:* ₹${payload.total}` : ''}\n*Payment:* Please pay at the counter for the order to get placed.\n\n💬 We would love to hear your feedback! How was your experience with us?`;
+    }
   } else if (payload.type === 'ready') {
-    message = `Hi ${greetingName}, great news! Your order *#${shortId}* at *${payload.restaurantName}* is *READY FOR PICKUP*! 🍽️ Enjoy your meal.`;
+    if (itemsList) {
+      message = `Hi ${greetingName}! 👋\n\nGreat news! Your order *#${shortId}* at *${cleanRestName}* is *READY FOR PICKUP*! 🍽️\n\n🧾 *Your order*\n${itemsList}\n\n*Total items:* ${totalQty}${payload.total !== undefined ? `\n*Total:* ₹${payload.total}` : ''}\n\nEnjoy your meal! 🌟 We would love your feedback—please let us know how your experience was!`;
+    } else {
+      message = `Hi ${greetingName}! 👋\n\nGreat news! Your order *#${shortId}* at *${cleanRestName}* is *READY FOR PICKUP*! 🍽️${payload.total !== undefined ? `\n*Total:* ₹${payload.total}` : ''}\n\nEnjoy your meal! 🌟 We would love your feedback—please let us know how your experience was!`;
+    }
   }
 
   return `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(message)}`;

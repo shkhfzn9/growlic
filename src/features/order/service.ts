@@ -75,8 +75,12 @@ export async function createOrder(data: {
   const validatedItems: IOrder['items'] = [];
   let calculatedSubtotal = 0;
 
+  const itemIds = items.map((i) => i.menuItemId);
+  const dbItems = await menuRepo.findByIds(restaurantId, itemIds);
+  const dbItemsMap = new Map(dbItems.map((dbItem) => [dbItem._id, dbItem]));
+
   for (const item of items) {
-    const dbItem = await menuRepo.findById(restaurantId, item.menuItemId);
+    const dbItem = dbItemsMap.get(item.menuItemId);
     if (!dbItem || dbItem.restaurantId !== restaurantId || dbItem.available === false || dbItem.active === false) {
       throw new Error(`Menu item '${item.menuItemId}' is invalid or unavailable for tenant '${restaurantId}'`);
     }
@@ -227,7 +231,17 @@ export async function getAdminOrders(
   skip?: number,
   status?: string,
   source?: string
-): Promise<{ orders: IOrder[]; totalCount: number }> {
+): Promise<{
+  orders: IOrder[];
+  totalCount: number;
+  stats?: {
+    onTimeRate: number;
+    delayedCount: number;
+    avgDelayMins: string;
+    totalProcessed: number;
+    totalCompleted: number;
+  };
+}> {
   validateRestaurantId(restaurantId);
   return orderRepo.findAll(restaurantId, limit, skip, status, source);
 }

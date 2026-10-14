@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 
 import { getVocabulary } from '@/config/businessVocabulary';
+import { getCachedPosMenu, setCachedPosMenu, prependOrderToCache } from '../services/orderClientCache';
 
 interface MenuItem {
   _id: string;
@@ -50,6 +51,9 @@ export default function CounterOrderForm() {
   const router = useRouter();
   const auth = useSelector((state: RootState) => state.auth);
 
+  // Check if we have pre-cached POS data for 0ms mount
+  const cachedPos = getCachedPosMenu();
+
   // Form State
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -57,25 +61,34 @@ export default function CounterOrderForm() {
   const [tableId, setTableId] = useState('');
   const [paymentMode, setPaymentMode] = useState<'cash' | 'online'>('cash');
   const [notes, setNotes] = useState('');
-  const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
+  const [businessCategory, setBusinessCategory] = useState<string>(
+    cachedPos?.details?.businessCategory ||
+    (cachedPos?.details?.themePreset === 'rose_quartz' || cachedPos?.details?.themePreset === 'velvet_noir' ? 'salon' :
+     cachedPos?.details?.themePreset === 'carbon_crimson' || cachedPos?.details?.themePreset === 'cyber_cyan' ? 'detailing' : 'restaurant')
+  );
 
   // Mobile / Small Screen Navigation Tab
   const [activeMobileTab, setActiveMobileTab] = useState<'menu' | 'ticket'>('menu');
 
   // Cart & Menu State
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(cachedPos?.items || []);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [restaurantName, setRestaurantName] = useState('Restaurant');
+  const [restaurantName, setRestaurantName] = useState(
+    cachedPos?.details?.restaurantName ||
+    cachedPos?.details?.name ||
+    auth.restaurantName ||
+    'Restaurant'
+  );
 
-  // UI state
-  const [loading, setLoading] = useState(true);
+  // UI state: instant 0ms mount if cache is present
+  const [loading, setLoading] = useState(!cachedPos);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [successOrder, setSuccessOrder] = useState<any | null>(null);
 
-  // Load menu items & store profile
+  // Load menu items & store profile (syncs and updates cache)
   useEffect(() => {
     if (!auth.restaurantId) return;
 
@@ -85,8 +98,9 @@ export default function CounterOrderForm() {
     ])
       .then(([items, details]) => {
         setMenuItems(items || []);
-        if (details?.name) {
-          setRestaurantName(details.name);
+        const resolvedName = details?.restaurantName || details?.name || auth.restaurantName;
+        if (resolvedName) {
+          setRestaurantName(resolvedName);
         }
         if (details?.businessCategory) {
           setBusinessCategory(details.businessCategory);
@@ -95,10 +109,13 @@ export default function CounterOrderForm() {
         } else if (details?.themePreset === 'carbon_crimson' || details?.themePreset === 'cyber_cyan') {
           setBusinessCategory('detailing');
         }
+        setCachedPosMenu(items || [], details);
       })
       .catch((err) => {
         console.error('Failed to load menu items:', err);
-        setError('Failed to load menu items. Please refresh the page.');
+        if (!cachedPos) {
+          setError('Failed to load menu items. Please refresh the page.');
+        }
       })
       .finally(() => setLoading(false));
   }, [auth.restaurantId]);
@@ -227,6 +244,7 @@ export default function CounterOrderForm() {
       const res = await createCounterOrderAction(payload);
       if (res.success && res.order) {
         setSuccessOrder(res.order);
+        prependOrderToCache(res.order);
         // Reset form inputs for next order
         setCart([]);
         setCustomerPhone('');
@@ -246,10 +264,25 @@ export default function CounterOrderForm() {
 
   if (loading) {
     return (
-      <div className="flex flex-col gap-4 animate-pulse p-6">
-        <div className="h-8 w-48 bg-gray-200 rounded" />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 h-96 bg-white border border-gray-200 rounded-2xl" />
+      <div className="flex flex-col gap-6 p-4 sm:p-6 max-w-7xl mx-auto pb-28 lg:pb-6">
+        <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
+          <Link
+            href="/admin/orders?tab=counter"
+            className="w-10 h-10 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-pulse">
+          <div className="lg:col-span-2 h-96 bg-white border border-gray-200 rounded-2xl p-4 flex flex-col gap-3">
+            <div className="h-10 bg-gray-100 rounded-xl" />
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="h-28 bg-gray-100 rounded-xl" />
+              <div className="h-28 bg-gray-100 rounded-xl" />
+              <div className="h-28 bg-gray-100 rounded-xl" />
+            </div>
+          </div>
           <div className="h-96 bg-white border border-gray-200 rounded-2xl" />
         </div>
       </div>
@@ -309,8 +342,9 @@ export default function CounterOrderForm() {
                 phone: successOrder.customerPhone,
                 customerName: successOrder.customerName,
                 orderId: successOrder._id,
-                restaurantName,
+                restaurantName: restaurantName || auth.restaurantName || 'Restaurant',
                 total: successOrder.total,
+                items: successOrder.items,
               })}
               target="_blank"
               rel="noopener noreferrer"

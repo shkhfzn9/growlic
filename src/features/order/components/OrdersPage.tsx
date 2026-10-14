@@ -4,6 +4,7 @@ import React, { useEffect, useState, Suspense, useRef, useCallback } from 'react
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getAdminOrders, updateOrderStatus, updateOrderEstimatedTime, markOrderWhatsAppNotifiedAction } from '../services/order.service';
+import { getCachedOrders, setCachedOrders, updateOrderInCache, prefetchPosMenu, getCachedPosMenu, KitchenStats } from '../services/orderClientCache';
 import { PageHeader, StatusBadge, AdminButton } from '@/components/ui';
 import { useOrderNotification } from '@/components/providers';
 import { Clock, ArrowLeft, AlertTriangle, CheckCircle2, TrendingDown, MessageSquare, X, ShieldAlert, Plus, ExternalLink, ShoppingBag, Sparkles } from 'lucide-react';
@@ -96,13 +97,21 @@ function OrdersContent() {
   const initialSourceTab = tabParam === 'counter' ? 'admin_counter' : 'qr_scan';
   const { acknowledgeOrder } = useOrderNotification();
 
+  const initialCacheKey = `${initialSourceTab}_all_1`;
+  const initialCached = getCachedOrders(initialCacheKey);
+
   const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
-  const [restaurantName, setRestaurantName] = useState<string>('Restaurant');
+  const [restaurantName, setRestaurantName] = useState<string>(() => {
+    const pos = getCachedPosMenu();
+    return pos?.details?.restaurantName || pos?.details?.name || 'Restaurant';
+  });
+  const [restaurantId, setRestaurantId] = useState<string>('');
   const [sourceTab, setSourceTab] = useState<'qr_scan' | 'admin_counter' | 'all'>(initialSourceTab);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [orders, setOrders] = useState<Order[]>(initialCached?.orders || []);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(initialCached?.orders[0] || null);
+  const [serverStats, setServerStats] = useState<KitchenStats | null>(initialCached?.stats || null);
   const [filter, setFilter] = useState<FilterStatus>('all');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialCached);
   const [error, setError] = useState('');
   const [customEta, setCustomEta] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
@@ -115,8 +124,13 @@ function OrdersContent() {
         if (details?.businessCategory) {
           setBusinessCategory(details.businessCategory);
         }
-        if (details?.name) {
-          setRestaurantName(details.name);
+        if (details?.restaurantName || details?.name) {
+          setRestaurantName(details.restaurantName || details.name);
+        }
+        const rId = details?.restaurantId || details?._id;
+        if (rId) {
+          setRestaurantId(rId);
+          prefetchPosMenu(rId);
         }
       })
       .catch((err) => console.error('Error loading business category for orders:', err));
@@ -217,6 +231,7 @@ function OrdersContent() {
     const activeFilter = filterRef.current;
     const activeHighlightId = highlightIdRef.current;
     const activeSource = sourceTabRef.current;
+    const cacheKey = `${activeSource}_${activeFilter}_${activePage}`;
 
     if (showLoading) setLoading(true);
     try {
@@ -230,9 +245,18 @@ function OrdersContent() {
       }
       const fetchedOrders = data?.orders || [];
       const total = data?.totalCount || 0;
+      const stats = data?.stats;
+
+      // Update client-side SWR cache
+      setCachedOrders(cacheKey, {
+        orders: fetchedOrders,
+        totalCount: total,
+        stats,
+      });
 
       setOrders(fetchedOrders);
       setTotalCount(total);
+      if (stats) setServerStats(stats);
       setCurrentPage(activePage);
 
       const currentSelected = selectedOrderRef.current;
@@ -270,10 +294,71 @@ function OrdersContent() {
     }
   };
 
+  const handleTabChange = (newSource: 'qr_scan' | 'admin_counter' | 'all') => {
+    if (newSource === sourceTab) return;
+    setSourceTab(newSource);
+    setFilter('all');
+    setCurrentPage(1);
+
+    const cacheKey = `${newSource}_all_1`;
+    const cached = getCachedOrders(cacheKey);
+    if (cached) {
+      setOrders(cached.orders);
+      setTotalCount(cached.totalCount);
+      if (cached.stats) setServerStats(cached.stats);
+      if (cached.orders.length > 0) {
+        setSelectedOrder(cached.orders[0]);
+      }
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+  };
+
+  const handleFilterChange = (newFilter: FilterStatus) => {
+    if (newFilter === filter) return;
+    setFilter(newFilter);
+    setCurrentPage(1);
+
+    const cacheKey = `${sourceTab}_${newFilter}_1`;
+    const cached = getCachedOrders(cacheKey);
+    if (cached) {
+      setOrders(cached.orders);
+      setTotalCount(cached.totalCount);
+      if (cached.stats) setServerStats(cached.stats);
+      if (cached.orders.length > 0) {
+        setSelectedOrder(cached.orders[0]);
+      }
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+
+    const cacheKey = `${sourceTab}_${filter}_${newPage}`;
+    const cached = getCachedOrders(cacheKey);
+    if (cached) {
+      setOrders(cached.orders);
+      setTotalCount(cached.totalCount);
+      if (cached.stats) setServerStats(cached.stats);
+      if (cached.orders.length > 0) {
+        setSelectedOrder(cached.orders[0]);
+      }
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+  };
+
   const isInitialMount = useRef(true);
 
   useEffect(() => {
-    const showLoading = isInitialMount.current;
+    const cacheKey = `${sourceTab}_${filter}_${currentPage}`;
+    const hasCache = !!getCachedOrders(cacheKey);
+    const showLoading = isInitialMount.current && !hasCache;
     loadOrders(showLoading, currentPage);
     if (isInitialMount.current) {
       isInitialMount.current = false;
@@ -282,9 +367,7 @@ function OrdersContent() {
 
   useEffect(() => {
     if (tabParam === 'counter' && sourceTab !== 'admin_counter') {
-      setSourceTab('admin_counter');
-      setFilter('all');
-      setCurrentPage(1);
+      handleTabChange('admin_counter');
     }
   }, [tabParam]);
 
@@ -319,6 +402,7 @@ function OrdersContent() {
       const updated = await updateOrderStatus(orderId, nextStatus, delayData, rejectionReason);
       setOrders((prev) => prev.map((o) => (o._id === orderId ? updated : o)));
       setSelectedOrder(updated);
+      updateOrderInCache(updated);
       acknowledgeOrder(orderId);
       setDelayModalOpen(false);
       setPendingDelayOrder(null);
@@ -409,6 +493,7 @@ function OrdersContent() {
       orderId: order._id,
       restaurantName: restaurantName || 'Restaurant',
       total: order.total,
+      items: order.items,
     });
 
     if (waUrl) {
@@ -427,6 +512,7 @@ function OrdersContent() {
       if (selectedOrder?._id === order._id) {
         setSelectedOrder(updatedOrder);
       }
+      updateOrderInCache(updatedOrder);
     } catch (err) {
       console.error('Failed to update WhatsApp notification status:', err);
     } finally {
@@ -466,26 +552,19 @@ function OrdersContent() {
     }
   };
 
-  // Calculate kitchen metrics
+  // Calculate kitchen metrics with fallback to local orders if server stats not yet loaded
   const delayedOrders = orders.filter((o) => o.isDelayed);
-  const totalCompleted = orders.filter((o) => ['ready', 'completed'].includes(o.status)).length;
-  const onTimeCount = Math.max(0, totalCompleted - delayedOrders.length);
-  const onTimeRate = totalCompleted > 0 ? Math.round((onTimeCount / totalCompleted) * 100) : 100;
-  const totalDelayMins = delayedOrders.reduce((sum, o) => sum + (o.delayMinutes || 0), 0);
-  const avgDelayMins = delayedOrders.length > 0 ? (totalDelayMins / delayedOrders.length).toFixed(1) : '0';
+  const totalCompletedOrders = orders.filter((o) => ['ready', 'completed'].includes(o.status)).length;
+  const localOnTimeCount = Math.max(0, totalCompletedOrders - delayedOrders.length);
+  const localOnTimeRate = totalCompletedOrders > 0 ? Math.round((localOnTimeCount / totalCompletedOrders) * 100) : 100;
+  const localTotalDelayMins = delayedOrders.reduce((sum, o) => sum + (o.delayMinutes || 0), 0);
+  const localAvgDelayMins = delayedOrders.length > 0 ? (localTotalDelayMins / delayedOrders.length).toFixed(1) : '0';
 
-  if (loading) {
-    return (
-      <div className="flex flex-col gap-4">
-        <div className="h-8 w-32 bg-[#E2E6EA] rounded animate-pulse" />
-        <div className="h-10 w-full bg-[#E2E6EA] rounded-lg animate-pulse" />
-        <div className="flex gap-4">
-          <div className="flex-1 h-96 bg-white border border-[#E2E6EA] rounded-xl animate-pulse" />
-          <div className="flex-1 h-96 bg-white border border-[#E2E6EA] rounded-xl animate-pulse hidden lg:block" />
-        </div>
-      </div>
-    );
-  }
+  const onTimeRate = serverStats?.onTimeRate ?? localOnTimeRate;
+  const delayedCount = serverStats?.delayedCount ?? delayedOrders.length;
+  const avgDelayMins = serverStats?.avgDelayMins ?? localAvgDelayMins;
+  const totalProcessed = serverStats?.totalProcessed ?? totalCount;
+  const totalCompleted = serverStats?.totalCompleted ?? totalCompletedOrders;
 
   return (
     <div className="flex flex-col gap-5">
@@ -496,6 +575,7 @@ function OrdersContent() {
           <div className="flex items-center gap-2.5">
             <Link
               href="/admin/orders/new"
+              onMouseEnter={() => { if (restaurantId) prefetchPosMenu(restaurantId); }}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-[#C0181A] hover:bg-[#A01416] rounded-xl shadow-sm transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -515,59 +595,57 @@ function OrdersContent() {
         </div>
       )}
 
-      {/* Kitchen Efficiency & Delay Analytics Summary Card */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-white border border-[#E2E6EA] rounded-2xl p-4 shadow-sm">
-        <div className="flex flex-col justify-between p-3 bg-emerald-50/50 border border-emerald-100 rounded-xl">
-          <span className="text-[10px] font-black uppercase text-emerald-800 tracking-wider flex items-center gap-1">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> On-Time Rate
-          </span>
-          <div className="mt-2">
-            <span className="text-2xl font-black text-emerald-950">{onTimeRate}%</span>
-            <span className="text-[10px] text-emerald-700 block font-semibold">Target: 90%+ On-Time</span>
+      {/* Kitchen Efficiency & Delay Analytics Summary Card - Strictly for Restaurant Tenant ONLY */}
+      {businessCategory === 'restaurant' && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-white border border-[#E2E6EA] rounded-2xl p-4 shadow-sm">
+          <div className="flex flex-col justify-between p-3 bg-emerald-50/50 border border-emerald-100 rounded-xl">
+            <span className="text-[10px] font-black uppercase text-emerald-800 tracking-wider flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> On-Time Rate
+            </span>
+            <div className="mt-2">
+              <span className="text-2xl font-black text-emerald-950">{onTimeRate}%</span>
+              <span className="text-[10px] text-emerald-700 block font-semibold">Target: 90%+ On-Time</span>
+            </div>
           </div>
-        </div>
 
-        <div className="flex flex-col justify-between p-3 bg-red-50/50 border border-red-100 rounded-xl">
-          <span className="text-[10px] font-black uppercase text-red-800 tracking-wider flex items-center gap-1">
-            <AlertTriangle className="w-3.5 h-3.5 text-red-600" /> Delayed Orders
-          </span>
-          <div className="mt-2">
-            <span className="text-2xl font-black text-red-950">{delayedOrders.length}</span>
-            <span className="text-[10px] text-red-700 block font-semibold">{totalDelayMins} total delay mins</span>
+          <div className="flex flex-col justify-between p-3 bg-red-50/50 border border-red-100 rounded-xl">
+            <span className="text-[10px] font-black uppercase text-red-800 tracking-wider flex items-center gap-1">
+              <AlertTriangle className="w-3.5 h-3.5 text-red-600" /> Delayed Orders
+            </span>
+            <div className="mt-2">
+              <span className="text-2xl font-black text-red-950">{delayedCount}</span>
+              <span className="text-[10px] text-red-700 block font-semibold">{serverStats ? `${delayedCount} total flagged` : `${localTotalDelayMins} total delay mins`}</span>
+            </div>
           </div>
-        </div>
 
-        <div className="flex flex-col justify-between p-3 bg-amber-50/50 border border-amber-100 rounded-xl">
-          <span className="text-[10px] font-black uppercase text-amber-800 tracking-wider flex items-center gap-1">
-            <Clock className="w-3.5 h-3.5 text-amber-600" /> Avg Delay / Order
-          </span>
-          <div className="mt-2">
-            <span className="text-2xl font-black text-amber-950">+{avgDelayMins} min</span>
-            <span className="text-[10px] text-amber-700 block font-semibold">Exceeded promised ETA</span>
+          <div className="flex flex-col justify-between p-3 bg-amber-50/50 border border-amber-100 rounded-xl">
+            <span className="text-[10px] font-black uppercase text-amber-800 tracking-wider flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5 text-amber-600" /> Avg Delay / Order
+            </span>
+            <div className="mt-2">
+              <span className="text-2xl font-black text-amber-950">+{avgDelayMins} min</span>
+              <span className="text-[10px] text-amber-700 block font-semibold">Exceeded promised ETA</span>
+            </div>
           </div>
-        </div>
 
-        <div className="flex flex-col justify-between p-3 bg-gray-50 border border-gray-100 rounded-xl">
-          <span className="text-[10px] font-black uppercase text-gray-700 tracking-wider">
-            Total Processed
-          </span>
-          <div className="mt-2">
-            <span className="text-2xl font-black text-gray-900">{totalCount}</span>
-            <span className="text-[10px] text-gray-500 block font-semibold">{totalCompleted} completed</span>
+          <div className="flex flex-col justify-between p-3 bg-gray-50 border border-gray-100 rounded-xl">
+            <span className="text-[10px] font-black uppercase text-gray-700 tracking-wider">
+              Total Processed
+            </span>
+            <div className="mt-2">
+              <span className="text-2xl font-black text-gray-900">{totalProcessed}</span>
+              <span className="text-[10px] text-gray-500 block font-semibold">{totalCompleted} completed</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Primary Channel Tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-200 pb-3">
         <div className="flex items-center gap-1.5 p-1 bg-gray-100 rounded-2xl w-fit">
           <button
             type="button"
-            onClick={() => {
-              setSourceTab('qr_scan');
-              setFilter('all');
-              setCurrentPage(1);
-            }}
+            onClick={() => handleTabChange('qr_scan')}
             className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
               sourceTab === 'qr_scan'
                 ? 'bg-white text-gray-900 shadow-sm border border-gray-200/80'
@@ -584,11 +662,7 @@ function OrdersContent() {
 
           <button
             type="button"
-            onClick={() => {
-              setSourceTab('admin_counter');
-              setFilter('all');
-              setCurrentPage(1);
-            }}
+            onClick={() => handleTabChange('admin_counter')}
             className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
               sourceTab === 'admin_counter'
                 ? 'bg-[#C0181A] text-white shadow-md'
@@ -607,11 +681,7 @@ function OrdersContent() {
 
           <button
             type="button"
-            onClick={() => {
-              setSourceTab('all');
-              setFilter('all');
-              setCurrentPage(1);
-            }}
+            onClick={() => handleTabChange('all')}
             className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
               sourceTab === 'all'
                 ? 'bg-white text-gray-900 shadow-sm border border-gray-200/80'
@@ -625,6 +695,7 @@ function OrdersContent() {
         {/* Enter New Counter Order button */}
         <Link
           href="/admin/orders/new"
+          onMouseEnter={() => { if (restaurantId) prefetchPosMenu(restaurantId); }}
           className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-black text-white bg-[#C0181A] hover:bg-[#A01416] rounded-xl shadow-md transition-all active:scale-98 cursor-pointer self-start sm:self-auto"
         >
           <Plus className="w-4 h-4" />
@@ -640,11 +711,8 @@ function OrdersContent() {
           (status) => (
             <button
               key={status}
-              onClick={() => {
-                setFilter(status);
-                setCurrentPage(1);
-              }}
-              className={`px-3.5 py-2 text-xs font-bold rounded-xl whitespace-nowrap transition-colors capitalize flex items-center gap-1.5 ${
+              onClick={() => handleFilterChange(status)}
+              className={`px-3.5 py-2 text-xs font-bold rounded-xl whitespace-nowrap transition-colors capitalize flex items-center gap-1.5 cursor-pointer ${
                 filter === status
                   ? 'bg-[#111827] text-white shadow-sm'
                   : status === 'delayed'
@@ -666,27 +734,46 @@ function OrdersContent() {
       </div>
 
       {orders.length === 0 ? (
-        <div className="bg-white border border-[#E2E6EA] rounded-2xl p-14 text-center flex flex-col items-center justify-center gap-3">
-          <div className="p-3 bg-gray-50 rounded-2xl text-gray-400">
-            {sourceTab === 'admin_counter' ? <ShoppingBag className="w-8 h-8 text-gray-400" /> : <Clock className="w-8 h-8 text-gray-400" />}
+        loading ? (
+          <div className="flex flex-col lg:flex-row gap-4 items-start w-full animate-pulse">
+            <div className="w-full lg:w-1/2 flex flex-col gap-3">
+              <div className="bg-white border border-[#E2E6EA] rounded-xl h-[450px] p-4 flex flex-col gap-3">
+                <div className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+                <div className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+                <div className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+                <div className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+              </div>
+            </div>
+            <div className="w-full lg:w-1/2 bg-white border border-[#E2E6EA] rounded-xl h-[450px] p-6 hidden lg:block animate-pulse">
+              <div className="h-6 w-32 bg-gray-100 rounded mb-4" />
+              <div className="h-20 bg-gray-50 rounded-xl mb-4" />
+              <div className="h-32 bg-gray-50 rounded-xl" />
+            </div>
           </div>
-          <p className="text-sm font-semibold text-[#6B7280]">
-            {sourceTab === 'admin_counter'
-              ? 'No counter orders found for this view.'
-              : filter === 'delayed'
-              ? 'Great job! No delayed orders found.'
-              : 'No orders received yet.'}
-          </p>
-          {sourceTab === 'admin_counter' && (
-            <Link
-              href="/admin/orders/new"
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#C0181A] hover:bg-[#A01416] rounded-xl shadow-sm transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Enter First Counter Order</span>
-            </Link>
-          )}
-        </div>
+        ) : (
+          <div className="bg-white border border-[#E2E6EA] rounded-2xl p-14 text-center flex flex-col items-center justify-center gap-3">
+            <div className="p-3 bg-gray-50 rounded-2xl text-gray-400">
+              {sourceTab === 'admin_counter' ? <ShoppingBag className="w-8 h-8 text-gray-400" /> : <Clock className="w-8 h-8 text-gray-400" />}
+            </div>
+            <p className="text-sm font-semibold text-[#6B7280]">
+              {sourceTab === 'admin_counter'
+                ? 'No counter orders found for this view.'
+                : filter === 'delayed'
+                ? 'Great job! No delayed orders found.'
+                : 'No orders received yet.'}
+            </p>
+            {sourceTab === 'admin_counter' && (
+              <Link
+                href="/admin/orders/new"
+                onMouseEnter={() => { if (restaurantId) prefetchPosMenu(restaurantId); }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#C0181A] hover:bg-[#A01416] rounded-xl shadow-sm transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Enter First Counter Order</span>
+              </Link>
+            )}
+          </div>
+        )
       ) : (
         <div className="flex flex-col lg:flex-row gap-4 items-start w-full">
           {/* Left pane: Orders list */}
@@ -712,8 +799,8 @@ function OrdersContent() {
               <div className="flex justify-between items-center px-4 py-2.5 bg-white border border-[#E2E6EA] rounded-lg text-xs">
                 <button
                   disabled={currentPage <= 1}
-                  onClick={() => loadOrders(true, currentPage - 1)}
-                  className="px-3 py-1.5 border border-[#E2E6EA] rounded-lg hover:bg-[#F4F6F9] disabled:opacity-40 font-medium transition-colors"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  className="px-3 py-1.5 border border-[#E2E6EA] rounded-lg hover:bg-[#F4F6F9] disabled:opacity-40 font-medium transition-colors cursor-pointer"
                 >
                   Previous
                 </button>
@@ -722,8 +809,8 @@ function OrdersContent() {
                 </span>
                 <button
                   disabled={currentPage >= Math.ceil(totalCount / limit)}
-                  onClick={() => loadOrders(true, currentPage + 1)}
-                  className="px-3 py-1.5 border border-[#E2E6EA] rounded-lg hover:bg-[#F4F6F9] disabled:opacity-40 font-medium transition-colors"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  className="px-3 py-1.5 border border-[#E2E6EA] rounded-lg hover:bg-[#F4F6F9] disabled:opacity-40 font-medium transition-colors cursor-pointer"
                 >
                   Next
                 </button>

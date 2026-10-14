@@ -110,6 +110,8 @@ const OrderSchema: Schema = new Schema<IOrderDocument>(
 
 OrderSchema.index({ restaurantId: 1, createdAt: -1 });
 OrderSchema.index({ restaurantId: 1, status: 1, createdAt: -1 });
+OrderSchema.index({ restaurantId: 1, source: 1, createdAt: -1 });
+OrderSchema.index({ restaurantId: 1, source: 1, status: 1, createdAt: -1 });
 
 // Valid Atomic Concurrency Lock: Partial Unique Index on activeSlotKey
 OrderSchema.index(

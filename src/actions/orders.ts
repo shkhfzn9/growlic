@@ -558,11 +558,12 @@ export async function createCounterOrderAction(data: {
 
     const order = await orderService.createOrder(orderPayload);
 
-    // Telemetry & audit logging
+    // Telemetry & audit logging (dispatched in background without blocking POS response)
     orderTelemetry.recordRequest(order._id, admin.restaurantId, order.status);
-    await logAction(admin.restaurantId, admin.userId, 'COUNTER_ORDER_CREATED', null, { orderId: order._id, total: order.total, status: order.status });
+    logAction(admin.restaurantId, admin.userId, 'COUNTER_ORDER_CREATED', null, { orderId: order._id, total: order.total, status: order.status }).catch((err) => {
+      console.error('[AUDIT_LOG_ERROR] Non-blocking audit log failed:', err);
+    });
 
-    revalidatePath('/admin/orders');
     return { success: true, order: JSON.parse(JSON.stringify(order)) };
   } catch (error) {
     console.error('Error creating counter order action:', error);
