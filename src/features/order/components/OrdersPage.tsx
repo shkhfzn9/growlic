@@ -3,16 +3,17 @@
 import React, { useEffect, useState, Suspense, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { getAdminOrders, updateOrderStatus, updateOrderEstimatedTime, markOrderWhatsAppNotifiedAction } from '../services/order.service';
+import { getAdminOrders, updateOrderStatus, updateOrderEstimatedTime, markOrderWhatsAppNotifiedAction, updateOrderItemsAction } from '../services/order.service';
 import { getCachedOrders, setCachedOrders, updateOrderInCache, prefetchPosMenu, getCachedPosMenu, KitchenStats } from '../services/orderClientCache';
 import { PageHeader, StatusBadge, AdminButton } from '@/components/ui';
 import { useOrderNotification } from '@/components/providers';
-import { Clock, ArrowLeft, AlertTriangle, CheckCircle2, TrendingDown, MessageSquare, X, ShieldAlert, Plus, ExternalLink, ShoppingBag, Sparkles } from 'lucide-react';
+import { Clock, ArrowLeft, AlertTriangle, CheckCircle2, TrendingDown, MessageSquare, X, ShieldAlert, Plus, Minus, Trash2, Edit, Search, ExternalLink, ShoppingBag, Sparkles } from 'lucide-react';
 import { OrderItem, Order } from '../types/order.types';
 import { ORDER_CONFIG } from '@/config/orderConfig';
 import { generateWhatsAppOrderLink } from '@/lib/whatsappService';
 
 import { getRestaurantDetails } from '@/actions/auth';
+import { getMenuItems } from '@/actions/menu';
 import { getVocabulary, getDelayReasons, getRejectionReasons } from '@/config/businessVocabulary';
 
 type FilterStatus = 'all' | Order['status'] | 'delayed' | 'missed';
@@ -156,6 +157,16 @@ function OrdersContent() {
   const [pendingRejectionOrder, setPendingRejectionOrder] = useState<Order | null>(null);
   const [selectedRejectionReason, setSelectedRejectionReason] = useState(presetRejectionReasons[0]);
   const [customRejectionReason, setCustomRejectionReason] = useState('');
+
+  // Edit Order Items Modal states
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [editableItems, setEditableItems] = useState<Array<{ menuItemId: string; name: string; price: number; quantity: number }>>([]);
+  const [editableNotes, setEditableNotes] = useState('');
+  const [editSearchQuery, setEditSearchQuery] = useState('');
+  const [availableMenuItems, setAvailableMenuItems] = useState<any[]>([]);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editSuccessAlert, setEditSuccessAlert] = useState<{ orderId: string; total: number; count: number } | null>(null);
 
   useEffect(() => {
     if (presetDelayReasons.length > 0 && !presetDelayReasons.includes(selectedDelayReason)) {
@@ -480,14 +491,115 @@ function OrdersContent() {
     executeStatusUpdate(orderId, nextStatus);
   };
 
-  const handleSendWhatsApp = async (order: Order) => {
+  const handleOpenEditModal = async (order: Order) => {
+    setEditingOrder(order);
+    setEditableItems(
+      order.items.map((i) => ({
+        menuItemId: i.menuItemId,
+        name: i.name,
+        price: i.price,
+        quantity: i.quantity,
+      }))
+    );
+    setEditableNotes(order.notes || '');
+    setEditSearchQuery('');
+    setEditSuccessAlert(null);
+
+    // Load available menu items from cache or fetch
+    const cached = getCachedPosMenu();
+    if (cached?.items && cached.items.length > 0) {
+      setAvailableMenuItems(cached.items.filter((item: any) => item.available !== false && item.active !== false));
+    } else if (restaurantId) {
+      try {
+        const items = await getMenuItems(restaurantId);
+        setAvailableMenuItems((items || []).filter((item: any) => item.available !== false && item.active !== false));
+      } catch (err) {
+        console.error('Failed to load menu items for edit modal:', err);
+      }
+    }
+    setEditModalOpen(true);
+  };
+
+  const handleEditItemQty = (menuItemId: string, delta: number) => {
+    setEditableItems((prev) =>
+      prev
+        .map((item) => {
+          if (item.menuItemId === menuItemId) {
+            const nextQty = item.quantity + delta;
+            return nextQty > 0 ? { ...item, quantity: nextQty } : null;
+          }
+          return item;
+        })
+        .filter(Boolean) as Array<{ menuItemId: string; name: string; price: number; quantity: number }>
+    );
+  };
+
+  const handleRemoveEditItem = (menuItemId: string) => {
+    setEditableItems((prev) => prev.filter((i) => i.menuItemId !== menuItemId));
+  };
+
+  const handleAddMenuItemToEdit = (menuItem: any) => {
+    setEditableItems((prev) => {
+      const existing = prev.find((i) => i.menuItemId === menuItem._id);
+      if (existing) {
+        return prev.map((i) => (i.menuItemId === menuItem._id ? { ...i, quantity: i.quantity + 1 } : i));
+      }
+      return [
+        ...prev,
+        {
+          menuItemId: menuItem._id,
+          name: menuItem.name,
+          price: menuItem.price,
+          quantity: 1,
+        },
+      ];
+    });
+  };
+
+  const handleSaveOrderItems = async () => {
+    if (!editingOrder) return;
+    if (editableItems.length === 0) {
+      alert('Order must contain at least one item.');
+      return;
+    }
+
+    setEditSaving(true);
+    try {
+      const payloadItems = editableItems.map((i) => ({
+        menuItemId: i.menuItemId,
+        quantity: i.quantity,
+      }));
+      const res = await updateOrderItemsAction(editingOrder._id, payloadItems, editableNotes.trim());
+      if (res.success && res.order) {
+        const updatedOrder: Order = res.order;
+        setOrders((prev) => prev.map((o) => (o._id === updatedOrder._id ? updatedOrder : o)));
+        setSelectedOrder(updatedOrder);
+        updateOrderInCache(updatedOrder);
+        setEditSuccessAlert({
+          orderId: updatedOrder._id,
+          total: updatedOrder.total,
+          count: updatedOrder.items.reduce((s, i) => s + i.quantity, 0),
+        });
+        setEditModalOpen(false);
+      }
+    } catch (err) {
+      console.error('Failed to update order items:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to update order items';
+      alert(msg);
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleSendWhatsApp = async (order: Order, typeOverride?: 'placed' | 'ready' | 'updated') => {
     if (!order.customerPhone) {
       alert('No customer phone number recorded for this order.');
       return;
     }
     const isReady = order.status === 'ready' || order.status === 'completed';
+    const waType = typeOverride || (isReady ? 'ready' : 'placed');
     const waUrl = generateWhatsAppOrderLink({
-      type: isReady ? 'ready' : 'placed',
+      type: waType,
       phone: order.customerPhone,
       customerName: order.customerName,
       orderId: order._id,
@@ -940,9 +1052,49 @@ function OrdersContent() {
                   )}
                 </div>
 
+                {/* Updated Items Success Notification */}
+                {editSuccessAlert && editSuccessAlert.orderId === selectedOrder._id && (
+                  <div className="bg-emerald-50 border-2 border-emerald-400 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                      <div>
+                        <h4 className="font-extrabold text-xs text-emerald-950">
+                          Order Items Updated Successfully!
+                        </h4>
+                        <p className="text-[11px] font-medium text-emerald-800">
+                          New Total: <span className="font-black text-emerald-950">₹{editSuccessAlert.total}</span> ({editSuccessAlert.count} {editSuccessAlert.count === 1 ? 'item' : 'items'})
+                        </p>
+                      </div>
+                    </div>
+                    {selectedOrder.customerPhone && (
+                      <button
+                        type="button"
+                        onClick={() => handleSendWhatsApp(selectedOrder, 'updated')}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#25D366] hover:bg-[#1EBE5D] text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer whitespace-nowrap active:scale-95"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>Send Updated WhatsApp</span>
+                        <ExternalLink className="w-3 h-3 opacity-80" />
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {/* Receipt */}
                 <div>
-                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] mb-2">Items</h3>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Items</h3>
+                    {!['cancelled', 'rejected', 'completed'].includes(selectedOrder.status) && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditModal(selectedOrder)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-red-600 hover:text-red-700 hover:bg-red-50 px-2.5 py-1 rounded-xl border border-red-200 transition-colors cursor-pointer active:scale-95 shadow-2xs"
+                      >
+                        <Edit className="w-3 h-3" />
+                        <span>Edit / Update Items</span>
+                      </button>
+                    )}
+                  </div>
                   <div className="divide-y divide-[#E2E6EA]">
                     {selectedOrder.items.map((item, idx) => (
                       <div key={idx} className="py-2 flex justify-between text-sm">
@@ -1564,6 +1716,208 @@ function OrdersContent() {
               >
                 {actionLoading[pendingRejectionOrder._id] ? 'Rejecting...' : 'Confirm Rejection'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Order Items Modal */}
+      {editModalOpen && editingOrder && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[999] flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-xl w-full shadow-2xl border border-gray-100 flex flex-col gap-4 max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2 text-gray-900">
+                <div className="p-2 bg-red-100 text-red-600 rounded-xl">
+                  <Edit className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-gray-900 leading-tight">
+                    Edit Order Items
+                  </h3>
+                  <p className="text-[11px] text-gray-500 font-medium">
+                    Order #{editingOrder._id.slice(-6).toUpperCase()} • {editingOrder.customerName} ({editingOrder.customerPhone || 'No phone'})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Modal Content */}
+            <div className="flex flex-col gap-4 overflow-y-auto pr-1 flex-1">
+              {/* Section 1: Current Items List */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-gray-500">
+                    Order Items ({editableItems.reduce((s, i) => s + i.quantity, 0)})
+                  </h4>
+                  <span className="text-[11px] font-bold text-gray-400">
+                    Subtotal: ₹{editableItems.reduce((s, i) => s + i.price * i.quantity, 0)}
+                  </span>
+                </div>
+
+                {editableItems.length === 0 ? (
+                  <div className="p-6 text-center text-gray-400 text-xs font-medium border-2 border-dashed border-gray-200 rounded-2xl">
+                    No items left in this order. Add items from the menu below.
+                  </div>
+                ) : (
+                  <div className="flex flex-col divide-y divide-gray-100 bg-gray-50/70 border border-gray-200 rounded-2xl p-2 max-h-52 overflow-y-auto">
+                    {editableItems.map((item) => (
+                      <div key={item.menuItemId} className="py-2 px-2 flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <h5 className="text-xs font-bold text-gray-900 truncate">{item.name}</h5>
+                          <span className="text-[11px] font-semibold text-gray-500">₹{item.price} each</span>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {/* Quantity Stepper */}
+                          <div className="flex items-center bg-white rounded-xl p-0.5 border border-gray-200 shadow-xs">
+                            <button
+                              type="button"
+                              onClick={() => handleEditItemQty(item.menuItemId, -1)}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-red-50 text-gray-700 hover:text-red-600 transition-colors cursor-pointer active:scale-90"
+                              title="Decrease quantity"
+                            >
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="w-7 text-center font-black text-xs text-gray-900 select-none">
+                              {item.quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleEditItemQty(item.menuItemId, 1)}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-green-50 text-gray-700 hover:text-green-600 transition-colors cursor-pointer active:scale-90"
+                              title="Increase quantity"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <span className="font-black text-xs text-gray-900 min-w-14 text-right">
+                            ₹{item.price * item.quantity}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEditItem(item.menuItemId)}
+                            className="text-gray-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="Remove line item"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Section 2: Quick Menu Search & Add */}
+              <div className="flex flex-col gap-2">
+                <h4 className="text-xs font-black uppercase tracking-wider text-gray-500 flex items-center gap-1.5">
+                  <Plus className="w-3.5 h-3.5 text-red-600" />
+                  <span>Add More Items From Menu</span>
+                </h4>
+
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search menu items to add..."
+                    value={editSearchQuery}
+                    onChange={(e) => setEditSearchQuery(e.target.value)}
+                    className="w-full text-xs pl-8 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:border-red-600 outline-none transition-all"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto p-1">
+                  {availableMenuItems
+                    .filter((item) => {
+                      if (!editSearchQuery.trim()) return true;
+                      const q = editSearchQuery.toLowerCase();
+                      return item.name?.toLowerCase().includes(q) || item.category?.toLowerCase().includes(q);
+                    })
+                    .slice(0, 16)
+                    .map((menuItem) => {
+                      const inOrder = editableItems.find((i) => i.menuItemId === menuItem._id);
+                      return (
+                        <div
+                          key={menuItem._id}
+                          className="p-2 bg-white border border-gray-200 rounded-xl flex items-center justify-between gap-2 shadow-xs hover:border-gray-300 transition-all"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <h6 className="font-bold text-xs text-gray-900 truncate">{menuItem.name}</h6>
+                            <span className="text-[11px] font-extrabold text-red-600">₹{menuItem.price}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleAddMenuItemToEdit(menuItem)}
+                            className={`px-2.5 py-1 text-xs font-bold rounded-lg flex items-center gap-1 transition-all cursor-pointer active:scale-95 shrink-0 ${
+                              inOrder
+                                ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
+                                : 'bg-gray-900 hover:bg-red-600 text-white'
+                            }`}
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>{inOrder ? `Add (${inOrder.quantity})` : 'Add'}</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* Section 3: Notes / Special Request */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-black uppercase tracking-wider text-gray-500">
+                  Order Notes / Chef Instructions
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Extra spicy, no onions, pack separately..."
+                  value={editableNotes}
+                  onChange={(e) => setEditableNotes(e.target.value)}
+                  className="w-full text-xs bg-gray-50 border border-gray-200 rounded-xl p-2.5 outline-none focus:border-red-600 focus:bg-white transition-all resize-none font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer: Total & Actions */}
+            <div className="border-t border-gray-100 pt-3 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div>
+                <span className="text-[10px] font-bold uppercase text-gray-500 block">Updated Total</span>
+                <span className="text-lg font-black text-gray-900">
+                  ₹{editableItems.reduce((s, i) => s + i.price * i.quantity, 0)}
+                  <span className="text-xs text-gray-500 font-semibold ml-1.5">
+                    ({editableItems.reduce((s, i) => s + i.quantity, 0)} items)
+                  </span>
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="px-4 py-2.5 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={editableItems.length === 0 || editSaving}
+                  onClick={handleSaveOrderItems}
+                  className="px-5 py-2.5 text-xs font-black bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-98"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{editSaving ? 'Saving Changes...' : 'Save & Update Order'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

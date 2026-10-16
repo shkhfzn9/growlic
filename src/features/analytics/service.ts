@@ -18,16 +18,35 @@ export async function getDashboardMetrics(restaurantId: string, startDateStr?: s
 
   return unstable_cache(
     async () => {
-      // Parse date ranges
-      const start = startDateStr ? new Date(startDateStr) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const end = endDateStr ? new Date(endDateStr) : new Date();
+      // Parse date ranges ensuring full inclusive day coverage in local operational timezone (+05:30)
+      const parseBoundary = (dateStr: string | undefined, isEnd: boolean): Date => {
+        if (!dateStr) {
+          const d = new Date();
+          if (isEnd) {
+            d.setHours(23, 59, 59, 999);
+          } else {
+            d.setDate(d.getDate() - 30);
+            d.setHours(0, 0, 0, 0);
+          }
+          return d;
+        }
+        if (dateStr.includes('T')) {
+          const d = new Date(dateStr);
+          if (isEnd) d.setHours(23, 59, 59, 999);
+          else d.setHours(0, 0, 0, 0);
+          return d;
+        }
+        const suffix = isEnd ? 'T23:59:59.999+05:30' : 'T00:00:00.000+05:30';
+        const parsed = new Date(`${dateStr}${suffix}`);
+        if (!isNaN(parsed.getTime())) return parsed;
+        const fallback = new Date(dateStr);
+        if (isEnd) fallback.setHours(23, 59, 59, 999);
+        else fallback.setHours(0, 0, 0, 0);
+        return fallback;
+      };
 
-      if (!startDateStr) {
-        start.setHours(0, 0, 0, 0);
-      }
-      if (!endDateStr) {
-        end.setHours(23, 59, 59, 999);
-      }
+      const start = parseBoundary(startDateStr, false);
+      const end = parseBoundary(endDateStr, true);
 
       // Fetch raw dataset using analyticsRepository
       const rawData = await analyticsRepo.fetchRawDashboardData(restaurantId, start, end);
@@ -60,6 +79,7 @@ export async function getDashboardMetrics(restaurantId: string, startDateStr?: s
         orderAggregates,
         recentCompletedOrders,
         ordersTableRaw,
+        threeDayAggregation: rawData.threeDayAggregation,
         menuItems,
         pairingRules,
         comboRules,

@@ -591,4 +591,41 @@ export async function markOrderWhatsAppNotifiedAction(orderId: string) {
   }
 }
 
+/**
+ * Server action to update the items and notes of an existing active order.
+ * Recomputes totals from DB menu items and logs audit trail.
+ */
+export async function updateOrderItemsAction(
+  orderId: string,
+  items: Array<{ menuItemId: string; quantity: number }>,
+  notes?: string
+) {
+  try {
+    const admin = await checkAdminAuth();
+    const isAllowed =
+      (await can('update_order_status', admin.token, admin.restaurantId)) ||
+      (await can('manage_orders', admin.token, admin.restaurantId));
+    if (!isAllowed) {
+      throw new Error('Forbidden: Insufficient permissions to modify order items');
+    }
+
+    const previous = await orderService.getOrderById(orderId, admin.restaurantId);
+    const updated = await orderService.updateOrderItems(orderId, admin.restaurantId, items, notes);
+
+    // Audit log
+    await logAction(admin.restaurantId, admin.userId, 'ORDER_ITEMS_MODIFIED', previous, {
+      orderId: updated._id,
+      items: updated.items,
+      total: updated.total,
+      notes: updated.notes,
+    });
+
+    return { success: true, order: JSON.parse(JSON.stringify(updated)) };
+  } catch (error) {
+    console.error('Error updating order items action:', error);
+    const message = error instanceof Error ? error.message : 'Failed to update order items';
+    throw new Error(message);
+  }
+}
+
 

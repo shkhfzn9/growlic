@@ -340,6 +340,80 @@ export async function updateOrderEstimatedTime(id: string, restaurantId: string,
 }
 
 /**
+ * Updates items, line quantities, and notes of an existing order.
+ * Revalidates prices strictly against DB menu items to prevent manipulation.
+ */
+export async function updateOrderItems(
+  id: string,
+  restaurantId: string,
+  items: Array<{ menuItemId: string; quantity: number }>,
+  notes?: string
+): Promise<IOrder> {
+  validateOrderId(id);
+  const cleanRestId = orderRepo.sanitizeTenantId(restaurantId);
+  const existing = await orderRepo.findById(cleanRestId, id);
+  if (!existing || existing.restaurantId !== cleanRestId) {
+    throw new NotFoundError(`Order '${id}' not found`);
+  }
+
+  if (['cancelled', 'rejected'].includes(existing.status)) {
+    throw new Error(`Cannot modify order '${id}' because it has already been ${existing.status}`);
+  }
+
+  if (!items || items.length === 0) {
+    throw new Error('Order must contain at least one item');
+  }
+
+  // Fetch current menu items from database to compute safe prices
+  const itemIds = items.map((i) => i.menuItemId);
+  const dbItems = await menuRepo.findByIds(cleanRestId, itemIds);
+  const dbItemsMap = new Map(dbItems.map((dbItem) => [dbItem._id, dbItem]));
+
+  const validatedItems: IOrder['items'] = [];
+  let calculatedSubtotal = 0;
+
+  for (const item of items) {
+    if (item.quantity <= 0) continue;
+    const dbItem = dbItemsMap.get(item.menuItemId);
+    const existingItem = existing.items.find((ei) => ei.menuItemId === item.menuItemId);
+
+    const itemName = dbItem?.name || existingItem?.name || 'Item';
+    const itemPrice = dbItem ? dbItem.price : (existingItem ? existingItem.price : 0);
+    const itemImage = dbItem?.image || existingItem?.image || '';
+
+    const lineTotal = itemPrice * item.quantity;
+    calculatedSubtotal += lineTotal;
+    validatedItems.push({
+      menuItemId: item.menuItemId,
+      name: itemName,
+      price: itemPrice,
+      quantity: item.quantity,
+      image: itemImage,
+    });
+  }
+
+  if (validatedItems.length === 0) {
+    throw new Error('Order must contain at least one valid item with quantity > 0');
+  }
+
+  const calculatedTotal = calculatedSubtotal;
+  const updated = await orderRepo.updateOrderItems(
+    cleanRestId,
+    id,
+    validatedItems,
+    calculatedSubtotal,
+    calculatedTotal,
+    notes
+  );
+
+  if (!updated) {
+    throw new NotFoundError(`Order '${id}' not found`);
+  }
+
+  return updated;
+}
+
+/**
  * Retrieves past orders associated with a customer's phone number.
  * 
  * @param phone The unique customer phone number.

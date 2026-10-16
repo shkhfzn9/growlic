@@ -436,6 +436,35 @@ export async function markWhatsAppNotified(restaurantId: string, id: string): Pr
 }
 
 /**
+ * Updates items, subtotal, total, and optional notes of an existing order.
+ */
+export async function updateOrderItems(
+  restaurantId: string,
+  id: string,
+  items: IOrder['items'],
+  subtotal: number,
+  total: number,
+  notes?: string
+): Promise<IOrder | null> {
+  await dbConnect();
+  const updatePayload: any = {
+    items,
+    subtotal,
+    total,
+  };
+  if (notes !== undefined) {
+    updatePayload.notes = notes;
+  }
+
+  const doc = await Order.findOneAndUpdate(
+    { _id: id, restaurantId: sanitizeTenantId(restaurantId) },
+    updatePayload,
+    { returnDocument: 'after' }
+  );
+  return doc ? normalizeOrder(doc) : null;
+}
+
+/**
  * Updates the estimated preparation time (ETA minutes) and optionally shifts status to 'accepted' inside a specific restaurant scope.
  * 
  * @param restaurantId Scope parameter enforcing multi-tenant isolation.

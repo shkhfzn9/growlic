@@ -483,14 +483,40 @@ export default function CounterOrderForm() {
 
                   <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                     <span className="font-black text-sm text-red-600">₹{item.price}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleAddToCart(item)}
-                      className="px-3 py-1.5 bg-gray-900 hover:bg-red-600 text-white text-xs font-bold rounded-xl flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add</span>
-                    </button>
+                    {inCart ? (
+                      <div className="flex items-center bg-gray-900 text-white rounded-xl p-0.5 shadow-xs">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateQuantity(item._id, -1)}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-red-600 text-gray-200 hover:text-white transition-colors cursor-pointer active:scale-90"
+                          title="Decrease quantity"
+                          aria-label={`Decrease quantity of ${item.name}`}
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="w-7 text-center font-black text-xs text-white select-none">
+                          {inCart.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleAddToCart(item)}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-red-600 text-gray-200 hover:text-white transition-colors cursor-pointer active:scale-90"
+                          title="Increase quantity"
+                          aria-label={`Increase quantity of ${item.name}`}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleAddToCart(item)}
+                        className="px-3 py-1.5 bg-gray-900 hover:bg-red-600 text-white text-xs font-bold rounded-xl flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               );

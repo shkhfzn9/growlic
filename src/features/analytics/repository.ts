@@ -25,6 +25,7 @@ export async function fetchRawDashboardData(restaurantId: string, start: Date, e
     orderAggregation,
     recentCompletedOrders,
     ordersTableRaw,
+    threeDayAggregation,
     menuItems,
     pairingRules,
     comboRules,
@@ -99,8 +100,8 @@ export async function fetchRawDashboardData(restaurantId: string, start: Date, e
               $project: {
                 status: 1,
                 total: 1,
-                dayOfWeek: { $dayOfWeek: '$createdAt' }, // 1 (Sun) to 7 (Sat)
-                hour: { $hour: '$createdAt' } // 0 to 23
+                dayOfWeek: { $dayOfWeek: { date: '$createdAt', timezone: '+05:30' } }, // 1 (Sun) to 7 (Sat)
+                hour: { $hour: { date: '$createdAt', timezone: '+05:30' } } // 0 to 23 in operational time
               }
             },
             {
@@ -126,7 +127,7 @@ export async function fetchRawDashboardData(restaurantId: string, start: Date, e
                 status: 1,
                 total: 1,
                 itemsCount: { $sum: '$items.quantity' },
-                dateStr: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }
+                dateStr: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: '+05:30' } }
               }
             },
             {
@@ -183,6 +184,33 @@ export async function fetchRawDashboardData(restaurantId: string, start: Date, e
                 orderCount: { $sum: 1 }
               }
             }
+          ],
+          paymentSplit: [
+            { $match: { status: { $ne: 'cancelled' } } },
+            {
+              $group: {
+                _id: { $ifNull: ['$paymentMode', 'cash'] },
+                count: { $sum: 1 },
+                revenue: { $sum: '$total' }
+              }
+            }
+          ],
+          dailyPaymentSplit: [
+            { $match: { status: { $ne: 'cancelled' } } },
+            {
+              $project: {
+                total: 1,
+                paymentMode: { $ifNull: ['$paymentMode', 'cash'] },
+                dateStr: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: '+05:30' } }
+              }
+            },
+            {
+              $group: {
+                _id: { dateStr: '$dateStr', paymentMode: '$paymentMode' },
+                count: { $sum: 1 },
+                revenue: { $sum: '$total' }
+              }
+            }
           ]
         }
       }
@@ -204,10 +232,37 @@ export async function fetchRawDashboardData(restaurantId: string, start: Date, e
       restaurantId,
       createdAt: { $gte: start, $lte: end }
     })
-    .select('_id customerName customerPhone subtotal total status createdAt items.name items.quantity items.originatedFromNudge tableId')
+    .select('_id customerName customerPhone subtotal total status paymentMode createdAt items.name items.quantity items.originatedFromNudge tableId')
     .sort({ createdAt: -1 })
     .limit(1000)
     .lean(),
+
+    // 5. Dedicated multi-period aggregation (Last 185 days for Daily, 2D, 3D, WoW, MoM, and QoQ Quarterly comparisons)
+    Order.aggregate([
+      {
+        $match: {
+          restaurantId,
+          createdAt: {
+            $gte: new Date(Date.now() - 185 * 24 * 60 * 60 * 1000)
+          },
+          status: { $ne: 'cancelled' }
+        }
+      },
+      {
+        $project: {
+          total: 1,
+          paymentMode: { $ifNull: ['$paymentMode', 'cash'] },
+          dateStr: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: '+05:30' } }
+        }
+      },
+      {
+        $group: {
+          _id: { dateStr: '$dateStr', paymentMode: '$paymentMode' },
+          count: { $sum: 1 },
+          revenue: { $sum: '$total' }
+        }
+      }
+    ]),
 
     // Configurations/counts
     menuItemRepo.findAll(restaurantId),
@@ -285,10 +340,13 @@ export async function fetchRawDashboardData(restaurantId: string, start: Date, e
       trends: [],
       itemSales: [],
       ruleConversions: [],
-      customerPhones: []
+      customerPhones: [],
+      paymentSplit: [],
+      dailyPaymentSplit: []
     },
     recentCompletedOrders,
     ordersTableRaw,
+    threeDayAggregation: threeDayAggregation || [],
     menuItems,
     pairingRules,
     comboRules,

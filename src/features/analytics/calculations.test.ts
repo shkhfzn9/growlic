@@ -136,5 +136,76 @@ describe('analytics calculations', () => {
       expect(behavior.cartAbandonment.ordersCompleted).toBe(5);
       expect(behavior.cartAbandonment.abandonmentRate).toBe(50);
     });
+
+    it('should compute 3-day sales summary and payment mode split', () => {
+      const customParams = {
+        ...mockParams,
+        orderAggregates: {
+          ...mockParams.orderAggregates,
+          paymentSplit: [
+            { _id: 'cash', count: 3, revenue: 900 },
+            { _id: 'online', count: 2, revenue: 600 },
+          ],
+          dailyPaymentSplit: [
+            { _id: { dateStr: '2026-06-10', paymentMode: 'cash' }, count: 2, revenue: 500 },
+            { _id: { dateStr: '2026-06-10', paymentMode: 'online' }, count: 1, revenue: 400 },
+            { _id: { dateStr: '2026-06-09', paymentMode: 'cash' }, count: 1, revenue: 400 },
+            { _id: { dateStr: '2026-06-08', paymentMode: 'online' }, count: 1, revenue: 200 },
+          ],
+        },
+        threeDayAggregation: [
+          { _id: { dateStr: '2026-06-10', paymentMode: 'cash' }, count: 2, revenue: 500 },
+          { _id: { dateStr: '2026-06-10', paymentMode: 'online' }, count: 1, revenue: 400 },
+          { _id: { dateStr: '2026-06-09', paymentMode: 'cash' }, count: 1, revenue: 400 },
+          { _id: { dateStr: '2026-06-08', paymentMode: 'online' }, count: 1, revenue: 200 },
+        ],
+        ordersTableRaw: [
+          {
+            _id: 'order-1',
+            customerName: 'Alice',
+            customerPhone: '9999999999',
+            subtotal: 300,
+            total: 300,
+            status: 'completed',
+            paymentMode: 'online',
+            createdAt: '2026-06-10T12:00:00Z',
+            items: [],
+          },
+        ],
+      };
+
+      const result = computeDashboardMetrics(customParams);
+
+      // Payment split
+      expect(result.paymentSplit.totalRevenue).toBe(1500);
+      expect(result.paymentSplit.cashRevenue).toBe(900);
+      expect(result.paymentSplit.onlineRevenue).toBe(600);
+      expect(result.paymentSplit.cashPercent).toBe(60);
+      expect(result.paymentSplit.onlinePercent).toBe(40);
+      expect(result.paymentSplit.dailyBreakdown.length).toBe(3);
+
+      // 3-day summary
+      expect(result.threeDaySummary.day1.totalRevenue).toBe(900); // 2026-06-10
+      expect(result.threeDaySummary.day1.cashRevenue).toBe(500);
+      expect(result.threeDaySummary.day1.onlineRevenue).toBe(400);
+      expect(result.threeDaySummary.day2.totalRevenue).toBe(400); // 2026-06-09
+      expect(result.threeDaySummary.day3.totalRevenue).toBe(200); // 2026-06-08
+      expect(result.threeDaySummary.cumulative.totalRevenue).toBe(1500);
+
+      // Orders table paymentMode
+      expect(result.ordersTable[0].paymentMode).toBe('online');
+
+      // Growth analysis
+      expect(result.growthAnalysis).toBeDefined();
+      expect(result.growthAnalysis.dod).toBeDefined();
+      expect(result.growthAnalysis.twoDay).toBeDefined();
+      expect(result.growthAnalysis.threeDay).toBeDefined();
+      expect(result.growthAnalysis.wow).toBeDefined();
+      expect(result.growthAnalysis.mom).toBeDefined();
+      expect(result.growthAnalysis.quarter).toBeDefined();
+      expect(result.growthAnalysis.diagnosis).toBeDefined();
+      expect(result.growthAnalysis.wowDayBreakdown.length).toBe(7);
+      expect(result.growthAnalysis.historicalDays.length).toBeGreaterThan(0);
+    });
   });
 });

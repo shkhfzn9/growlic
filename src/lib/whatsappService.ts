@@ -6,7 +6,7 @@
  */
 
 export interface WhatsAppNotificationPayload {
-  type: 'placed' | 'ready';
+  type: 'placed' | 'ready' | 'updated';
   phone: string;
   customerName?: string;
   orderId: string;
@@ -75,15 +75,21 @@ export function generateWhatsAppOrderLink(payload: WhatsAppNotificationPayload):
   let message = '';
   if (payload.type === 'placed') {
     if (itemsList) {
-      message = `Hi ${greetingName}! 👋\n\nThank you for ordering at *${cleanRestName}*.\n\n*Order #${shortId}* has been placed ✅\n\n🧾 *Your order*\n${itemsList}\n\n*Total items:* ${totalQty}${payload.total !== undefined ? `\n*Total:* ₹${payload.total}` : ''}\n*Payment:* Please pay at the counter for the order to get placed.\n\n💬 We would love to hear your feedback! How was your experience with us?`;
+      message = `Hi ${greetingName}!\n\nThank you for ordering at *${cleanRestName}*.\n\n*Order #${shortId}* has been placed.\n\n*Your order:*\n${itemsList}\n\n*Total items:* ${totalQty}${payload.total !== undefined ? `\n*Total:* ₹${payload.total}` : ''}\n*Payment:* Please pay at the counter for the order to get placed.\n\nWe would love to hear your feedback! How was your experience with us?`;
     } else {
-      message = `Hi ${greetingName}! 👋\n\nThank you for ordering at *${cleanRestName}*.\n\n*Order #${shortId}* has been placed ✅${payload.total !== undefined ? `\n*Total:* ₹${payload.total}` : ''}\n*Payment:* Please pay at the counter for the order to get placed.\n\n💬 We would love to hear your feedback! How was your experience with us?`;
+      message = `Hi ${greetingName}!\n\nThank you for ordering at *${cleanRestName}*.\n\n*Order #${shortId}* has been placed.${payload.total !== undefined ? `\n*Total:* ₹${payload.total}` : ''}\n*Payment:* Please pay at the counter for the order to get placed.\n\nWe would love to hear your feedback! How was your experience with us?`;
     }
   } else if (payload.type === 'ready') {
     if (itemsList) {
-      message = `Hi ${greetingName}! 👋\n\nGreat news! Your order *#${shortId}* at *${cleanRestName}* is *READY FOR PICKUP*! 🍽️\n\n🧾 *Your order*\n${itemsList}\n\n*Total items:* ${totalQty}${payload.total !== undefined ? `\n*Total:* ₹${payload.total}` : ''}\n\nEnjoy your meal! 🌟 We would love your feedback—please let us know how your experience was!`;
+      message = `Hi ${greetingName}!\n\nGreat news! Your order *#${shortId}* at *${cleanRestName}* is *READY FOR PICKUP*!\n\n*Your order:*\n${itemsList}\n\n*Total items:* ${totalQty}${payload.total !== undefined ? `\n*Total:* ₹${payload.total}` : ''}\n\nEnjoy your meal! We would love your feedback - please let us know how your experience was!`;
     } else {
-      message = `Hi ${greetingName}! 👋\n\nGreat news! Your order *#${shortId}* at *${cleanRestName}* is *READY FOR PICKUP*! 🍽️${payload.total !== undefined ? `\n*Total:* ₹${payload.total}` : ''}\n\nEnjoy your meal! 🌟 We would love your feedback—please let us know how your experience was!`;
+      message = `Hi ${greetingName}!\n\nGreat news! Your order *#${shortId}* at *${cleanRestName}* is *READY FOR PICKUP*!${payload.total !== undefined ? `\n*Total:* ₹${payload.total}` : ''}\n\nEnjoy your meal! We would love your feedback - please let us know how your experience was!`;
+    }
+  } else if (payload.type === 'updated') {
+    if (itemsList) {
+      message = `Hi ${greetingName}!\n\nYour order *#${shortId}* at *${cleanRestName}* has been *UPDATED*.\n\n*Updated order:*\n${itemsList}\n\n*Total items:* ${totalQty}${payload.total !== undefined ? `\n*Updated Total:* ₹${payload.total}` : ''}\n*Payment:* Please pay at the counter for the order to get processed.\n\nWe would love to hear your feedback! How was your experience with us?`;
+    } else {
+      message = `Hi ${greetingName}!\n\nYour order *#${shortId}* at *${cleanRestName}* has been *UPDATED*.${payload.total !== undefined ? `\n*Updated Total:* ₹${payload.total}` : ''}\n*Payment:* Please pay at the counter for the order to get processed.\n\nWe would love to hear your feedback! How was your experience with us?`;
     }
   }
 
