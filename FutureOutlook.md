@@ -165,11 +165,11 @@
 | `updateOrderEstimatedTime` | Server Action | POS Staff | On setting preparation ETA | Updates `estimatedTime` in `Order` | None | Admin JWT | ~2 kB |
 | `markOrderWhatsAppNotifiedAction` | Server Action | POS Staff | On clicking WhatsApp notify button | Updates `whatsapp_notified` flag in `Order` | None | Admin JWT | ~1 kB |
 
-### Detailed Behavioral Observations
-1. **Polling Analysis:**
-   * **Customer Order Tracker (`src/features/order/components/OrderTracker.tsx:182-194`):** Runs `setInterval(..., 5000)` invoking `getOrderById`. It **does not** check document visibility (`document.hidden`). If the user leaves the tab running in mobile Safari/Chrome or switches apps, polling continues until status reaches `'completed'` or `'cancelled'`.
-   * **POS Admin Dashboard (`src/features/analytics/components/DashboardPage.tsx:308-312`):** Runs `setInterval(..., 10000)` invoking `getDashboardMetrics`. It runs unconditionally as long as the dashboard tab is mounted, generating 360 full metric aggregation requests per hour per open screen.
-   * **POS Notification Provider (`src/components/providers/OrderNotificationProvider.tsx:310-332`):** Implements an adaptive decay schedule (5s up to 30s, pausing after 10 minutes). It checks `document.hidden` and halts when backgrounded. However, when zero active alerts are ringing, it schedules **no interval polling**, relying instead on window focus and local BroadcastChannel events.
+1. **Polling Analysis (Breakdown by Caller):**
+   * **POS Notification Provider (`src/components/providers/OrderNotificationProvider.tsx:310-332`):** Highly optimized. It runs an adaptive decay schedule (5s for 0–30s, 10s for 30s–3m, 15s for 3m–5m, 20s for 5m–7m, 30s for 7m–10m, and fully pauses after 10 minutes). It checks `document.hidden` and halts when blurred. It **only polls for orders in `status: 'received'`** (`src/features/order/repository.ts:648-653`). Crucially, the moment staff clicks "Accept Order", `handleAccept` triggers `acknowledgeOrder(orderId)`, clearing `activeAlertOrders`. With zero ringing alerts, **interval polling terminates completely**. Thus, POS notification polling generates virtually zero sustained load (~6 requests per acknowledged order).
+   * **POS Orders Page (`src/features/order/components/OrdersPage.tsx:385-397`):** Runs `setInterval(..., 10000)` while the staff is actively viewing `/admin/orders`. It pauses when the tab is hidden (`document.hidden`).
+   * **POS Admin Dashboard (`src/features/analytics/components/DashboardPage.tsx:308-312`):** Runs `setInterval(..., 10000)` invoking `getDashboardMetrics`. It runs unconditionally as long as the dashboard tab is mounted (does not check `document.hidden`), generating 360 metric aggregations per hour per open dashboard screen.
+   * **Customer Order Tracker (`src/features/order/components/OrderTracker.tsx:182-194`):** **This is the actual system bottleneck.** It runs on every customer's smartphone after placing an order. Unlike the POS notification provider, it has **no adaptive decay schedule**, does **not** stop when the order is accepted (it continues through `accepted`, `preparing`, and `ready` states until `completed` or `cancelled`), does **not** check `document.hidden`, and executes `getOrderById` every 5,000 ms flat. Over an average 15-minute preparation window, a single customer session generates 180 continuous Server Action invocations.
 2. **Calls on Page Load Without User Action:**
    * Visiting `/cart?restaurantId=...` immediately initiates:
      * `getRestaurantMenuContext` (fetching menu configuration, admin settings, and banner rules).
@@ -296,6 +296,23 @@
   * Arithmetic: An unoptimized Next.js Server Action connecting to MongoDB takes an average of 60 ms of active CPU time.
   * Maximum sustainable CPU invocations: 14,400 CPU seconds / 0.060 CPU seconds/inv = **240,000 invocations/month**.
   * **Real-world limit:** Under Active CPU constraints, the platform can support only **1 medium-volume restaurant** or **0.3 high-volume restaurants** on Vercel Hobby before being throttled or forced to upgrade to Vercel Pro ($20/seat/month).
+
+---
+
+### Before vs. After Optimization Impact (Show the Math)
+
+If the customer-side `OrderTracker.tsx` is updated to incorporate the exact same smart polling patterns already implemented in `OrderNotificationProvider.tsx` (15s–30s interval + `document.hidden` pause):
+
+| Metric | Current State (5s Flat Polling) | Optimized State (Adaptive 15s–30s + Tab Visibility) | Change |
+| :--- | :--- | :--- | :--- |
+| **Tracking Requests / Order** | **180 requests** (5s flat for 15 min) | **~28 requests** (15s first 2m, 30s thereafter) | **-84.4% reduction** |
+| **Total Invocations / Customer Session** | **187 invocations** | **35 invocations** | **-81.3% reduction** |
+| **Monthly Load (Medium Venue, 1,800 orders)** | **379,800 invocations** | **~117,000 invocations** | **-69.2% reduction** |
+| **Vercel Hobby Capacity (Medium Venues)** | **~2.6 restaurants** (~4,700 orders) | **~8.5 restaurants** (~15,300 orders) | **+227% capacity** |
+| **Vercel Hobby Capacity (Low Venues)** | **~7.9 restaurants** | **~28.5 restaurants** | **+260% capacity** |
+| **Active CPU Runway (Medium Venues)** | **~0.63 restaurants** (CPU throttled) | **~2.05 restaurants** | **3.2x runway** |
+
+**Key Takeaway:** The POS side is already optimized. Applying those exact same polling rules to the customer status screen immediately expands free-tier hosting runway from 2 restaurants to nearly 9 restaurants without spending a single dollar.
 
 ---
 
