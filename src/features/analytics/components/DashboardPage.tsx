@@ -304,12 +304,7 @@ export default function DashboardPage() {
     fetchMetrics(true, startDate, endDate);
   }, [startDate, endDate]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchMetrics(false, startDate, endDate);
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [startDate, endDate]);
+
 
   const handlePresetSelect = (preset: 'today' | '2d' | '3d' | '7d' | '30d') => {
     setDatePreset(preset);

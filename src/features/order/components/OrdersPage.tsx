@@ -7,7 +7,7 @@ import { getAdminOrders, updateOrderStatus, updateOrderEstimatedTime, markOrderW
 import { getCachedOrders, setCachedOrders, updateOrderInCache, prefetchPosMenu, getCachedPosMenu, KitchenStats } from '../services/orderClientCache';
 import { PageHeader, StatusBadge, AdminButton } from '@/components/ui';
 import { useOrderNotification } from '@/components/providers';
-import { Clock, ArrowLeft, AlertTriangle, CheckCircle2, TrendingDown, MessageSquare, X, ShieldAlert, Plus, Minus, Trash2, Edit, Search, ExternalLink, ShoppingBag, Sparkles } from 'lucide-react';
+import { Clock, ArrowLeft, AlertTriangle, CheckCircle2, TrendingDown, MessageSquare, X, ShieldAlert, Plus, Minus, Trash2, Edit, Search, ExternalLink, ShoppingBag, Sparkles, RefreshCw } from 'lucide-react';
 import { OrderItem, Order } from '../types/order.types';
 import { ORDER_CONFIG } from '@/config/orderConfig';
 import { generateWhatsAppOrderLink } from '@/lib/whatsappService';
@@ -382,19 +382,7 @@ function OrdersContent() {
     }
   }, [tabParam]);
 
-  useEffect(() => {
-    if (businessCategory === 'salon') {
-      return; // Do not run background polling for salon mode
-    }
 
-    const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.hidden) {
-        return;
-      }
-      loadOrders(false);
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [businessCategory]);
 
   // Execution helper for status updates with delay metadata and rejection reason
   const executeStatusUpdate = async (
@@ -693,10 +681,16 @@ function OrdersContent() {
               <Plus className="w-4 h-4" />
               <span>+ New Counter Order</span>
             </Link>
-            <span className="inline-flex items-center gap-1.5 text-xs text-[#16A34A] font-medium bg-[#F0FDF4] px-2.5 py-1 rounded-full border border-emerald-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] animate-pulse" />
-              Live Polling Active
-            </span>
+            <button
+              type="button"
+              onClick={() => loadOrders(false)}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-white border border-[#E2E6EA] text-gray-700 hover:bg-gray-50 active:scale-95 transition-all shadow-xs cursor-pointer disabled:opacity-50"
+              title="Refresh Orders"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
           </div>
         }
       />

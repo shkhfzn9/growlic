@@ -311,7 +311,7 @@ function CartContent() {
           setOffersLoading(false);
         });
 
-      fetch(`/api/admin/discounts?restaurantId=${resolvedRestId}`)
+      fetch(`/api/customer/discounts?restaurantId=${resolvedRestId}`)
         .then((res) => res.json())
         .then((data) => {
           if (data.success && data.data?.settings) {

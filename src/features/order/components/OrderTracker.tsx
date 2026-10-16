@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { getOrderById, getCustomerLoyaltyInfo } from '@/actions/orders';
 import { getDeveloperPromo } from '@/actions/developerPromo';
 import Link from 'next/link';
-import { Check, Clock, ChefHat, UtensilsCrossed, PartyPopper, XCircle, ExternalLink, Sparkles, MessageCircle, PhoneCall, CreditCard, QrCode, X, Camera, Smartphone, Image as ImageIcon, Wrench, Package, CheckCircle2, Scissors } from 'lucide-react';
+import { Check, Clock, ChefHat, UtensilsCrossed, PartyPopper, XCircle, ExternalLink, Sparkles, MessageCircle, PhoneCall, CreditCard, QrCode, X, Camera, Smartphone, Image as ImageIcon, Wrench, Package, CheckCircle2, Scissors, RefreshCw } from 'lucide-react';
 import { CustomerNavbar } from '@/components/layout';
 import ConsultationModal from '@/components/ui/ConsultationModal';
 import { TRACK_NUDGES } from '../constants/trackNudges';
@@ -90,6 +90,40 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
   const [consultationModalOpen, setConsultationModalOpen] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isCooldown, setIsCooldown] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date>(() => new Date());
+  const [lastUpdatedText, setLastUpdatedText] = useState('just now');
+  const inFlightRef = useRef(false);
+  const lastFetchTimeRef = useRef<number>(Date.now());
+  const cooldownTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (cooldownTimeoutRef.current) {
+        clearTimeout(cooldownTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const updateLabel = () => {
+      const elapsedSec = Math.floor((Date.now() - lastUpdated.getTime()) / 1000);
+      if (elapsedSec < 10) {
+        setLastUpdatedText('just now');
+      } else if (elapsedSec < 60) {
+        setLastUpdatedText(`${elapsedSec}s ago`);
+      } else {
+        const mins = Math.floor(elapsedSec / 60);
+        setLastUpdatedText(`${mins}m ago`);
+      }
+    };
+
+    updateLabel();
+    const timer = setInterval(updateLabel, 5000);
+    return () => clearInterval(timer);
+  }, [lastUpdated]);
+
   useEffect(() => {
     setMounted(true);
     const active = getActiveTheme(initialOrder.restaurantId);
@@ -170,28 +204,72 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
     return () => clearInterval(interval);
   }, [order.status, nudges.length]);
 
+  const isTerminal = order.status === 'completed' || order.status === 'cancelled';
+
+  const handleRefreshStatus = useCallback(async () => {
+    if (order.status === 'completed' || order.status === 'cancelled') {
+      return;
+    }
+
+    if (businessCategory === 'salon') {
+      return; // Do not refresh for salon bookings
+    }
+
+    if (inFlightRef.current) {
+      return;
+    }
+
+    inFlightRef.current = true;
+    setIsRefreshing(true);
+
+    try {
+      const latestOrder = await getOrderById(orderId, order.restaurantId);
+      if (latestOrder) {
+        setOrder(latestOrder);
+      }
+      const nowTime = Date.now();
+      lastFetchTimeRef.current = nowTime;
+      setLastUpdated(new Date(nowTime));
+    } catch (err) {
+      console.error('Error refreshing order status:', err);
+    } finally {
+      inFlightRef.current = false;
+      setIsRefreshing(false);
+      setIsCooldown(true);
+      if (cooldownTimeoutRef.current) clearTimeout(cooldownTimeoutRef.current);
+      cooldownTimeoutRef.current = setTimeout(() => {
+        setIsCooldown(false);
+      }, 3000);
+    }
+  }, [order.status, businessCategory, orderId, order.restaurantId]);
+
+  // Refetch once when tab becomes visible or window regains focus (throttled to at most once per 10s)
   useEffect(() => {
     if (order.status === 'completed' || order.status === 'cancelled') {
       return;
     }
 
     if (businessCategory === 'salon') {
-      return; // Do not run background polling for salon bookings
+      return; // Keep salon early return
     }
 
-    const interval = setInterval(async () => {
-      try {
-        const latestOrder = await getOrderById(orderId, order.restaurantId);
-        if (latestOrder) {
-          setOrder(latestOrder);
-        }
-      } catch (err) {
-        console.error('Error polling order status:', err);
+    const handleFocusOrVisibility = () => {
+      if (document.hidden) return;
+      const now = Date.now();
+      if (now - lastFetchTimeRef.current < 10000) {
+        return; // Throttled: no more than once per 10 seconds
       }
-    }, 5000);
+      handleRefreshStatus();
+    };
 
-    return () => clearInterval(interval);
-  }, [orderId, order.status, order.restaurantId, businessCategory]);
+    document.addEventListener('visibilitychange', handleFocusOrVisibility);
+    window.addEventListener('focus', handleFocusOrVisibility);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleFocusOrVisibility);
+      window.removeEventListener('focus', handleFocusOrVisibility);
+    };
+  }, [order.status, businessCategory, handleRefreshStatus]);
 
   useEffect(() => {
     if (!order.estimatedTime || ['ready', 'completed', 'cancelled'].includes(order.status)) {
@@ -388,6 +466,25 @@ Please confirm and prepare my order!
             </h1>
             <p className="text-[0.6rem] text-text-dark/40 mt-0.5">{order._id}</p>
           </div>
+
+          {/* Manual Refresh & Last Updated (hidden for terminal statuses & salon) */}
+          {!isTerminal && businessCategory !== 'salon' && (
+            <div className="flex items-center justify-between px-3.5 py-2 bg-neutral-50 border border-neutral-200/80 rounded-xl text-xs">
+              <span className="text-neutral-500 font-medium text-[11px] flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                Last updated {lastUpdatedText}
+              </span>
+              <button
+                type="button"
+                onClick={handleRefreshStatus}
+                disabled={isRefreshing || isCooldown}
+                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg bg-neutral-900 text-white hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xs"
+              >
+                <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>{isRefreshing ? 'Refreshing...' : isCooldown ? 'Updated' : 'Refresh status'}</span>
+              </button>
+            </div>
+          )}
 
           {/* Status Banners */}
           {order.status === 'cancelled' && (
