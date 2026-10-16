@@ -34,6 +34,8 @@ export const createOrderZodSchema = z.object({
     .max(50, 'Order cannot contain more than 50 items'),
   subtotal: z.number().optional(),
   total: z.number().optional(),
+  discount: z.number().optional(),
+  couponCode: z.string().optional(),
   notes: z.string().optional(),
   appointmentDetails: z
     .object({

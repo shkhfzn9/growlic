@@ -29,6 +29,8 @@ export interface IOrderDocument extends Document {
   items: IOrderItem[];
   subtotal: number;
   total: number;
+  discount?: number;
+  couponCode?: string;
   status: 'received' | 'scheduled' | 'accepted' | 'confirmed' | 'in_progress' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'rejected';
   notes?: string;
   appointmentDetails?: IAppointmentDetails;
@@ -87,6 +89,8 @@ const OrderSchema: Schema = new Schema<IOrderDocument>(
     items: { type: [OrderItemSchema], required: true },
     subtotal: { type: Number, required: true },
     total: { type: Number, required: true },
+    discount: { type: Number, default: 0 },
+    couponCode: { type: String, default: null },
     status: {
       type: String,
       enum: ['received', 'scheduled', 'accepted', 'confirmed', 'in_progress', 'preparing', 'ready', 'completed', 'cancelled', 'rejected'],

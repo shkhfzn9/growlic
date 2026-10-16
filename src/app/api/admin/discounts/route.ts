@@ -39,13 +39,19 @@ export async function GET(req: NextRequest) {
 
     await dbConnect();
 
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
     const [settings, coupons, spendTiers, rawComboRules, rawMenuItems, orders] = await Promise.all([
       discountRepo.getDiscountSettings(restaurantId),
       discountRepo.getCoupons(restaurantId),
       discountTierRepo.findAll(restaurantId),
-      ComboRule.find({ restaurantId }).sort({ createdAt: -1 }),
-      Menu.find({ restaurantId }).sort({ category: 1, name: 1 }),
-      Order.find({ restaurantId, status: { $ne: 'cancelled' } }),
+      ComboRule.find({ restaurantId }).sort({ createdAt: -1 }).lean(),
+      Menu.find({ restaurantId }).sort({ category: 1, name: 1 }).lean(),
+      Order.find(
+        { restaurantId, status: { $ne: 'cancelled' }, createdAt: { $gte: ninetyDaysAgo } },
+        { subtotal: 1, total: 1 }
+      ).lean(),
     ]);
 
     let totalDiscountGiven = 0;

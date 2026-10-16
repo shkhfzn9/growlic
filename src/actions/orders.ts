@@ -70,6 +70,8 @@ export async function createOrder(data: {
   }>;
   subtotal: number;
   total: number;
+  discount?: number;
+  couponCode?: string;
   notes?: string;
   appointmentDetails?: {
     bookingDate: string;

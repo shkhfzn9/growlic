@@ -8,7 +8,7 @@ import { Check, Clock, ChefHat, UtensilsCrossed, PartyPopper, XCircle, ExternalL
 import { CustomerNavbar } from '@/components/layout';
 import ConsultationModal from '@/components/ui/ConsultationModal';
 import { TRACK_NUDGES } from '../constants/trackNudges';
-import { getRestaurantMenuContext } from '@/actions/menu';
+import { getCachedRestaurantMenuContext } from '@/actions/menu';
 import { getActiveTheme, saveActiveTheme } from '@/config/themes';
 import { getVocabulary } from '@/config/businessVocabulary';
 
@@ -149,7 +149,7 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
 
   useEffect(() => {
     if (order?.restaurantId) {
-      getRestaurantMenuContext(order.restaurantId)
+      getCachedRestaurantMenuContext(order.restaurantId)
         .then((context) => {
           if (context?.admin) {
             if (context.admin.businessCategory) {

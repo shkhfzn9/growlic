@@ -6,7 +6,7 @@ import { RootState } from '@/redux/store';
 import { updateQuantity, removeItem, clearCart, addItem } from '@/redux/cartSlice';
 import { createOrder, logEvent, getCustomerLoyaltyInfo, getOrdersByCustomerPhone } from '@/actions/orders';
 import { getUpsellConfig } from '@/actions/upsell';
-import { getRestaurantMenuContext } from '@/actions/menu';
+import { getCachedRestaurantMenuContext } from '@/actions/menu';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Minus, Plus, ArrowLeft, ShoppingBag, Loader2, X, Gift, TrendingUp, Sparkles, AlertTriangle, Ticket, CheckCircle, Pencil } from 'lucide-react';
@@ -216,6 +216,7 @@ function CartContent() {
   } | null>(null);
 
   const [customerPastOrders, setCustomerPastOrders] = useState<any[]>([]);
+  const lastFetchedPhoneRef = React.useRef<string>('');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -226,44 +227,37 @@ function CartContent() {
         setPhone(cachedPhone);
         setOriginalCachedPhone(cachedPhone);
         setIsCachedUser(true);
-        if (resolvedRestId) {
-          getCustomerLoyaltyInfo(cachedPhone, resolvedRestId)
-            .then(setLoyaltyInfo)
-            .catch((err) => console.error('Error fetching loyalty details inside cart:', err));
-
-          getOrdersByCustomerPhone(cachedPhone, resolvedRestId)
-            .then((orders) => {
-              if (orders && Array.isArray(orders)) setCustomerPastOrders(orders);
-            })
-            .catch((err) => console.error('Error loading past orders for cart recommendations:', err));
-        }
       }
     }
-  }, [resolvedRestId]);
+  }, []);
 
   useEffect(() => {
-    if (phone.length === 10 && resolvedRestId) {
-      getCustomerLoyaltyInfo(phone, resolvedRestId)
+    const cleanPhone = phone.trim();
+    if (cleanPhone.length === 10 && resolvedRestId) {
+      if (lastFetchedPhoneRef.current === cleanPhone) return;
+      lastFetchedPhoneRef.current = cleanPhone;
+
+      getCustomerLoyaltyInfo(cleanPhone, resolvedRestId)
         .then((info) => {
           setLoyaltyInfo(info);
-          if (info.customer) {
+          if (info.customer?.name) {
             setName(info.customer.name);
           }
         })
-        .catch((err) => console.error('Error loading loyalty details on input:', err));
+        .catch((err) => console.error('Error loading loyalty details inside cart:', err));
 
-      getOrdersByCustomerPhone(phone, resolvedRestId)
+      getOrdersByCustomerPhone(cleanPhone, resolvedRestId)
         .then((orders) => {
           if (orders && Array.isArray(orders)) setCustomerPastOrders(orders);
         })
-        .catch((err) => console.error('Error loading past orders for cart recommendations on input:', err));
+        .catch((err) => console.error('Error loading past orders for cart recommendations:', err));
     }
   }, [phone, resolvedRestId]);
 
   useEffect(() => {
     if (resolvedRestId) {
       setOffersLoading(true);
-      getRestaurantMenuContext(resolvedRestId)
+      getCachedRestaurantMenuContext(resolvedRestId)
         .then((context) => {
           if (context.admin) {
             setRestaurantName(context.admin.restaurantName || '');
@@ -922,6 +916,8 @@ function CartContent() {
         })),
         subtotal: subtotal,
         total: finalDiscountedTotal,
+        discount: Math.max(0, subtotal - finalDiscountedTotal),
+        couponCode: appliedCoupon?.code || undefined,
         notes: finalNotes || undefined,
         appointmentDetails: appointmentDetailsPayload,
       };

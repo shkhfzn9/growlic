@@ -28,6 +28,8 @@ export interface IOrder {
   items: IOrderItem[];
   subtotal: number;
   total: number;
+  discount?: number;
+  couponCode?: string;
   status: 'received' | 'scheduled' | 'accepted' | 'confirmed' | 'in_progress' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'rejected';
   notes?: string;
   appointmentDetails?: IAppointmentDetails;

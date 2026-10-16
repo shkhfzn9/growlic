@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { UtensilsCrossed, ShoppingBag, Receipt, Award, Bell, Loader2, Sparkles } from 'lucide-react';
 import { callStaffAction } from '@/actions/orders';
-import { getRestaurantMenuContext } from '@/actions/menu';
+import { getCachedRestaurantMenuContext } from '@/actions/menu';
 import { getActiveTheme, saveActiveTheme } from '@/config/themes';
 import { getVocabulary } from '@/config/businessVocabulary';
 
@@ -99,7 +99,7 @@ export default function CustomerNavbar({ restaurantId, menuContext }: CustomerNa
     }
 
     if (currentRestaurantId) {
-      getRestaurantMenuContext(currentRestaurantId)
+      getCachedRestaurantMenuContext(currentRestaurantId)
         .then((context) => {
           if (context && context.admin) {
             setCallStaffAllowed(context.admin.callStaffEnabled !== false);

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { CustomerNavbar } from '@/components/layout';
 import { getOrdersByCustomerPhone, getCustomerLoyaltyInfo, redeemLoyaltyReward } from '@/actions/orders';
-import { getRestaurantMenuContext } from '@/actions/menu';
+import { getCachedRestaurantMenuContext } from '@/actions/menu';
 
 interface OrderItem {
   menuItemId: string;
@@ -186,7 +186,7 @@ function OrdersHistoryContent() {
 
   useEffect(() => {
     if (resolvedRestaurantId) {
-      getRestaurantMenuContext(resolvedRestaurantId)
+      getCachedRestaurantMenuContext(resolvedRestaurantId)
         .then((context) => {
           if (context?.admin) {
             if (context.admin.themeGradientDark) setThemeGradientDark(context.admin.themeGradientDark);

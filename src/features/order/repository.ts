@@ -39,6 +39,8 @@ export function normalizeOrder(doc: any): IOrder {
     })),
     subtotal: plain.subtotal,
     total: plain.total,
+    discount: plain.discount || 0,
+    couponCode: plain.couponCode || undefined,
     status: plain.status,
     notes: plain.notes || '',
     appointmentDetails: plain.appointmentDetails ? {
@@ -98,6 +100,8 @@ export async function create(data: {
   }>;
   subtotal: number;
   total: number;
+  discount?: number;
+  couponCode?: string;
   status: IOrder['status'];
   notes?: string;
   appointmentDetails?: IOrder['appointmentDetails'];
@@ -551,7 +555,7 @@ export async function findByCustomerPhone(restaurantId: string | undefined, phon
   if (restaurantId) {
     query.restaurantId = sanitizeTenantId(restaurantId);
   }
-  const docs = await Order.find(query).sort({ createdAt: -1 });
+  const docs = await Order.find(query).sort({ createdAt: -1 }).limit(20).lean();
   return docs.map(normalizeOrder);
 }
 

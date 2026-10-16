@@ -1,6 +1,8 @@
 import * as orderRepo from './repository';
 import * as customerRepo from '@/features/customer/repository';
 import * as menuRepo from '@/features/menu/repositories/menuRepository';
+import * as discountRepo from '@/features/discount/repository';
+import * as discountTierRepo from '@/features/menu/repositories/discountTierRepository';
 import { NotFoundError, ValidationError } from '@/shared/errors';
 import { IOrder } from './types';
 import { validateCreateOrderPayload, validateOrderId, validateRestaurantId } from './validation';
@@ -48,6 +50,8 @@ export async function createOrder(data: {
   }>;
   subtotal?: number;
   total?: number;
+  discount?: number;
+  couponCode?: string;
   notes?: string;
   source?: 'qr_scan' | 'admin_counter';
   status?: IOrder['status'];
@@ -98,7 +102,66 @@ export async function createOrder(data: {
     });
   }
 
-  const calculatedTotal = calculatedSubtotal;
+  let calculatedTotal = calculatedSubtotal;
+  let orderDiscount = 0;
+
+  if (typeof data.total === 'number' && data.total < calculatedSubtotal && data.total >= 0) {
+    const rawClaimedDiscount = Math.round((calculatedSubtotal - data.total) * 100) / 100;
+    let maxAllowedDiscount = 0;
+
+    const discountSettings = await discountRepo.getDiscountSettings(restaurantId);
+    const storeDiscountsAllowed = discountSettings.masterEnabled !== false;
+
+    if (data.couponCode && discountSettings.couponsEnabled !== false && storeDiscountsAllowed) {
+      try {
+        const couponResult = await discountRepo.validateCoupon(restaurantId, data.couponCode, calculatedSubtotal);
+        if (couponResult.valid) {
+          maxAllowedDiscount += couponResult.discountAmount;
+          discountRepo.incrementCouponUsage(restaurantId, data.couponCode).catch((err) => {
+            console.error('[COUPON_USAGE_INCREMENT_ERROR]', err);
+          });
+        }
+      } catch (err) {
+        console.warn('[COUPON_VALIDATION_ERROR]', err);
+      }
+    }
+
+    if (admin.loyaltyEnabled) {
+      const existingCust = await customerRepo.findByPhone(restaurantId, trimmedPhone);
+      if (existingCust?.hasPendingDiscount) {
+        const loyaltyPercent = admin.discountPercentage || 20;
+        const loyaltyDiscountAmount = Math.round(calculatedSubtotal * (loyaltyPercent / 100));
+        maxAllowedDiscount += loyaltyDiscountAmount;
+      }
+    }
+
+    if (storeDiscountsAllowed) {
+      if (discountSettings.spendTiersEnabled !== false) {
+        try {
+          const activeTiers = await discountTierRepo.findActive(restaurantId);
+          let bestTierDiscount = 0;
+          for (const tier of activeTiers) {
+            if (calculatedSubtotal >= tier.minSpend) {
+              const discountAmt = Math.round(calculatedSubtotal * (tier.percentOff / 100));
+              if (discountAmt > bestTierDiscount) bestTierDiscount = discountAmt;
+            }
+          }
+          maxAllowedDiscount += bestTierDiscount;
+        } catch (tierErr) {
+          console.warn('[TIER_DISCOUNT_ERROR]', tierErr);
+        }
+      }
+
+      if (discountSettings.maxDiscountPerOrder > 0 && maxAllowedDiscount > discountSettings.maxDiscountPerOrder) {
+        maxAllowedDiscount = discountSettings.maxDiscountPerOrder;
+      }
+    } else {
+      maxAllowedDiscount = 0;
+    }
+
+    orderDiscount = Math.min(rawClaimedDiscount, maxAllowedDiscount, calculatedSubtotal);
+    calculatedTotal = Math.max(0, calculatedSubtotal - orderDiscount);
+  }
 
   // 1. Double-booking concurrency check & activeSlotKey generation for Salon appointments
   let activeSlotKey: string | null = null;
@@ -149,6 +212,8 @@ export async function createOrder(data: {
       items: validatedItems,
       subtotal: calculatedSubtotal,
       total: calculatedTotal,
+      discount: orderDiscount,
+      couponCode: data.couponCode ? data.couponCode.trim().toUpperCase() : undefined,
       status: data.status || 'received',
       ready_at: data.ready_at,
       prep_duration_seconds: data.prep_duration_seconds,
@@ -172,7 +237,7 @@ export async function createOrder(data: {
       trimmedPhone,
       calculatedTotal
     );
-    if (customer.hasPendingDiscount) {
+    if (customer.hasPendingDiscount && orderDiscount > 0) {
       await customerRepo.resetPendingDiscount(restaurantId, customer._id);
     }
   } catch (statsErr) {

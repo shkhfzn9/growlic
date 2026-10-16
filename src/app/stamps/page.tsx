@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { CustomerNavbar } from '@/components/layout';
 import { getCustomerLoyaltySummary, redeemLoyaltyReward } from '@/actions/orders';
-import { getRestaurantMenuContext } from '@/actions/menu';
+import { getCachedRestaurantMenuContext } from '@/actions/menu';
 import { getActiveTheme, saveActiveTheme } from '@/config/themes';
 
 interface LoyaltySummary {
@@ -72,7 +72,7 @@ function StampsDashboardContent() {
             const data = await getCustomerLoyaltySummary(cachedPhone);
             setSummaries(data);
             if (data && data.length > 0) {
-              getRestaurantMenuContext(data[0].restaurantId).then((context) => {
+              getCachedRestaurantMenuContext(data[0].restaurantId).then((context) => {
                 if (context?.admin) {
                   const gDark = context.admin.themeGradientDark || '#8B0000';
                   const gDarker = context.admin.themeGradientDarker || '#6B0000';
