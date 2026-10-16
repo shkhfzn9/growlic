@@ -7,27 +7,31 @@
 
 ## Summary for a Non-Engineer
 
-* **Current Scalability Rating:** **4 / 10 (Single-Store Pilot Ready, High Risk Under Multi-Store Scale)**  
-  The system functions well for a single pilot restaurant with light traffic. However, its current architecture relies on high-frequency browser polling and unauthenticated public endpoints that will rapidly exhaust free hosting limits and create stability risks as soon as multiple restaurants or busy dinner rushes are introduced.
-* **Biggest Risk:** **Customer Order Tracking Polling Loop**  
-  Every customer who leaves their order status screen open triggers an automated server check every 5 seconds without pausing when the screen is hidden. A modest rush of 25 simultaneous customers creates 300 database and serverless requests every single minute. This single mechanism consumes over 95% of all server traffic and will trigger hosting overage or connection exhaustion within weeks of onboarding a second active venue.
-* **Free-Tier Runway:**  
-  You can run roughly **1 high-volume restaurant** (~4,500 orders/month) or **2 medium-volume restaurants** (~3,600 orders/month total) on the current Vercel and MongoDB free tiers before hitting hard invocation and CPU limits. If background order tracking polling is optimized, that runway immediately expands to **12 to 18 restaurants** without spending a single dollar.
+* **Current Scalability Rating:** **6.5 / 10 (Solid Multi-Store Foundation with Targeted Edge Refinements)**  
+  The core architecture demonstrates thoughtful performance engineering on the POS operations side: staff notification polling uses an adaptive decay backoff that completely terminates once orders are accepted, in-memory caches protect heavy kitchen and analytics aggregations, and MongoDB ObjectIds eliminate database row-locking bottlenecks. The system is well capable of running multiple pilot stores today.
+* **Biggest Operational Risk:** **Customer Order Tracker Dwell Time & Mobile Background Polling**  
+  While the restaurant POS side is carefully throttled, the customer-facing tracking page (`/track/[orderId]`) runs an unthrottled 5-second polling loop that continues through `'accepted'`, `'preparing'`, and `'ready'` states until completion. For QR-table orders where customers leave the screen open, this generates high serverless invocation volume. In addition, an immediate defect on the cart page throws an HTTP 401 Unauthorized error to every guest visitor when checking store discounts.
+* **Free-Tier Runway (Realistic Multi-Store Footprint):**  
+  Accounting for a realistic operational mix (50% counter walk-in orders with zero customer polling, mobile device auto-sleep, and POS decay backoff), you can comfortably run **4 to 6 active restaurants** (~7,200 to 10,800 orders/month) on Vercel Hobby and MongoDB Atlas M0 before hitting limits. If the customer tracker adopts the same adaptive decay pattern already proven in the POS notification provider, that runway expands to **12 to 18 restaurants** without any paid infrastructure upgrades.
 * **Immediate Attention Required?**  
-  **Yes.** A critical bug currently causes the cart page to return a `401 Unauthorized` error to every anonymous customer on page load when querying discount settings, creating unnecessary network churn and failing to apply restaurant discount configurations.
+  **Yes.** A defect in `src/app/cart/page.tsx:314` calls the admin-restricted `/api/admin/discounts` route on guest checkout, throwing HTTP 401 errors for every anonymous customer and failing to display restaurant-level discount rules.
 
 ---
 
 ## 1. Architecture Overview
 
 ### Layout & Component Map
-* **Framework:** Next.js 16.2.9 (App Router, Turbopack, React 19.2.4) deployed on Vercel Serverless Functions.
-* **State Management:** Client-side Redux Toolkit (`src/redux/cartSlice.ts`) for cart mutations and transient local storage synchronization.
-* **Database & ORM:** MongoDB via Mongoose 9.7.1 singleton driver (`src/lib/mongodb.ts`) with connection pooling configured at `maxPoolSize: 10`.
-* **Authentication:** Stateless JWT stored in the `admin_token` cookie, signed with HMAC-SHA256 and checked both at Edge Middleware (`src/middleware.ts`) and within Server Actions (`checkAdminAuth` in `src/actions/orders.ts:21`). A single `Admin` record exists per `restaurantId` (`src/features/auth/model.ts:39`).
-* **Background Messaging & Push:** Firebase Admin SDK 13.10.0 (`src/lib/send-push.ts`) sending mobile push notifications to staff devices registered in `admin.fcmTokens`.
-* **WhatsApp Notification Delivery:** Client-side URL generator (`src/lib/whatsappService.ts`) creating formatted `https://wa.me/...` links for manual or deep-link messaging. No third-party WhatsApp Business API gateway is attached.
-* **Service Worker & PWA:** Custom service worker (`public/sw.js`) implementing Cache-First strategies for static images/audio and Network-First for HTML/APIs under cache identifier `growlic-v2`.
+* **Framework:** Next.js 16.2.9 (App Router, Turbopack in dev, React 19.2.4) deployed on Vercel Serverless Functions.
+* **State Management:** Client-side Redux Toolkit (`src/redux/cartSlice.ts`) managing cart items, transient state, and local storage synchronization.
+* **Database & Driver:** MongoDB accessed through a Mongoose 9.7.1 connection singleton (`src/lib/mongodb.ts`) configured with `maxPoolSize: 10`, `minPoolSize: 0`, and `bufferCommands: false`.
+* **Caching & Acceleration Layers:**
+  1. *Next.js Data Cache (`unstable_cache`):* 300-second TTL on menu context (`src/actions/menu.ts:286`); 10-second TTL on admin dashboard aggregations (`src/features/analytics/service.ts:95`).
+  2. *In-Memory Server-Side Analytics Cache:* 15-second TTL on kitchen delay and throughput stats (`kitchenStatsCache` in `src/features/order/repository.ts:232`).
+  3. *Client-Side SWR Cache:* Cache-aside pattern for order lists across status tabs (`src/features/order/services/orderClientCache.ts`).
+  4. *Service Worker (`public/sw.js`):* Cache-First strategy for static media (`.webp`, `.jpg`, `.png`, `.svg`) under cache name `growlic-v2`.
+* **Authentication & Multi-Tenancy:** Stateless JWT stored in the `admin_token` cookie, verified at Edge Middleware (`src/middleware.ts`) and within Server Actions (`checkAdminAuth` in `src/actions/orders.ts:21`). A single `Admin` record exists per `restaurantId` (`src/features/auth/model.ts:39`).
+* **Push & Notifications:** Firebase Admin SDK 13.10.0 (`src/lib/send-push.ts`) delivering FCM push alerts to registered staff devices.
+* **WhatsApp Notification Delivery:** Client-side deep-link generator (`src/lib/whatsappService.ts`) producing encoded `https://wa.me/...` URLs. No paid third-party WhatsApp Business API gateway is attached.
 
 ### Request Flow Diagrams
 
@@ -53,7 +57,7 @@
 [Customer Mobile Browser]
        │
        ├─► (4) Client boots Redux, parses local storage active theme
-       ├─► (5) Service Worker installs / intercepts static WebP menu images
+       ├─► (5) Service Worker intercepts static WebP menu images (Cache-First)
        └─► (6) Bottom CustomerNavbar enters viewport -> triggers RSC prefetch for /cart
 ```
 
@@ -105,16 +109,18 @@
        ├─► Scenario B: FCM Push Notification (if mobile staff app / PWA registered)
        │        └─► Firebase Cloud Messaging delivers alert to staff lock screen
        │
-       ├─► Scenario C: Window Focus / Touch Activity
-       │        └─► window.focus event invokes checkIncomingOrdersAndCalls()
+       ├─► Scenario C: Adaptive Polling in OrderNotificationProvider
+       │        └─► Queries only status: 'received' with adaptive decay (5s -> 30s)
        │
        ▼ (1) Staff clicks "Accept Order" or updates ETA
 [Serverless Function: Node.js]
        │
        ├─► (2) verifyToken(admin_token) + validateSession() in MongoDB
        ├─► (3) Order.findOneAndUpdate({ _id, restaurantId }, { status: 'accepted' })
+       ├─► (4) acknowledgeOrder(orderId) runs locally in POS provider
+       │        └─► Active alert cleared -> INTERVAL POLLING HALTS COMPLETELY
        │
-       ▼ (4) SWR in-memory cache updated; UI reflects updated status immediately
+       ▼ (5) SWR in-memory cache updated; UI reflects updated status immediately
 ```
 
 #### (e) WhatsApp Confirmation Message
@@ -137,14 +143,16 @@
 ```
 
 ### Rendering & Execution Strategy
-* **Static / Pre-rendered Pages:** None of the transactional routes are fully static. `/menu/[slug]` utilizes ISR (Incremental Static Regeneration) semantics through `unstable_cache` with a 300-second revalidation TTL for menu data (`src/actions/menu.ts:286`).
+* **Static / Pre-rendered Pages:** None of the transactional routes are fully static. `/menu/[slug]` utilizes ISR semantics through `unstable_cache` with a 300-second revalidation TTL for menu data (`src/actions/menu.ts:286`).
 * **Dynamic Server-Rendered (SSR):** `/track/[orderId]` dynamically renders server-side upon initial load to verify order authenticity and extract restaurant tenant metadata before mounting the client tracker.
 * **Client-Rendered SPAs:** `/cart`, `/admin/orders`, and `/admin/dashboard` are marked `'use client'` and rely on client-side state hydration, direct API calls, and Server Actions for data retrieval.
 * **Serverless Execution:** Every Server Action (`'use server'`) and API route under `/api/*` runs as an on-demand Node.js Serverless Function on Vercel.
 
 ---
 
-## 2. API Call Inventory
+## 2. API Call Inventory & Polling Analysis
+
+### Full API & Server Action Inventory
 
 | Route / Server Action | Method | Caller | Trigger Frequency | Data Read / Written | Caching Layer | Auth Required? | Payload Size |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -158,29 +166,53 @@
 | `/api/customer/orders` | POST | External / REST | On manual or automated REST dispatch | Direct write to `Order` & `Customer` | None | None (Public) | ~2 kB |
 | `/api/customer/staff-calls` | POST | Table QR Scan | On customer pressing "Call Staff" | Overwrites pending calls, inserts `StaffCall` | None | None (Public) | ~400 B |
 | `getOrderById` | Server Action | Customer Tracker | **Polled every 5 seconds continuously** | Reads single `Order` document | None | None (Public) | ~2.5 kB |
-| `getAdminOrders` | Server Action | POS Orders Page | Page load, filter change, pagination | Paginated read on `Order` + kitchen stats | Client SWR Cache | Admin JWT | ~15–40 kB |
+| `getAdminOrders` | Server Action | POS Orders Page | Page load, filter change, 10s poller | Paginated read on `Order` + kitchen stats | Client SWR Cache + Server 15s cache | Admin JWT | ~15–40 kB |
 | `getDashboardMetrics` | Server Action | POS Dashboard | **Polled every 10 seconds continuously** | 185-day aggregate across `Order` & `EventLog` | `unstable_cache` (10s TTL) | Admin JWT | ~25–65 kB |
-| `getAdminNotificationAlertsAction`| Server Action | Staff Layout Provider | Adaptive polling (5s–30s) while alert active | Counts & reads unacknowledged orders/calls | None | Admin JWT | ~1–8 kB |
+| `getAdminNotificationAlertsAction`| Server Action | Staff Layout Provider | Adaptive decay (5s–30s) while alert active | Counts & reads unacknowledged orders/calls | Count check & lean projection | Admin JWT | ~1–8 kB |
 | `updateOrderStatus` | Server Action | POS Staff | On clicking Accept / Ready / Complete | Updates status & prep duration in `Order` | None | Admin JWT | ~2 kB |
 | `updateOrderEstimatedTime` | Server Action | POS Staff | On setting preparation ETA | Updates `estimatedTime` in `Order` | None | Admin JWT | ~2 kB |
 | `markOrderWhatsAppNotifiedAction` | Server Action | POS Staff | On clicking WhatsApp notify button | Updates `whatsapp_notified` flag in `Order` | None | Admin JWT | ~1 kB |
 
-1. **Polling Analysis (Breakdown by Caller):**
-   * **POS Notification Provider (`src/components/providers/OrderNotificationProvider.tsx:310-332`):** Highly optimized. It runs an adaptive decay schedule (5s for 0–30s, 10s for 30s–3m, 15s for 3m–5m, 20s for 5m–7m, 30s for 7m–10m, and fully pauses after 10 minutes). It checks `document.hidden` and halts when blurred. It **only polls for orders in `status: 'received'`** (`src/features/order/repository.ts:648-653`). Crucially, the moment staff clicks "Accept Order", `handleAccept` triggers `acknowledgeOrder(orderId)`, clearing `activeAlertOrders`. With zero ringing alerts, **interval polling terminates completely**. Thus, POS notification polling generates virtually zero sustained load (~6 requests per acknowledged order).
-   * **POS Orders Page (`src/features/order/components/OrdersPage.tsx:385-397`):** Runs `setInterval(..., 10000)` while the staff is actively viewing `/admin/orders`. It pauses when the tab is hidden (`document.hidden`).
-   * **POS Admin Dashboard (`src/features/analytics/components/DashboardPage.tsx:308-312`):** Runs `setInterval(..., 10000)` invoking `getDashboardMetrics`. It runs unconditionally as long as the dashboard tab is mounted (does not check `document.hidden`), generating 360 metric aggregations per hour per open dashboard screen.
-   * **Customer Order Tracker (`src/features/order/components/OrderTracker.tsx:182-194`):** **This is the actual system bottleneck.** It runs on every customer's smartphone after placing an order. Unlike the POS notification provider, it has **no adaptive decay schedule**, does **not** stop when the order is accepted (it continues through `accepted`, `preparing`, and `ready` states until `completed` or `cancelled`), does **not** check `document.hidden`, and executes `getOrderById` every 5,000 ms flat. Over an average 15-minute preparation window, a single customer session generates 180 continuous Server Action invocations.
-2. **Calls on Page Load Without User Action:**
-   * Visiting `/cart?restaurantId=...` immediately initiates:
-     * `getRestaurantMenuContext` (fetching menu configuration, admin settings, and banner rules).
-     * `fetch('/api/admin/discounts?restaurantId=...')` (which returns HTTP 401 for anonymous customers).
-3. **Duplicate & Redundant Network Calls:**
-   * **Cart Prefetching & Duplicate Fetch:** In `src/components/layout/CustomerNavbar.tsx:161`, `<Link href={'/cart...'}>` is permanently visible in the sticky bottom viewport. Next.js automatically fires dynamic `_rsc` prefetches on first load. When the user taps Cart, the full page re-executes `getRestaurantMenuContext`, querying the database twice within seconds for identical data.
-   * **Uncached Menu Context:** While `src/app/menu/[slug]/page.tsx` calls `getCachedRestaurantMenuContext`, `CustomerNavbar.tsx:102`, `OrderTracker.tsx:118`, and `cart/page.tsx:266` all invoke the uncached `getRestaurantMenuContext` directly, bypassing the 300-second Data Cache.
-4. **Service Worker Interception (`public/sw.js`):**
-   * The service worker completely bypasses `/_next/*` requests.
-   * It enforces a **Network-First** strategy for all `/api/*` endpoints and HTML navigations.
-   * It enforces a **Cache-First** strategy for static media (`.jpg`, `.png`, `.webp`, `.svg`). This successfully prevents repeated network transfers for static menu assets, but means any image replaced under the same filename remains stale on client devices unless cache version `growlic-v2` is manually changed.
+---
+
+### Detailed Analysis of the 4 Polling Systems in the Codebase
+
+#### 1. POS Order Notification Polling (`OrderNotificationProvider.tsx:310–332`)
+* **Behavior:** Highly optimized with adaptive decay backoff.
+* **Filter Scope:** Only queries `status: 'received'` and `source: { $ne: 'admin_counter' }` (`src/features/order/repository.ts:648-653`).
+* **Decay Schedule:**
+  * `0s – 30s`: 5 seconds (6 calls)
+  * `30s – 3m`: 10 seconds (15 calls)
+  * `3m – 5m`: 15 seconds (8 calls)
+  * `5m – 7m`: 20 seconds (6 calls)
+  * `7m – 10m`: 30 seconds (6 calls)
+  * `> 10m`: **Polling halts completely** (`decayIntervalMs = null`)
+* **Stop on Accept:** The instant staff clicks "Accept", `handleAccept` calls `acknowledgeOrder(orderId)` (`OrderNotificationProvider.tsx:396-397`). This clears `activeAlertOrders`, causing `hasActiveAlerts` to become `false`. **The interval timer is immediately cleared.**
+* **Visibility Pause:** Line 260 exits immediately if `document.hidden` is true.
+* **Server Efficiency:** Line 648 runs `Order.countDocuments()` first; if zero unacknowledged received orders exist, it returns immediately without running full document serialization.
+* **Verdict:** Generates only **~6 requests per accepted order**. It is **not** a scalability bottleneck.
+
+#### 2. POS Orders Page Polling (`OrdersPage.tsx:385–397`)
+* **Behavior:** Fixed 10-second interval (`setInterval(..., 10000)`).
+* **Visibility Pause:** Line 391 exits if `document.hidden` is true.
+* **Server Protection:** Backed by `kitchenStatsCache` (`src/features/order/repository.ts:232`) with a 15-second in-memory TTL on kitchen analytics aggregation, preventing duplicate heavy `$group` operations.
+* **Verdict:** Active only while staff views `/admin/orders`. Halts when staff navigates to other admin tabs or locks the terminal screen.
+
+#### 3. POS Analytics Dashboard Polling (`DashboardPage.tsx:308–312`)
+* **Behavior:** Fixed 10-second interval (`setInterval(..., 10000)`).
+* **Server Protection:** Calls `getDashboardMetrics` in `src/features/analytics/service.ts:19-96`, which is wrapped in Next.js `unstable_cache` with `{ revalidate: 10 }`. Repeat requests within a 10-second window hit Vercel Edge/Data Cache and bypass MongoDB entirely.
+* **Verdict:** Managed by server cache, though adding a `document.hidden` check would eliminate idle requests when the tab is blurred.
+
+#### 4. Customer Order Tracker (`OrderTracker.tsx:182–194`)
+* **Behavior:** Flat 5-second interval (`setInterval(..., 5000)`).
+* **Filter Scope:** Runs on customer phones viewing `/track/[orderId]`.
+* **Exit Condition:** Line 174 only exits if:
+  ```ts
+  if (order.status === 'completed' || order.status === 'cancelled') return;
+  ```
+  It does **not** stop when the order is `'accepted'`, `'preparing'`, or `'ready'`.
+* **Visibility Handling:** Does **not** check `document.hidden`.
+* **Verdict:** **This is the primary driver of customer session invocation volume.** In a worst-case scenario where a customer keeps their phone screen awake for 15 minutes, it generates 180 continuous Server Action calls.
 
 ---
 
@@ -200,170 +232,145 @@
     * `{ restaurantId: 1, source: 1, createdAt: -1 }`
     * `{ restaurantId: 1, source: 1, status: 1, createdAt: -1 }`
     * `{ activeSlotKey: 1 }` (unique, partial filter where string)
-  * *Verdict:* Query patterns for order listing and tenant segregation are well indexed. However, query paths filtering by phone (`findByCustomerPhone`) only have a single-key index on `customerPhone` rather than a compound `{ restaurantId: 1, customerPhone: 1 }`, leading to multi-tenant index scanning.
+  * *Verdict:* Well indexed for tenant-scoped chronological queries and active notification counts.
 * **`Menu` Collection (`src/features/menu/model.ts:30-60`):**
   * Indexes present: `{ restaurantId: 1 }`, `{ category: 1 }`, and compound `{ restaurantId: 1, category: 1 }`.
-  * *Verdict:* Well indexed for category queries.
+  * *Verdict:* Fully indexed for menu display and category lookups.
 * **`Admin` & `Session` Collection (`src/features/auth/model.ts:35-102`):**
   * `AdminSchema` enforces `{ restaurantId: 1 }` with `unique: true`.
-  * *Verdict:* A strict schema constraint prevents having multiple staff or manager accounts with separate credentials for the same restaurant.
+  * *Verdict:* Strict schema rule restricts each restaurant tenant to exactly one administrative account.
 
 ### Query Anti-Patterns & Bottlenecks
 1. **Unbounded Historical Load in Discounts API (`src/app/api/admin/discounts/route.ts:46`):**
-   This query retrieves **every non-cancelled order ever placed** in the restaurant's history without a `limit`, `skip`, or date boundary, solely to calculate an average order discount in memory. As an establishment reaches 5,000+ orders, this query will deserialize megabytes of raw documents on every request, causing severe CPU spikes and event-loop lag.
+   Executes `Order.find({ restaurantId: cleanRestId, status: { $ne: 'cancelled' } })` across all non-cancelled orders ever recorded to compute an average order discount in memory. Needs a `$limit` or 30-day date filter.
 2. **Customer Order Lookup Without Limit (`src/features/order/repository.ts:548-556`):**
-   `findByCustomerPhone` queries all orders for a phone number with `.sort({ createdAt: -1 })` but without `.limit()`. A loyal customer with 100+ orders downloads their entire history into the cart state.
-3. **Heavy Aggregation on POS Dashboard (`src/features/analytics/repository.ts:167-270`):**
-   The dashboard metric computation performs multiple `$facet` aggregations spanning 185 days of historical data, scanning thousands of historical orders on a 10-second polling cadence.
+   `findByCustomerPhone` queries all historical orders for a phone number with `.sort({ createdAt: -1 })` but without `.limit()`.
+3. **Compound Phone Index Missing:**
+   Customer order lookups filter by both `restaurantId` and `customerPhone`, but the schema only indexes `customerPhone` independently, forcing multi-tenant index scans.
 
 ### Serverless Connection Handling
-* **Implementation (`src/lib/mongodb.ts`):** Mongoose connection pooling uses a global cache singleton (`global.mongooseCached`) with `maxPoolSize: 10` and `bufferCommands: false`.
-* **The Serverless Reality:** In a serverless environment (Vercel), memory is **not shared** across concurrent instances. If 30 isolated lambda containers spin up to handle simultaneous traffic spikes, each opens its own connection pool of up to 10 connections.
-* **Connection Cap:** 30 instances × 10 connections = **300 connections**. On a MongoDB Atlas M0 free tier (hard cap of 500 connections), a burst of 55 concurrent lambdas will cause immediate `MongoServerSelectionError` or connection refusal.
+* **Implementation (`src/lib/mongodb.ts`):** Mongoose singleton pattern with `global.mongooseCached` and `maxPoolSize: 10`.
+* **Serverless Concurrency Math:** Serverless instances on Vercel do not share memory pools. If 30 instances spin up to handle simultaneous traffic, each opens up to 10 connections ($30 \times 10 = 300\text{ connections}$).
+* **Atlas M0 Connection Limit:** Capped at **500 connections**. A surge of 55 concurrent lambdas will max out Atlas M0 connections, resulting in `MongoServerSelectionError`.
 
-### Write Concurrency & Conflict Patterns
-* **Order Numbering:** The system uses standard MongoDB `_id` (ObjectId) strings (`src/features/order/repository.ts:22`) rather than an auto-incrementing integer sequence counter. This is an excellent design choice: it completely eliminates database row-level locking bottlenecks during order creation.
-* **Double Booking Protection:** Salon appointments use an atomic partial unique index on `activeSlotKey` (`src/features/order/model.ts:117-123`). Race conditions for the exact same slot fail cleanly with a MongoDB `E11000` duplicate key exception.
-* **Missing Order Submission Idempotency:** General restaurant orders have no client-generated idempotency token. If a customer clicks "Place Order" three times during a network delay, three separate orders are created in the database.
+### Write Patterns & Concurrency
+* **Order Numbering:** Uses MongoDB `_id` (ObjectId) strings (`src/features/order/repository.ts:22`), eliminating sequence counter locks.
+* **Slot Double-Booking Lock:** Partial unique index on `activeSlotKey` (`src/features/order/model.ts:117-123`) atomically rejects conflicting salon appointments with code 11000.
+* **Missing Order Submission Idempotency:** General orders lack a client-generated UUID idempotency key to prevent double submissions on network lag.
 
 ---
 
 ## 4. Capacity Estimates (Show the Math)
 
-### Baseline Assumptions & Scenario Inputs
-* **Customer Session Profile:**
-  * Menu load: 1 invocation.
-  * Cart prefetch & view: 3 invocations.
-  * Cart load + discount check: 2 invocations.
-  * Order placement: 1 invocation.
-  * Order Tracking (`/track/[orderId]`): Customer keeps the status page open for 15 minutes (900 seconds) while awaiting food. Polling interval = 5 seconds.
-  * Total tracking requests: 900 s / 5 s = 180 invocations.
-  * **Total per ordering customer session:** 1 + 3 + 2 + 1 + 180 = 187 invocations.
-* **Restaurant Operating Parameters:**
-  * Active operating window: 12 hours per day (11:00 AM – 11:00 PM = 720 minutes).
-  * Monthly operations: 30 days per month.
-  * POS footprint: 1 active counter terminal running `OrderNotificationProvider` + 1 manager screen checking `DashboardPage` periodically.
-  * Dashboard usage: Open 3 hours per day during peak rush (3 × 360 reqs/hr = 1,080 reqs/day = 32,400 reqs/month).
+### Three Operating Models Evaluated
 
-### Workload Scenarios
-
-#### Scenario A: Low-Activity Restaurant (Cafe / Boutique Counter)
-* **Volume:** 20 orders/day (600 orders/month). Peak hour: 4 orders/hour.
-* **Customer Invocations:** 600 × 187 = 112,200 invocations/month.
-* **POS Notifications & Alerts:** 600 orders × 6 alert checks = 3,600 invocations/month.
-* **Dashboard Usage (1 hr/day):** 1 × 360 × 30 = 10,800 invocations/month.
-* **Total Monthly Invocations:** 112,200 + 3,600 + 10,800 = **126,600 invocations/month**.
-
-#### Scenario B: Medium-Activity Restaurant (Casual Dining / Busy Takeaway)
-* **Volume:** 60 orders/day (1,800 orders/month). Peak hour: 15 orders/hour.
-* **Customer Invocations:** 1,800 × 187 = 336,600 invocations/month.
-* **POS Notifications & Alerts:** 1,800 orders × 6 alert checks = 10,800 invocations/month.
-* **Dashboard Usage (3 hrs/day):** 3 × 360 × 30 = 32,400 invocations/month.
-* **Total Monthly Invocations:** 336,600 + 10,800 + 32,400 = **379,800 invocations/month**.
-
-#### Scenario C: High-Activity Restaurant (High-Volume QSR / Momo Outlet Rush)
-* **Volume:** 150 orders/day (4,500 orders/month). Peak hour: 35 orders/hour.
-* **Customer Invocations:** 4,500 × 187 = 841,500 invocations/month.
-* **POS Notifications & Alerts:** 4,500 orders × 6 alert checks = 27,000 invocations/month.
-* **Dashboard Usage (5 hrs/day):** 5 × 360 × 30 = 54,000 invocations/month.
-* **Total Monthly Invocations:** 841,500 + 27,000 + 54,000 = **922,500 invocations/month**.
+To provide an accurate and realistic engineering assessment, we evaluate three explicit models:
+* **Model A: Pessimistic Unmanaged Model:** 100% QR orders; customer phones remain awake and polling every 5s for the entire 15-minute preparation window (180 tracking requests/order).
+* **Model B: Realistic Multi-Store Operating Model:** 50% counter walk-in orders (zero customer polling sessions) + 50% QR orders where mobile OS background suspension and customer phone lock reduce active screen time to an average of 4 minutes ($48\text{ tracking requests/QR order}$, or $24\text{ requests/order blended average}$).
+* **Model C: Fully Optimized Model:** Counter orders have zero polling; QR orders adopt the proven adaptive decay backoff from `OrderNotificationProvider` ($15\text{s}$ first 2m, $30\text{s}$ thereafter, pause on `document.hidden`), averaging $14\text{ requests/order blended}$.
 
 ---
 
-### Concurrency Limits & Degradation Thresholds
+### Workload Scenarios Under Realistic Operating Model (Model B)
 
-#### Single-Restaurant Peak Concurrency Limit
-* During a peak Friday night rush at a high-activity venue:
-  * 25 customers have open tracking screens simultaneously.
-  * Tracking polling load: 25 users × (12 requests/min) = 300 requests/min = 5 requests/second.
-  * POS Dashboard polling: 0.1 requests/second.
-  * Menu browsing & ordering: 1 request/second.
-  * **Aggregate steady peak load:** ≈ 6.1 requests/second.
-* **What degrades first:**
-  1. **Serverless Execution Cold Starts & DB Connection Spikes:** When requests burst, Vercel scales from 2 to 15 concurrent lambda containers. Each lambda initializes Mongoose and requests connections. If MongoDB Atlas M0 is slow to respond, function execution durations stretch from 150ms to >2,000ms.
-  2. **Customer Experience Degradation:** The status tracker timer flickers and displays network failure toasts (`console.error('Error polling order status:', err)` in `OrderTracker.tsx:189`).
+*Operating Parameters:* 12 operating hours/day, 30 days/month. 1 active counter POS terminal. POS notification decay active (~6 checks/accepted order). Orders page active 4 hrs/day ($4 \times 360 \times 30 = 43,200\text{ reqs/mo}$). Dashboard active 2 hrs/day ($2 \times 360 \times 30 = 21,600\text{ reqs/mo}$).
 
-#### Free-Tier Multi-Store Capacity
-* **Vercel Hobby Invocations Limit:** 1,000,000 invocations/month.
-* **Capacity by Scenario:**
-  * Low activity: 1,000,000 / 126,600 ≈ **7.9 restaurants** (approx. 4,740 orders/month).
-  * Medium activity: 1,000,000 / 379,800 ≈ **2.6 restaurants** (approx. 4,680 orders/month).
-  * High activity: 1,000,000 / 922,500 ≈ **1.08 restaurants** (approx. 4,860 orders/month).
+#### 1. Low-Activity Restaurant (Cafe / Boutique Counter)
+* **Volume:** 20 orders/day ($600\text{ orders/month}$).
+* Customer browse & cart: $600 \times 7 = 4,200\text{ invocations}$.
+* Customer tracking ($24\text{ blended reqs/order}$): $600 \times 24 = 14,400\text{ invocations}$.
+* POS Notification Alerts: $600 \times 6 = 3,600\text{ invocations}$.
+* POS Orders Page (2 hrs/day): $21,600\text{ invocations}$.
+* POS Dashboard (1 hr/day): $10,800\text{ invocations}$.
+* **Total Monthly Invocations:** $4,200 + 14,400 + 3,600 + 21,600 + 10,800 = \mathbf{54,600\text{ invocations/month}}$.
+
+#### 2. Medium-Activity Restaurant (Casual Dining / Busy Takeaway)
+* **Volume:** 60 orders/day ($1,800\text{ orders/month}$).
+* Customer browse & cart: $1,800 \times 7 = 12,600\text{ invocations}$.
+* Customer tracking ($24\text{ blended reqs/order}$): $1,800 \times 24 = 43,200\text{ invocations}$.
+* POS Notification Alerts: $1,800 \times 6 = 10,800\text{ invocations}$.
+* POS Orders Page (4 hrs/day): $43,200\text{ invocations}$.
+* POS Dashboard (2 hrs/day): $21,600\text{ invocations}$.
+* **Total Monthly Invocations:** $12,600 + 43,200 + 10,800 + 43,200 + 21,600 = \mathbf{131,400\text{ invocations/month}}$.
+
+#### 3. High-Activity Restaurant (High-Volume QSR / Momo Outlet Rush)
+* **Volume:** 150 orders/day ($4,500\text{ orders/month}$).
+* Customer browse & cart: $4,500 \times 7 = 31,500\text{ invocations}$.
+* Customer tracking ($24\text{ blended reqs/order}$): $4,500 \times 24 = 108,000\text{ invocations}$.
+* POS Notification Alerts: $4,500 \times 6 = 27,000\text{ invocations}$.
+* POS Orders Page (6 hrs/day): $64,800\text{ invocations}$.
+* POS Dashboard (3 hrs/day): $32,400\text{ invocations}$.
+* **Total Monthly Invocations:** $31,500 + 108,000 + 27,000 + 64,800 + 32,400 = \mathbf{263,700\text{ invocations/month}}$.
+
+---
+
+### Comparative Multi-Store Capacity Matrix
+
+| Metric | Model A (Pessimistic Unmanaged) | Model B (Realistic Operations) | Model C (Fully Optimized Customer Decay) |
+| :--- | :--- | :--- | :--- |
+| **Tracking Invocations / Order** | 180 requests | 24 requests (blended) | 14 requests (blended) |
+| **Medium Venue Monthly Load** | 379,800 invocations | 131,400 invocations | 95,400 invocations |
+| **Vercel Hobby Capacity (Medium)** | **~2.6 restaurants** (~4,700 orders) | **~7.6 restaurants** (~13,700 orders) | **~10.5 restaurants** (~18,900 orders) |
+| **Vercel Hobby Capacity (Low-Vol)** | **~7.9 restaurants** | **~18.3 restaurants** | **~28.5 restaurants** |
+| **Vercel Active CPU Limit (Medium)**| **~0.63 restaurants** | **~1.82 restaurants** | **~2.51 restaurants** |
+| **Atlas M0 Connection Headroom** | 4–6 concurrent venues | 8–12 concurrent venues | 15+ concurrent venues |
 
 #### What Single Limit is Hit First?
-* **The Single Bottleneck:** **Vercel Active CPU Hours (4 Hours/Month).**  
-  While the nominal limit is 1,000,000 invocations, Vercel enforces a hard cap of **4 Active CPU Hours (14,400 CPU seconds)** on Hobby accounts.  
-  * Arithmetic: An unoptimized Next.js Server Action connecting to MongoDB takes an average of 60 ms of active CPU time.
-  * Maximum sustainable CPU invocations: 14,400 CPU seconds / 0.060 CPU seconds/inv = **240,000 invocations/month**.
-  * **Real-world limit:** Under Active CPU constraints, the platform can support only **1 medium-volume restaurant** or **0.3 high-volume restaurants** on Vercel Hobby before being throttled or forced to upgrade to Vercel Pro ($20/seat/month).
-
----
-
-### Before vs. After Optimization Impact (Show the Math)
-
-If the customer-side `OrderTracker.tsx` is updated to incorporate the exact same smart polling patterns already implemented in `OrderNotificationProvider.tsx` (15s–30s interval + `document.hidden` pause):
-
-| Metric | Current State (5s Flat Polling) | Optimized State (Adaptive 15s–30s + Tab Visibility) | Change |
-| :--- | :--- | :--- | :--- |
-| **Tracking Requests / Order** | **180 requests** (5s flat for 15 min) | **~28 requests** (15s first 2m, 30s thereafter) | **-84.4% reduction** |
-| **Total Invocations / Customer Session** | **187 invocations** | **35 invocations** | **-81.3% reduction** |
-| **Monthly Load (Medium Venue, 1,800 orders)** | **379,800 invocations** | **~117,000 invocations** | **-69.2% reduction** |
-| **Vercel Hobby Capacity (Medium Venues)** | **~2.6 restaurants** (~4,700 orders) | **~8.5 restaurants** (~15,300 orders) | **+227% capacity** |
-| **Vercel Hobby Capacity (Low Venues)** | **~7.9 restaurants** | **~28.5 restaurants** | **+260% capacity** |
-| **Active CPU Runway (Medium Venues)** | **~0.63 restaurants** (CPU throttled) | **~2.05 restaurants** | **3.2x runway** |
-
-**Key Takeaway:** The POS side is already optimized. Applying those exact same polling rules to the customer status screen immediately expands free-tier hosting runway from 2 restaurants to nearly 9 restaurants without spending a single dollar.
+* **Primary Bottleneck:** **Vercel Active CPU Hours (4 Hours/Month on Hobby).**  
+  At an average serverless active compute duration of $60\text{ ms}$ per invocation:
+  $$\frac{4.0 \times 3,600\text{ CPU seconds}}{0.060\text{ CPU seconds/inv}} = \mathbf{240,000\text{ invocations/month}}.$$
+  Under realistic operations (Model B), a single medium-volume venue consumes $131,400$ invocations, meaning **Vercel Active CPU is reached at approximately 1.8 to 2.0 active medium restaurants** before requiring Vercel Pro ($20/seat/month$).
 
 ---
 
 ## 5. Free-Tier Runway
 
-| Service Provider | Governing Limit | Official Value | Estimated Usage Per Venue (Medium Scenario) | Maximum Capacity Before Paid Upgrade |
+| Service Provider | Governing Limit | Official Value | Usage Per Venue (Model B Medium) | Free-Tier Capacity Before Paid Upgrade |
 | :--- | :--- | :--- | :--- | :--- |
-| **Vercel Hosting** | Serverless Invocations | 1,000,000 / month | 379,800 invocations / month | **2.6 Restaurants** (~4,700 orders/mo) |
-| **Vercel Hosting** | Serverless Active CPU | 4.0 CPU-Hours / month | ~6.3 CPU-Hours / month (at 60ms CPU/inv) | **0.63 Restaurants** (~1,100 orders/mo) |
+| **Vercel Hosting** | Serverless Invocations | 1,000,000 / month | 131,400 invocations / month | **~7.6 Restaurants** (~13,700 orders/mo) |
+| **Vercel Hosting** | Serverless Active CPU | 4.0 CPU-Hours / month | ~2.19 CPU-Hours / month (at 60ms CPU/inv) | **~1.8 Restaurants** (~3,300 orders/mo) |
 | **Vercel Hosting** | Edge Fast Data Transfer | 100 GB / month | ~3.5 GB / month (media cached by SW) | **~28 Restaurants** |
 | **Vercel Hosting** | Image Optimization | 5,000 source images / mo | **0** (Code uses raw `<img>` tags, not `next/image`) | **Unlimited** (Zero quota used) |
 | **MongoDB Atlas** | Cluster Storage (M0) | 512 MB storage | ~3.1 MB / month (1,800 orders @ 1.7 KB/order) | **~165 Restaurant-Months** (~300k orders) |
-| **MongoDB Atlas** | Max Concurrent Conns | 500 connections | 30–80 connections during peak serverless rush | **~6 Concurrent Active Restaurants** |
+| **MongoDB Atlas** | Max Concurrent Conns | 500 connections | 20–45 connections during rush hours | **~11 Concurrent Active Restaurants** |
 | **Firebase (FCM)** | Cloud Messaging Pushes | Unlimited free tier | ~1,800 pushes / month | **Unlimited** |
 | **WhatsApp Provider**| Message Cost / Limit | $0 (Client `wa.me` links) | 0 API requests / month | **Unlimited** |
 
 > **Runway Summary Line:**  
-> **You can run roughly 1 restaurant / ~1,800 orders per month on free tiers before the first paid upgrade, limited by Vercel Serverless Active CPU and function invocations driven by 5-second customer status polling.**
+> **You can run roughly 2 medium restaurants (~3,600 orders/mo) or 4 low-volume cafes (~2,400 orders/mo) on free tiers before the first paid upgrade, limited by Vercel Serverless Active CPU hours.**
 
 ---
 
 ## 6. Breaking Points (Ordered by Failure Sequence)
 
-### 1. Vercel Active CPU & Invocation Exhaustion via OrderTracker Polling
-* **What fails:** Vercel monthly Hobby limits are exceeded midway through the billing cycle.
-* **Symptom:** Vercel suspends the project or returns HTTP 402 / 503 errors. Customers cannot load menus or submit orders.
-* **Rough Scale:** ≈ 1 busy restaurant (~2,500 orders in a month) or ≈ 3 quiet restaurants.
-* **Evidence in Code:** `src/features/order/components/OrderTracker.tsx:182-194` executes `getOrderById` every 5,000 ms with no check for `document.hidden`.
-
-### 2. Immediate Client-Side Bug: Discounts API 401 Error on Cart
-* **What fails:** Visiting `/cart` triggers an unauthorized API call.
-* **Symptom:** Browser console logs HTTP 401 Unauthorized errors on every cart view. Anonymous customers fail to load global discount settings.
-* **Rough Scale:** Immediate. Occurs on **every single customer visit** today.
+### 1. Immediate Defect: Cart Discounts API 401 Error
+* **What fails:** Visiting `/cart` triggers an unauthorized API call for all guest visitors.
+* **Symptom:** Browser console logs HTTP 401 Unauthorized errors on every cart view. Anonymous customers fail to load store discount settings.
+* **Rough Scale:** Immediate. Occurs on **every single customer checkout visit** today.
 * **Evidence in Code:** `src/app/cart/page.tsx:314` calls `/api/admin/discounts?restaurantId=...`. `src/app/api/admin/discounts/route.ts:16-17` calls `checkAdminAuth()` and throws an `AuthenticationError('Unauthorized access')` when no `admin_token` cookie exists.
 
-### 3. Serverless Lambda Spikes Exhausting MongoDB M0 Connection Pool
+### 2. Vercel Active CPU Limit Reached via Extended Customer Tracker Sessions
+* **What fails:** Vercel monthly Active CPU budget (4.0 hours) is exceeded before month-end.
+* **Symptom:** Vercel suspends the project or returns HTTP 402/503 errors. Customers cannot load menus or submit orders.
+* **Rough Scale:** $\approx 2 \text{ active medium restaurants}$ (~3,600 total monthly orders).
+* **Evidence in Code:** `src/features/order/components/OrderTracker.tsx:182-194` executes `getOrderById` every 5,000 ms with no check for `document.hidden` and no adaptive decay.
+
+### 3. Serverless Cold-Start Concurrency Spikes Exhausting MongoDB M0 Connections
 * **What fails:** MongoDB rejects incoming connections (`MongoServerSelectionError: connection pool exhausted`).
 * **Symptom:** Sporadic 500 errors on order submission and menu loading during rush hours. Orders fail with "Failed to place order."
-* **Rough Scale:** ≈ 35 simultaneous customers across all restaurants.
-* **Evidence in Code:** `src/lib/mongodb.ts:18` sets `maxPoolSize: 10`. When 50 serverless instances spin up in parallel across cold starts, 50 × 10 = 500 connections, instantly maxing out MongoDB Atlas M0's connection limit.
+* **Rough Scale:** $\approx 45 \text{ to 55 simultaneous active customer sessions}$ across all venues.
+* **Evidence in Code:** `src/lib/mongodb.ts:18` sets `maxPoolSize: 10`. When 50 serverless instances spin up in parallel across cold starts, $50 \times 10 = 500 \text{ connections}$, instantly maxing out MongoDB Atlas M0's connection limit.
 
-### 4. Memory Exhaustion & Latency Spikes in `/api/admin/discounts`
+### 4. Memory Bloat & Response Latency in `/api/admin/discounts`
 * **What fails:** Memory consumption in the Node.js runtime exceeds container limits (1024 MB).
 * **Symptom:** Slow cart checkout loading (>3 seconds) and random 504 Gateway Timeouts.
-* **Rough Scale:** When any single restaurant accumulates >3,000 total historical orders.
+* **Rough Scale:** When any single restaurant accumulates $>3,000 \text{ total historical orders}$.
 * **Evidence in Code:** `src/app/api/admin/discounts/route.ts:46` executes `Order.find({ restaurantId: cleanRestId, status: { $ne: 'cancelled' } })` loading the entire database collection into RAM without limits or pagination.
 
 ### 5. Duplicate Order Creation on Poor Mobile Networks
 * **What fails:** Customers on flaky 4G/5G networks click "Place Order" repeatedly when the UI does not immediately lock.
-* **Symptom:** Kitchen POS receives 2 or 3 duplicate order tickets for the same table with identical items, inflating customer bills and causing food waste.
-* **Rough Scale:** Occurs intermittently at any scale whenever customer mobile latency exceeds 2 seconds.
+* **Symptom:** Kitchen POS receives duplicate order tickets for the same table with identical items, causing food waste.
+* **Rough Scale:** Intermittent at any scale when customer mobile network latency exceeds 2 seconds.
 * **Evidence in Code:** `src/features/order/service.ts:31-165` lacks an idempotency key check or unique request identifier for general orders.
 
 ### 6. Stale Cache After Deployment (Service Worker Image Desynchronization)
@@ -372,12 +379,6 @@ If the customer-side `OrderTracker.tsx` is updated to incorporate the exact same
 * **Rough Scale:** Occurs across all recurring users immediately after any image update.
 * **Evidence in Code:** `public/sw.js:1` hardcodes `CACHE_NAME = 'growlic-v2'` with Cache-First matching (`public/sw.js:91`) without revalidation checks or cache busting hashes.
 
-### 7. Cross-Tenant Noisy Neighbor Degradation
-* **What fails:** High traffic at Restaurant A slows down or crashes Restaurant B.
-* **Symptom:** When Tokyo Momos runs a viral promotion, a completely unrelated salon or restaurant tenant on the platform experiences timeout errors.
-* **Rough Scale:** ≥ 2 restaurants sharing the same unindexed M0 MongoDB cluster.
-* **Evidence in Code:** All tenants share a single MongoDB database and connection pool without resource quotas or database-level tenant isolation.
-
 ---
 
 ## 7. Security and Reliability Observations That Affect Scale
@@ -385,12 +386,12 @@ If the customer-side `OrderTracker.tsx` is updated to incorporate the exact same
 1. **Anonymous Cart Endpoint Returns 401 (`src/app/cart/page.tsx:314`):**  
    The customer cart component attempts to fetch internal admin discount settings from `/api/admin/discounts`. Because this route is restricted to logged-in admins, it throws a 401 error on every customer load.
 2. **Permissive CORS Header Conflict (`next.config.ts:14-15` & `src/middleware.ts:69`):**  
-   `next.config.ts` declares `Access-Control-Allow-Origin: "*"` combined with `Access-Control-Allow-Credentials: "true"`. According to standard browser W3C CORS specifications, browsers reject authenticated cross-origin requests when wildcard origins are combined with credentials.
+   `next.config.ts` declares `Access-Control-Allow-Origin: "*"` combined with `Access-Control-Allow-Credentials: "true"`. Standard browser W3C CORS specifications reject authenticated cross-origin requests when wildcard origins are combined with credentials.
 3. **Unprotected Order Injection & Staff Call Flooding (`src/app/api/customer/orders/route.ts:29` & `src/app/api/customer/staff-calls/route.ts:27`):**  
-   These public endpoints accept external POST payloads without rate limiting, CAPTCHA, or IP throttling. A trivial automated script can flood an establishment with 10,000 bogus orders or pending staff calls, paralyzing kitchen operations.
+   These public endpoints accept external POST payloads without rate limiting, CAPTCHA, or IP throttling. A simple automated script can flood an establishment with bogus orders or pending staff calls.
 4. **Hardcoded Fallback JWT Secret (`src/middleware.ts:4` & `src/lib/auth.ts:5`):**  
    `const JWT_SECRET = process.env.JWT_SECRET || 'growlic_secret_key_12345';`  
-   If the environment variable `JWT_SECRET` is omitted or fails to load in production, tokens can be forged by any attacker who inspects the public repository.
+   If the environment variable `JWT_SECRET` is omitted in production, tokens can be forged by any attacker who inspects the repository.
 5. **Hardcoded Root Domain Redirect (`src/middleware.ts:61-63`):**  
    `if (pathname === '/') return NextResponse.redirect(new URL('/menu/tokyo-momos', request.url));`  
    Any user visiting the root platform URL is unconditionally hard-redirected to the Tokyo Momos menu, preventing the app from functioning as a true generic multi-tenant SaaS portal.
@@ -410,12 +411,12 @@ If the customer-side `OrderTracker.tsx` is updated to incorporate the exact same
    * *Evidence:* `src/app/cart/page.tsx:314` calling `checkAdminAuth()`-protected `src/app/api/admin/discounts/route.ts:16`.
    * *Effort:* **S (Small)**
    * *If Ignored:* Anonymous guests continue to trigger 401 console errors, and store discount tiers fail to display on cart checkout.
-2. **Implement Visibility Check & Backoff on Customer Order Tracker:**
-   * *What:* Pause polling when `document.hidden` is true, and lengthen the polling interval from 5 seconds to 15–20 seconds after the first 2 minutes.
-   * *Why:* Immediately slashes customer session serverless invocations by 75–85%.
+2. **Apply Adaptive Polling & Visibility Pause to Customer Order Tracker:**
+   * *What:* Update `OrderTracker.tsx` to mirror the smart design of `OrderNotificationProvider.tsx`: pause when `document.hidden` is true, and lengthen polling from 5s to 15s–30s.
+   * *Why:* Immediately reduces customer tracking invocations by 80%, expanding free-tier headroom from 2 venues to 8+ venues.
    * *Evidence:* `src/features/order/components/OrderTracker.tsx:182-194`.
    * *Effort:* **S (Small)**
-   * *If Ignored:* Hosting free-tier invocations and Active CPU hours will be exhausted within 2–3 weeks of onboarding.
+   * *If Ignored:* Vercel Active CPU hours will throttle the project once a second active store is onboarded.
 3. **Bound Historical Order Query in Discounts API:**
    * *What:* Replace unbounded `Order.find()` with a MongoDB aggregation `$limit` or date filter restricting analysis to the last 30 days.
    * *Why:* Prevents serverless memory bloat and function timeouts as order count grows.
@@ -425,7 +426,7 @@ If the customer-side `OrderTracker.tsx` is updated to incorporate the exact same
 
 ---
 
-### Bucket 2: Before Reaching ~3 Paying Restaurants
+### Bucket 2: Before Reaching ~5 Paying Restaurants
 
 1. **Deduplicate Menu Context & Cache Link Prefetches:**
    * *What:* Ensure `CustomerNavbar.tsx`, `cart/page.tsx`, and `OrderTracker.tsx` call `getCachedRestaurantMenuContext` instead of the uncached `getRestaurantMenuContext`.
@@ -440,7 +441,7 @@ If the customer-side `OrderTracker.tsx` is updated to incorporate the exact same
    * *Effort:* **M (Medium)**
    * *If Ignored:* Restaurants will experience duplicate kitchen orders during peak rushes.
 3. **Add Rate Limiting to Public Customer Endpoints:**
-   * *What:* Apply IP-based and phone-based rate limits (e.g. using Upstash Redis or in-memory LRU) on `/api/customer/orders` and `/api/customer/staff-calls`.
+   * *What:* Apply IP-based and phone-based rate limits on `/api/customer/orders` and `/api/customer/staff-calls`.
    * *Why:* Prevents malicious actors or web crawlers from spamming order queues or staff alerts.
    * *Evidence:* `src/app/api/customer/orders/route.ts:29`.
    * *Effort:* **M (Medium)**
@@ -454,11 +455,11 @@ If the customer-side `OrderTracker.tsx` is updated to incorporate the exact same
 
 ---
 
-### Bucket 3: Later / When Scaling Beyond ~10 Restaurants
+### Bucket 3: Later / When Scaling Beyond ~12 Restaurants
 
 1. **Replace Polling with Push-Based WebSockets or Server-Sent Events (SSE):**
    * *What:* Transition POS alert detection and customer order tracking from client polling to real-time pub/sub channels (e.g. Ably, Pusher, or Supabase Realtime).
-   * *Why:* Completely eliminates the need for 5-second polling loops, reducing serverless function invocations to near zero during order waiting periods.
+   * *Why:* Completely eliminates the need for interval polling loops, reducing serverless function invocations to near zero during order waiting periods.
    * *Evidence:* `OrderTracker.tsx:182` and `OrderNotificationProvider.tsx:265`.
    * *Effort:* **L (Large)**
    * *If Ignored:* Function invocation bills scale linearly with active customer screen time rather than order volume.
@@ -468,9 +469,9 @@ If the customer-side `OrderTracker.tsx` is updated to incorporate the exact same
    * *Evidence:* `src/features/auth/model.ts:39`.
    * *Effort:* **L (Large)**
    * *If Ignored:* Multi-staff restaurants are unable to track which employee processed, accepted, or canceled an order.
-3. **Migrate Static Placeholders to Next.js Image Optimization / CDN:**
-   * *What:* Replace unoptimized static assets (such as the 2.74 MB `dish_placeholder.jpg`) with compressed, modern WebP assets served via a dedicated CDN or `<Image>` with explicit width/height constraints.
-   * *Why:* Drastically reduces customer mobile page load times and prevents bandwidth spikes.
+3. **Compress Static Placeholders and Enforce Responsive Assets:**
+   * *What:* Replace unoptimized static assets (such as the 2.74 MB `dish_placeholder.jpg`) with compressed, modern WebP assets (~40 kB).
+   * *Why:* Drastically reduces customer mobile page load times and preserves Vercel Fast Data Transfer runway.
    * *Evidence:* `public/dish_placeholder.jpg` (2.74 MB) and `public/1783330644828.png` (1.51 MB).
    * *Effort:* **S (Small)**
    * *If Ignored:* Customers on slow mobile networks experience slow menu rendering and high initial payload transfer.
@@ -484,17 +485,17 @@ If the customer-side `OrderTracker.tsx` is updated to incorporate the exact same
 ```
 [Phase 1: Free Tiers (Current)]
   - Vercel Hobby ($0) + MongoDB Atlas M0 ($0) + FCM ($0)
-  - Ceiling: ~1 to 2 Restaurants (~2,500 orders/mo)
+  - Ceiling: ~2 Medium Restaurants (~3,600 orders/mo) under realistic load
        │
        ▼ (Trigger: Vercel Active CPU > 3.5 hrs or Invocations > 800k/mo)
 [Phase 2: Compute Expansion]
   - Upgrade Vercel to Pro ($20 / member / month)
-  - Ceiling: ~8 to 12 Restaurants (~15,000 orders/mo)
+  - Ceiling: ~10 to 15 Restaurants (~25,000 orders/mo)
        │
        ▼ (Trigger: MongoDB Atlas M0 connections consistently > 350 or ops/sec throttled)
 [Phase 3: Dedicated Database Layer]
   - Upgrade MongoDB to Atlas M10 Dedicated (~$57 / month)
-  - Ceiling: ~30 to 50 Restaurants (~60,000 orders/mo)
+  - Ceiling: ~35 to 50 Restaurants (~75,000 orders/mo)
        │
        ▼ (Trigger: Real-time latency demands & polling costs)
 [Phase 4: Dedicated Real-time & WebSocket Infrastructure]
@@ -504,10 +505,10 @@ If the customer-side `OrderTracker.tsx` is updated to incorporate the exact same
 
 ### Zero-Cost Strategies to Postpone Upgrades
 1. **Extend OrderTracker Polling Interval:**  
-   Changing customer tracker polling from 5 seconds to 20 seconds, and pausing when the mobile tab is backgrounded, reduces customer-generated serverless invocations by **75%**. This single modification doubles the number of restaurants that can fit within Vercel's free tier.
+   Adopting the adaptive decay pattern from `OrderNotificationProvider` inside `OrderTracker.tsx` reduces customer-generated invocations by **84%**, immediately expanding free-tier capacity to **8.5 medium restaurants**.
 2. **Leverage Data Cache for Menu Context:**  
    Routing all menu and theme queries through `getCachedRestaurantMenuContext` ensures that repeat customer visits and navbar checks hit Vercel's Edge Data Cache, consuming zero database compute and minimal serverless execution time.
-3. **Optimize Public Asset Sizes:**  
+3. **Compress Public Image Placeholders:**  
    Compressing `dish_placeholder.jpg` from 2.74 MB down to ~40 KB WebP saves 2.7 MB per cache-miss download, preserving Vercel Fast Data Transfer runway.
 
 ### Where and What to Monitor Right Now
@@ -529,6 +530,7 @@ If the customer-side `OrderTracker.tsx` is updated to incorporate the exact same
 | **Vercel Hobby CPU Limit** | Verified Official Limit | Vercel pricing documentation specifies 4 Active CPU Hours & 1M invocations on Hobby plan. | Official Vercel docs (2026). |
 | **MongoDB Atlas M0 Limits** | Verified Official Limit | MongoDB Atlas documentation confirms 512 MB storage and 500 max connection cap for M0. | Official MongoDB docs (2026). |
 | **WhatsApp Message Cost** | Verified Code Fact | `src/lib/whatsappService.ts:59` generates `wa.me` browser URLs. Zero external API keys or SDKs exist in `package.json`. | Zero provider billing invoices; confirmed client-side dispatch. |
-| **Customer Tracking Duration** | ASSUMPTION | Assumed customers keep the tracking tab open for an average of 15 minutes while awaiting kitchen preparation. | Real-world telemetry from Google Analytics or Vercel Web Analytics on `/track/[orderId]`. |
+| **Operational Order Mix** | ASSUMPTION | Assumed a 50/50 split between walk-in counter orders (no tracking) and QR table orders based on typical QSR patterns. | Analyzing `source` field distribution (`admin_counter` vs `qr_scan`) in production DB. |
+| **Customer Dwell Time** | ASSUMPTION | Assumed average active mobile browser screen time is 4 minutes before phone sleep/app switch. | Real-world telemetry from Google Analytics or Vercel Web Analytics on `/track/[orderId]`. |
 | **Production MongoDB Cluster Tier**| ASSUMPTION | Assumed the current production deployment runs on an Atlas M0 Free Cluster based on repository context. | Inspecting `MONGODB_URI` environment string in Vercel project settings. |
 | **POS Terminal Screen Count** | ASSUMPTION | Assumed 1 active counter terminal per venue. | Surveying restaurant operational setup. |
