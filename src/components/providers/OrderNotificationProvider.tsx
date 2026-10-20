@@ -347,10 +347,15 @@ export default function OrderNotificationProvider({ children }: { children: Reac
       }
     }
 
-    // Trigger check on window focus & reset decay clock
+    // Trigger check on window focus & reset decay clock (throttled to at most once per 25s)
+    let lastFocusCheckTime = 0;
     const handleActivity = () => {
-      setAlertFirstSeenTime(Date.now());
-      checkIncomingOrdersAndCalls();
+      const now = Date.now();
+      if (now - lastFocusCheckTime > 25000) {
+        lastFocusCheckTime = now;
+        setAlertFirstSeenTime(now);
+        checkIncomingOrdersAndCalls();
+      }
     };
 
     if (typeof window !== 'undefined') {

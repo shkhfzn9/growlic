@@ -55,7 +55,7 @@ interface MetricOrderTable {
   subtotal: number;
   total: number;
   status: 'received' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
-  paymentMode?: 'cash' | 'online';
+  paymentMode?: 'cash' | 'online' | 'credit';
   createdAt: string;
   discountApplied: number;
   upsellAccepted: boolean;
@@ -226,7 +226,7 @@ export default function DashboardPage() {
   const { acknowledgeOrder } = useOrderNotification();
   const [datePreset, setDatePreset] = useState<'today' | '2d' | '3d' | '7d' | '30d' | 'custom'>('30d');
   const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
-  const [orderPaymentFilter, setOrderPaymentFilter] = useState<'all' | 'cash' | 'online'>('all');
+  const [orderPaymentFilter, setOrderPaymentFilter] = useState<'all' | 'cash' | 'online' | 'credit'>('all');
 
   useEffect(() => {
     const fetchBusinessInfo = async () => {
@@ -387,6 +387,8 @@ export default function DashboardPage() {
       result = result.filter(o => (o.paymentMode || 'cash') === 'cash');
     } else if (orderPaymentFilter === 'online') {
       result = result.filter(o => o.paymentMode === 'online');
+    } else if (orderPaymentFilter === 'credit') {
+      result = result.filter(o => o.paymentMode === 'credit');
     }
 
     result.sort((a, b) => {
@@ -403,6 +405,19 @@ export default function DashboardPage() {
 
     return result;
   }, [metrics?.ordersTable, orderSearch, orderSortField, orderSortOrder, orderUpsellFilter, orderPaymentFilter]);
+
+  const creditMetrics = useMemo(() => {
+    const orders = metrics?.ordersTable || [];
+    const pendingCreditOrders = orders.filter(
+      (o) => o.paymentMode === 'credit' && o.status !== 'cancelled'
+    );
+    const totalPendingAmount = pendingCreditOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+    return {
+      orders: pendingCreditOrders,
+      count: pendingCreditOrders.length,
+      totalPendingAmount,
+    };
+  }, [metrics?.ordersTable]);
 
   const activeGrowthComparison = useMemo(() => {
     if (!metrics?.growthAnalysis) return null;
@@ -972,6 +987,48 @@ export default function DashboardPage() {
         />
       </div>
 
+      {/* Pending Credit / Udhar Alert & Quick Filter Widget */}
+      {creditMetrics.count > 0 && (
+        <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-2 border-amber-300 rounded-xl p-4 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
+              ⏳
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm font-extrabold text-amber-950">
+                  Pending Credit / Udhar Balance: ₹{Math.round(creditMetrics.totalPendingAmount).toLocaleString()}
+                </h3>
+                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300">
+                  {creditMetrics.count} {creditMetrics.count === 1 ? 'Order' : 'Orders'} Pending
+                </span>
+              </div>
+              <p className="text-xs text-amber-800 font-medium mt-0.5">
+                Outstanding counter orders placed on Credit / Pay Later. Settle payment modes in POS or filter order list below.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (orderPaymentFilter === 'credit') {
+                setOrderPaymentFilter('all');
+              } else {
+                setOrderPaymentFilter('credit');
+                document.getElementById('order-log-section')?.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}
+            className={`px-4 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer whitespace-nowrap active:scale-95 shadow-xs ${
+              orderPaymentFilter === 'credit'
+                ? 'bg-amber-600 text-white border-amber-700 hover:bg-amber-700 shadow-sm'
+                : 'bg-white text-amber-900 border-amber-300 hover:bg-amber-100/60'
+            }`}
+          >
+            {orderPaymentFilter === 'credit' ? '✓ Showing Credit Orders (Clear Filter)' : '⏳ View & Filter Credit Orders'}
+          </button>
+        </div>
+      )}
+
       {/* Business Growth & Trajectory Engine (Day on Day, Week on Week, Month on Month) */}
       {metrics?.growthAnalysis && (
         <div className="bg-white border border-[#E2E6EA] rounded-xl p-6 shadow-sm flex flex-col gap-6">
@@ -1496,8 +1553,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Two Big Highlight Cards: Cash Drawer vs Online Settlement */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          {/* Three Highlight Cards: Cash Drawer vs Online Settlement vs Credit / Udhar */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             {/* Cash Card */}
             <div className="bg-gradient-to-br from-emerald-50/60 to-white border border-emerald-200/80 rounded-xl p-5 relative overflow-hidden">
               <div className="flex items-start justify-between">
@@ -1518,9 +1575,9 @@ export default function DashboardPage() {
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-[#4B5563]">
                       <span className="font-semibold text-[#111827]">{metrics.paymentSplit.cashOrders} cash orders</span>
                       <span>·</span>
-                      <span className="font-semibold text-emerald-700">{metrics.paymentSplit.cashPercent.toFixed(1)}% of total revenue</span>
+                      <span className="font-semibold text-emerald-700">{metrics.paymentSplit.cashPercent.toFixed(1)}% of revenue</span>
                       <span>·</span>
-                      <span>Avg. cash ticket: ₹{Math.round(metrics.paymentSplit.cashRevenue / (metrics.paymentSplit.cashOrders || 1))}</span>
+                      <span>Avg. ticket: ₹{Math.round(metrics.paymentSplit.cashRevenue / (metrics.paymentSplit.cashOrders || 1))}</span>
                     </div>
                   </div>
                 </div>
@@ -1551,23 +1608,56 @@ export default function DashboardPage() {
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-[#4B5563]">
                       <span className="font-semibold text-[#111827]">{metrics.paymentSplit.onlineOrders} online orders</span>
                       <span>·</span>
-                      <span className="font-semibold text-blue-700">{metrics.paymentSplit.onlinePercent.toFixed(1)}% of total revenue</span>
+                      <span className="font-semibold text-blue-700">{metrics.paymentSplit.onlinePercent.toFixed(1)}% of revenue</span>
                       <span>·</span>
-                      <span>Avg. digital ticket: ₹{Math.round(metrics.paymentSplit.onlineRevenue / (metrics.paymentSplit.onlineOrders || 1))}</span>
+                      <span>Avg. ticket: ₹{Math.round(metrics.paymentSplit.onlineRevenue / (metrics.paymentSplit.onlineOrders || 1))}</span>
                     </div>
                   </div>
                 </div>
               </div>
               <div className="mt-4 p-2.5 bg-blue-100/60 rounded-lg border border-blue-200/50 text-[11px] text-blue-900 font-medium flex items-center gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-blue-700 shrink-0" />
-                <span>Verify this amount against UPI QR merchant dashboard & card swipe EDC settlement slips.</span>
+                <span>Verify this amount against UPI QR merchant dashboard & card swipe settlement slips.</span>
+              </div>
+            </div>
+
+            {/* Credit / Udhar Card */}
+            <div className="bg-gradient-to-br from-amber-50/70 to-white border-2 border-amber-300 rounded-xl p-5 relative overflow-hidden shadow-2xs">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-900 font-bold">
+                      ⏳
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-[#111827]">⏳ Credit / Udhar (Pending)</h3>
+                      <span className="text-[11px] text-amber-800 font-medium">Unsettled receivables & pay-later</span>
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <div className="text-[28px] font-extrabold text-amber-900 tracking-tight">
+                      ₹{Math.round(metrics.paymentSplit.creditRevenue || creditMetrics.totalPendingAmount || 0).toLocaleString()}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-[#4B5563]">
+                      <span className="font-semibold text-[#111827]">{metrics.paymentSplit.creditOrders ?? creditMetrics.count} credit orders</span>
+                      <span>·</span>
+                      <span className="font-semibold text-amber-700">{(metrics.paymentSplit.creditPercent || 0).toFixed(1)}% of total</span>
+                      <span>·</span>
+                      <span>Avg. ticket: ₹{Math.round((metrics.paymentSplit.creditRevenue || creditMetrics.totalPendingAmount || 0) / ((metrics.paymentSplit.creditOrders || creditMetrics.count) || 1))}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 p-2.5 bg-amber-100/70 rounded-lg border border-amber-200 text-[11px] text-amber-950 font-medium flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                <span>Outstanding receivables. Click below to filter or update payment mode to cash/online in POS.</span>
               </div>
             </div>
           </div>
 
           {/* Proportional Split Visual Bar */}
           <div className="bg-[#F8FAFC] border border-[#E2E6EA] rounded-xl p-4 mb-6">
-            <div className="flex justify-between items-center text-xs font-semibold mb-2">
+            <div className="flex justify-between items-center text-xs font-semibold mb-2 flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
                 <span className="text-[#111827]">Cash Share: {metrics.paymentSplit.cashPercent.toFixed(1)}%</span>
@@ -1578,17 +1668,33 @@ export default function DashboardPage() {
                 <span className="text-[#111827]">Online Share: {metrics.paymentSplit.onlinePercent.toFixed(1)}%</span>
                 <span className="text-[#6B7280] font-normal">(₹{Math.round(metrics.paymentSplit.onlineRevenue).toLocaleString()})</span>
               </div>
+              {(metrics.paymentSplit.creditPercent || 0) > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                  <span className="text-[#111827]">Pending Credit: {(metrics.paymentSplit.creditPercent || 0).toFixed(1)}%</span>
+                  <span className="text-amber-800 font-normal">(₹{Math.round(metrics.paymentSplit.creditRevenue || 0).toLocaleString()})</span>
+                </div>
+              )}
             </div>
 
             <div className="w-full bg-[#E2E6EA] h-3 rounded-full overflow-hidden flex shadow-inner">
               <div
                 className="bg-emerald-500 h-full transition-all duration-500"
                 style={{ width: `${metrics.paymentSplit.cashPercent}%` }}
+                title={`Cash: ${metrics.paymentSplit.cashPercent.toFixed(1)}%`}
               />
               <div
                 className="bg-blue-500 h-full transition-all duration-500"
                 style={{ width: `${metrics.paymentSplit.onlinePercent}%` }}
+                title={`Online: ${metrics.paymentSplit.onlinePercent.toFixed(1)}%`}
               />
+              {(metrics.paymentSplit.creditPercent || 0) > 0 && (
+                <div
+                  className="bg-amber-500 h-full transition-all duration-500"
+                  style={{ width: `${metrics.paymentSplit.creditPercent}%` }}
+                  title={`Credit Pending: ${(metrics.paymentSplit.creditPercent || 0).toFixed(1)}%`}
+                />
+              )}
             </div>
           </div>
 
@@ -1609,7 +1715,8 @@ export default function DashboardPage() {
                       <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Total Revenue</th>
                       <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-800">💵 Cash in Drawer</th>
                       <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-blue-800">💳 Online Settled</th>
-                      <th className="px-3 py-2.5 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Cash / Online Share</th>
+                      <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-800">⏳ Credit Pending</th>
+                      <th className="px-3 py-2.5 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Settlement Split</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E2E6EA]">
@@ -1634,13 +1741,22 @@ export default function DashboardPage() {
                             {row.onlineOrders} orders ({row.onlinePercent.toFixed(0)}%)
                           </span>
                         </td>
+                        <td className="px-3 py-2.5 text-right font-bold text-amber-800">
+                          ₹{Math.round(row.creditRevenue || 0).toLocaleString()}
+                          <span className="text-[11px] text-amber-700 font-medium block">
+                            {row.creditOrders || 0} orders ({(row.creditPercent || 0).toFixed(0)}%)
+                          </span>
+                        </td>
                         <td className="px-3 py-2.5 text-center">
                           <div className="w-28 mx-auto bg-[#E2E6EA] h-2 rounded-full overflow-hidden flex">
                             <div className="bg-emerald-500 h-full" style={{ width: `${row.cashPercent}%` }} />
                             <div className="bg-blue-500 h-full" style={{ width: `${row.onlinePercent}%` }} />
+                            {(row.creditPercent || 0) > 0 && (
+                              <div className="bg-amber-500 h-full" style={{ width: `${row.creditPercent}%` }} />
+                            )}
                           </div>
                           <span className="text-[10px] text-[#6B7280] mt-1 block font-medium">
-                            {row.cashPercent.toFixed(0)}% cash / {row.onlinePercent.toFixed(0)}% online
+                            {row.cashPercent.toFixed(0)}% cash / {row.onlinePercent.toFixed(0)}% online{(row.creditPercent || 0) > 0 ? ` / ${row.creditPercent?.toFixed(0)}% credit` : ''}
                           </span>
                         </td>
                       </tr>
@@ -1799,9 +1915,24 @@ export default function DashboardPage() {
             </div>
 
             {/* Orders Table */}
-            <div className="flex flex-col gap-3">
+            <div id="order-log-section" className="flex flex-col gap-3">
               <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
-                <h3 className="text-[14px] font-semibold text-[#111827]">Order Log</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-[14px] font-semibold text-[#111827]">Order Log</h3>
+                  {orderPaymentFilter === 'credit' && (
+                    <span className="text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span>⏳ Filtered: Credit / Pending Only</span>
+                      <button
+                        type="button"
+                        onClick={() => setOrderPaymentFilter('all')}
+                        className="text-amber-700 hover:text-amber-950 ml-1 font-black cursor-pointer"
+                        title="Clear filter"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <input
                     type="text"
@@ -1822,11 +1953,16 @@ export default function DashboardPage() {
                   <select
                     value={orderPaymentFilter}
                     onChange={(e) => setOrderPaymentFilter(e.target.value as any)}
-                    className="px-3 py-1.5 text-xs border border-[#E2E6EA] rounded-lg bg-white outline-none cursor-pointer"
+                    className={`px-3 py-1.5 text-xs border rounded-lg outline-none cursor-pointer font-medium ${
+                      orderPaymentFilter === 'credit'
+                        ? 'bg-amber-50 text-amber-900 border-amber-300 font-bold'
+                        : 'bg-white border-[#E2E6EA]'
+                    }`}
                   >
                     <option value="all">All Payments</option>
                     <option value="cash">💵 Cash Only</option>
                     <option value="online">💳 Online Only</option>
+                    <option value="credit">⏳ Credit / Udhar (Pending Only)</option>
                   </select>
                   <select
                     value={orderSortField}
@@ -1898,11 +2034,13 @@ export default function DashboardPage() {
                             <td className="px-3 py-3 text-right font-semibold text-[#111827]">₹{order.total}</td>
                             <td className="px-3 py-3 text-center whitespace-nowrap">
                               <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide ${
-                                order.paymentMode === 'online'
+                                order.paymentMode === 'credit'
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-300 font-bold shadow-2xs'
+                                  : order.paymentMode === 'online'
                                   ? 'bg-blue-50 text-blue-700 border border-blue-200'
                                   : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               }`}>
-                                {order.paymentMode === 'online' ? '💳 Online' : '💵 Cash'}
+                                {order.paymentMode === 'credit' ? '⏳ Credit (Pending)' : order.paymentMode === 'online' ? '💳 Online' : '💵 Cash'}
                               </span>
                             </td>
                             <td className="px-3 py-3 text-center">

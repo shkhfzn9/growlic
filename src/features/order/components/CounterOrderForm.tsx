@@ -59,7 +59,7 @@ export default function CounterOrderForm() {
   const [customerName, setCustomerName] = useState('');
   const [orderType, setOrderType] = useState<'takeaway' | 'dine_in' | 'delivery'>('takeaway');
   const [tableId, setTableId] = useState('');
-  const [paymentMode, setPaymentMode] = useState<'cash' | 'online'>('cash');
+  const [paymentMode, setPaymentMode] = useState<'cash' | 'online' | 'credit'>('cash');
   const [notes, setNotes] = useState('');
   const [businessCategory, setBusinessCategory] = useState<string>(
     cachedPos?.details?.businessCategory ||
@@ -331,7 +331,7 @@ export default function CounterOrderForm() {
                 Order #{successOrder._id.slice(-6).toUpperCase()} Placed Successfully!
               </h4>
               <p className="text-xs text-emerald-800 font-medium mt-0.5">
-                Total: ₹{successOrder.total} • Status: Received • Customer: {successOrder.customerName} ({successOrder.customerPhone})
+                Total: ₹{successOrder.total} • Status: Received • Payment: {successOrder.paymentMode === 'credit' ? '⏳ Credit / Udhar' : successOrder.paymentMode === 'online' ? '💳 Online' : '💵 Cash'} • Customer: {successOrder.customerName} ({successOrder.customerPhone})
               </p>
             </div>
           </div>
@@ -342,9 +342,12 @@ export default function CounterOrderForm() {
                 phone: successOrder.customerPhone,
                 customerName: successOrder.customerName,
                 orderId: successOrder._id,
+                orderNumber: (successOrder as any).orderNumber,
                 restaurantName: restaurantName || auth.restaurantName || 'Restaurant',
                 total: successOrder.total,
                 items: successOrder.items,
+                businessCategory: businessCategory,
+                appointmentDetails: (successOrder as any).appointmentDetails,
               })}
               target="_blank"
               rel="noopener noreferrer"
@@ -616,13 +619,29 @@ export default function CounterOrderForm() {
                 <select
                   value={paymentMode}
                   onChange={(e) => setPaymentMode(e.target.value as any)}
-                  className="w-full text-xs font-bold px-2.5 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:border-red-600 outline-none cursor-pointer"
+                  className={`w-full text-xs font-bold px-2.5 py-2 border rounded-xl outline-none cursor-pointer transition-colors ${
+                    paymentMode === 'credit'
+                      ? 'bg-amber-50 text-amber-900 border-amber-300 focus:border-amber-500'
+                      : paymentMode === 'online'
+                      ? 'bg-blue-50 text-blue-900 border-blue-200 focus:border-blue-500'
+                      : 'bg-gray-50 border-gray-200 focus:bg-white focus:border-red-600'
+                  }`}
                 >
                   <option value="cash">💵 Cash</option>
                   <option value="online">💳 Online / UPI</option>
+                  <option value="credit">⏳ Credit / Udhar (Pay Later)</option>
                 </select>
               </div>
             </div>
+
+            {paymentMode === 'credit' && (
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center gap-2">
+                <span className="text-sm">⏳</span>
+                <span className="text-[11px] font-medium leading-tight">
+                  This order will be logged under <strong>Credit / Udhar (Pending Payment)</strong>. You can filter and settle it in the dashboard anytime.
+                </span>
+              </div>
+            )}
 
             {orderType === 'dine_in' && (
               <div className="flex flex-col gap-1">

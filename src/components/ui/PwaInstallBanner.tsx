@@ -40,6 +40,10 @@ export default function PwaInstallBanner() {
     await installPwa();
   };
 
+  // If already on the audit or consultation landing page, do not show popups
+  const isAuditRoute = pathname === '/audit' || pathname === '/consultation';
+  if (isAuditRoute) return null;
+
   // 1. ADMIN ROUTE: Show Admin PWA Install Banner ONLY
   if (isAdminRoute) {
     const shouldShowPwa = (isInstallable || isIOS) && !isInstalled && !pwaDismissed;

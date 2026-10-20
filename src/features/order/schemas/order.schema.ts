@@ -27,7 +27,7 @@ export const createOrderZodSchema = z.object({
   customerOldPhone: z.string().optional(),
   tableId: z.string().optional(),
   orderType: z.enum(['dine_in', 'takeaway', 'delivery']).optional(),
-  paymentMode: z.enum(['cash', 'online']).optional(),
+  paymentMode: z.enum(['cash', 'online', 'credit']).optional(),
   items: z
     .array(createOrderItemZodSchema)
     .min(1, 'Order must contain at least 1 item')

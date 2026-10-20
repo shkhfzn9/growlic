@@ -37,6 +37,9 @@ export interface DayPaymentDetail {
   onlineRevenue: number;
   onlineOrders: number;
   onlinePercent: number;
+  creditRevenue?: number;
+  creditOrders?: number;
+  creditPercent?: number;
   aov: number;
 }
 
@@ -53,6 +56,9 @@ export interface ThreeDaySalesSummary {
     onlineRevenue: number;
     onlineOrders: number;
     onlinePercent: number;
+    creditRevenue?: number;
+    creditOrders?: number;
+    creditPercent?: number;
     aov: number;
   };
   comparison: {
@@ -70,6 +76,9 @@ export interface PaymentSplitOverview {
   onlineRevenue: number;
   onlineOrders: number;
   onlinePercent: number;
+  creditRevenue?: number;
+  creditOrders?: number;
+  creditPercent?: number;
   dailyBreakdown: Array<{
     date: string;
     totalRevenue: number;
@@ -78,8 +87,11 @@ export interface PaymentSplitOverview {
     cashOrders: number;
     onlineRevenue: number;
     onlineOrders: number;
+    creditRevenue?: number;
+    creditOrders?: number;
     cashPercent: number;
     onlinePercent: number;
+    creditPercent?: number;
   }>;
 }
 
@@ -713,19 +725,22 @@ export function computeDashboardMetrics(params: {
     ? threeDayAggregation
     : (orderAggregates.dailyPaymentSplit || []);
 
-  const threeDayMap = new Map<string, { cashRev: number; cashCount: number; onlineRev: number; onlineCount: number }>();
+  const threeDayMap = new Map<string, { cashRev: number; cashCount: number; onlineRev: number; onlineCount: number; creditRev: number; creditCount: number }>();
   threeDaySource.forEach((item: any) => {
     const date = item._id?.dateStr;
     const mode = (item._id?.paymentMode || 'cash').toLowerCase();
     if (!date) return;
 
     if (!threeDayMap.has(date)) {
-      threeDayMap.set(date, { cashRev: 0, cashCount: 0, onlineRev: 0, onlineCount: 0 });
+      threeDayMap.set(date, { cashRev: 0, cashCount: 0, onlineRev: 0, onlineCount: 0, creditRev: 0, creditCount: 0 });
     }
     const entry = threeDayMap.get(date)!;
     if (mode === 'online') {
       entry.onlineRev += item.revenue || 0;
       entry.onlineCount += item.count || 0;
+    } else if (mode === 'credit') {
+      entry.creditRev += item.revenue || 0;
+      entry.creditCount += item.count || 0;
     } else {
       entry.cashRev += item.revenue || 0;
       entry.cashCount += item.count || 0;
@@ -749,11 +764,12 @@ export function computeDashboardMetrics(params: {
   const targetDate3 = hasCurrentDates || sortedAvailableDates.length < 3 ? twoDaysAgoStr : (sortedAvailableDates[2] || twoDaysAgoStr);
 
   const getDayDetail = (dateStr: string, label: string): DayPaymentDetail => {
-    const data = threeDayMap.get(dateStr) || { cashRev: 0, cashCount: 0, onlineRev: 0, onlineCount: 0 };
-    const dayTotalRev = data.cashRev + data.onlineRev;
-    const dayTotalOrders = data.cashCount + data.onlineCount;
+    const data = threeDayMap.get(dateStr) || { cashRev: 0, cashCount: 0, onlineRev: 0, onlineCount: 0, creditRev: 0, creditCount: 0 };
+    const dayTotalRev = data.cashRev + data.onlineRev + data.creditRev;
+    const dayTotalOrders = data.cashCount + data.onlineCount + data.creditCount;
     const cashPercent = dayTotalRev > 0 ? (data.cashRev / dayTotalRev) * 100 : 0;
     const onlinePercent = dayTotalRev > 0 ? (data.onlineRev / dayTotalRev) * 100 : 0;
+    const creditPercent = dayTotalRev > 0 ? (data.creditRev / dayTotalRev) * 100 : 0;
     const dayAov = dayTotalOrders > 0 ? dayTotalRev / dayTotalOrders : 0;
 
     return {
@@ -767,6 +783,9 @@ export function computeDashboardMetrics(params: {
       onlineRevenue: data.onlineRev,
       onlineOrders: data.onlineCount,
       onlinePercent,
+      creditRevenue: data.creditRev,
+      creditOrders: data.creditCount,
+      creditPercent,
       aov: dayAov,
     };
   };
@@ -777,10 +796,12 @@ export function computeDashboardMetrics(params: {
 
   const cumCashRev = day1.cashRevenue + day2.cashRevenue + day3.cashRevenue;
   const cumOnlineRev = day1.onlineRevenue + day2.onlineRevenue + day3.onlineRevenue;
-  const cumTotalRev = cumCashRev + cumOnlineRev;
+  const cumCreditRev = (day1.creditRevenue || 0) + (day2.creditRevenue || 0) + (day3.creditRevenue || 0);
+  const cumTotalRev = cumCashRev + cumOnlineRev + cumCreditRev;
   const cumCashOrders = day1.cashOrders + day2.cashOrders + day3.cashOrders;
   const cumOnlineOrders = day1.onlineOrders + day2.onlineOrders + day3.onlineOrders;
-  const cumTotalOrders = cumCashOrders + cumOnlineOrders;
+  const cumCreditOrders = (day1.creditOrders || 0) + (day2.creditOrders || 0) + (day3.creditOrders || 0);
+  const cumTotalOrders = cumCashOrders + cumOnlineOrders + cumCreditOrders;
 
   const revenueGrowthVsYesterday = day2.totalRevenue > 0
     ? ((day1.totalRevenue - day2.totalRevenue) / day2.totalRevenue) * 100
@@ -803,6 +824,9 @@ export function computeDashboardMetrics(params: {
       onlineRevenue: cumOnlineRev,
       onlineOrders: cumOnlineOrders,
       onlinePercent: cumTotalRev > 0 ? (cumOnlineRev / cumTotalRev) * 100 : 0,
+      creditRevenue: cumCreditRev,
+      creditOrders: cumCreditOrders,
+      creditPercent: cumTotalRev > 0 ? (cumCreditRev / cumTotalRev) * 100 : 0,
       aov: cumTotalOrders > 0 ? cumTotalRev / cumTotalOrders : 0,
     },
     comparison: {
@@ -811,17 +835,22 @@ export function computeDashboardMetrics(params: {
     },
   };
 
-  // 8. Payment Split (Cash vs Online) for selected date range
+  // 8. Payment Split (Cash vs Online vs Credit) for selected date range
   let splitCashRev = 0;
   let splitCashCount = 0;
   let splitOnlineRev = 0;
   let splitOnlineCount = 0;
+  let splitCreditRev = 0;
+  let splitCreditCount = 0;
 
   (orderAggregates.paymentSplit || []).forEach((item: any) => {
     const mode = (item._id || 'cash').toLowerCase();
     if (mode === 'online') {
       splitOnlineRev += item.revenue || 0;
       splitOnlineCount += item.count || 0;
+    } else if (mode === 'credit') {
+      splitCreditRev += item.revenue || 0;
+      splitCreditCount += item.count || 0;
     } else {
       splitCashRev += item.revenue || 0;
       splitCashCount += item.count || 0;
@@ -829,24 +858,30 @@ export function computeDashboardMetrics(params: {
   });
 
   // If orderAggregates.paymentSplit was empty, fallback
-  if (splitCashRev === 0 && splitOnlineRev === 0 && (orderAggregates.dailyPaymentSplit || []).length > 0) {
+  if (splitCashRev === 0 && splitOnlineRev === 0 && splitCreditRev === 0 && (orderAggregates.dailyPaymentSplit || []).length > 0) {
     (orderAggregates.dailyPaymentSplit || []).forEach((item: any) => {
       const mode = (item._id?.paymentMode || 'cash').toLowerCase();
       if (mode === 'online') {
         splitOnlineRev += item.revenue || 0;
         splitOnlineCount += item.count || 0;
+      } else if (mode === 'credit') {
+        splitCreditRev += item.revenue || 0;
+        splitCreditCount += item.count || 0;
       } else {
         splitCashRev += item.revenue || 0;
         splitCashCount += item.count || 0;
       }
     });
-  } else if (splitCashRev === 0 && splitOnlineRev === 0 && (ordersTableRaw || []).length > 0) {
+  } else if (splitCashRev === 0 && splitOnlineRev === 0 && splitCreditRev === 0 && (ordersTableRaw || []).length > 0) {
     (ordersTableRaw || []).forEach((order: any) => {
       if (order.status === 'cancelled') return;
       const mode = (order.paymentMode || 'cash').toLowerCase();
       if (mode === 'online') {
         splitOnlineRev += order.total || 0;
         splitOnlineCount += 1;
+      } else if (mode === 'credit') {
+        splitCreditRev += order.total || 0;
+        splitCreditCount += 1;
       } else {
         splitCashRev += order.total || 0;
         splitCashCount += 1;
@@ -854,22 +889,25 @@ export function computeDashboardMetrics(params: {
     });
   }
 
-  const totalSplitRev = splitCashRev + splitOnlineRev;
-  const totalSplitOrders = splitCashCount + splitOnlineCount;
+  const totalSplitRev = splitCashRev + splitOnlineRev + splitCreditRev;
+  const totalSplitOrders = splitCashCount + splitOnlineCount + splitCreditCount;
 
-  const periodDailyMap = new Map<string, { cashRev: number; cashCount: number; onlineRev: number; onlineCount: number }>();
+  const periodDailyMap = new Map<string, { cashRev: number; cashCount: number; onlineRev: number; onlineCount: number; creditRev: number; creditCount: number }>();
   (orderAggregates.dailyPaymentSplit || []).forEach((item: any) => {
     const date = item._id?.dateStr;
     const mode = (item._id?.paymentMode || 'cash').toLowerCase();
     if (!date) return;
 
     if (!periodDailyMap.has(date)) {
-      periodDailyMap.set(date, { cashRev: 0, cashCount: 0, onlineRev: 0, onlineCount: 0 });
+      periodDailyMap.set(date, { cashRev: 0, cashCount: 0, onlineRev: 0, onlineCount: 0, creditRev: 0, creditCount: 0 });
     }
     const entry = periodDailyMap.get(date)!;
     if (mode === 'online') {
       entry.onlineRev += item.revenue || 0;
       entry.onlineCount += item.count || 0;
+    } else if (mode === 'credit') {
+      entry.creditRev += item.revenue || 0;
+      entry.creditCount += item.count || 0;
     } else {
       entry.cashRev += item.revenue || 0;
       entry.cashCount += item.count || 0;
@@ -878,8 +916,8 @@ export function computeDashboardMetrics(params: {
 
   const dailyBreakdown = Array.from(periodDailyMap.entries())
     .map(([date, data]) => {
-      const dayTotalRev = data.cashRev + data.onlineRev;
-      const dayTotalOrders = data.cashCount + data.onlineCount;
+      const dayTotalRev = data.cashRev + data.onlineRev + data.creditRev;
+      const dayTotalOrders = data.cashCount + data.onlineCount + data.creditCount;
       return {
         date,
         totalRevenue: dayTotalRev,
@@ -888,8 +926,11 @@ export function computeDashboardMetrics(params: {
         cashOrders: data.cashCount,
         onlineRevenue: data.onlineRev,
         onlineOrders: data.onlineCount,
+        creditRevenue: data.creditRev,
+        creditOrders: data.creditCount,
         cashPercent: dayTotalRev > 0 ? (data.cashRev / dayTotalRev) * 100 : 0,
         onlinePercent: dayTotalRev > 0 ? (data.onlineRev / dayTotalRev) * 100 : 0,
+        creditPercent: dayTotalRev > 0 ? (data.creditRev / dayTotalRev) * 100 : 0,
       };
     })
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -903,6 +944,9 @@ export function computeDashboardMetrics(params: {
     onlineRevenue: splitOnlineRev,
     onlineOrders: splitOnlineCount,
     onlinePercent: totalSplitRev > 0 ? (splitOnlineRev / totalSplitRev) * 100 : 0,
+    creditRevenue: splitCreditRev,
+    creditOrders: splitCreditCount,
+    creditPercent: totalSplitRev > 0 ? (splitCreditRev / totalSplitRev) * 100 : 0,
     dailyBreakdown,
   };
 

@@ -82,7 +82,7 @@ export async function create(data: {
   customerPhone: string;
   tableId?: string;
   orderType?: 'dine_in' | 'takeaway' | 'delivery';
-  paymentMode?: 'cash' | 'online';
+  paymentMode?: 'cash' | 'online' | 'credit';
   source?: 'qr_scan' | 'admin_counter';
   placed_at?: Date;
   ready_at?: Date;
@@ -255,8 +255,16 @@ export async function getKitchenStats(restaurantId: string): Promise<KitchenStat
       };
     }
 
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
     const aggResult = await Order.aggregate([
-      { $match: { restaurantId: cleanRestId } },
+      {
+        $match: {
+          restaurantId: cleanRestId,
+          createdAt: { $gte: startOfToday }
+        }
+      },
       {
         $group: {
           _id: null,
@@ -291,7 +299,7 @@ export async function getKitchenStats(restaurantId: string): Promise<KitchenStat
 
     kitchenStatsCache.set(cleanRestId, {
       stats: calculatedStats,
-      expiresAt: now + 15000,
+      expiresAt: now + 30000,
     });
 
     return calculatedStats;
@@ -487,6 +495,23 @@ export async function updateEstimatedTime(
   const doc = await Order.findOneAndUpdate(
     { _id: id, restaurantId: sanitizeTenantId(restaurantId) },
     { estimatedTime: minutes, status },
+    { new: true }
+  );
+  return doc ? normalizeOrder(doc) : null;
+}
+
+/**
+ * Updates the paymentMode ('cash' | 'online' | 'credit') of an existing order.
+ */
+export async function updatePaymentMode(
+  restaurantId: string,
+  id: string,
+  paymentMode: 'cash' | 'online' | 'credit'
+): Promise<IOrder | null> {
+  await dbConnect();
+  const doc = await Order.findOneAndUpdate(
+    { _id: id, restaurantId: sanitizeTenantId(restaurantId) },
+    { paymentMode },
     { new: true }
   );
   return doc ? normalizeOrder(doc) : null;

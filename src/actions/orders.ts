@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 import * as orderService from '@/features/order';
 import * as analyticsService from '@/features/analytics';
 import * as eventService from '@/features/analytics';
-import { validateSession, can, getAdminByRestaurantId } from '@/features/auth';
+import { validateSession, can, getAdminByRestaurantId, hasPermission } from '@/features/auth';
 import { logAction } from '@/features/audit';
 import * as customerRepo from '@/features/customer/repository';
 import { checkAndIncrementRateLimit } from '@/lib/rateLimiter';
@@ -16,7 +16,7 @@ import { orderTelemetry } from '@/lib/orderTelemetry';
  * Validates the admin's authentication cookie ('admin_token') and decodes its payload.
  * Throws an Error if the token is missing or invalid.
  * 
- * @returns The decoded admin session JWT token object, raw token, and userId.
+ * @returns The decoded admin session JWT token object, raw token, userId, and role.
  */
 async function checkAdminAuth() {
   const cookieStore = await cookies();
@@ -40,7 +40,7 @@ async function checkAdminAuth() {
     throw new Error('Unauthorized: Admin account not found');
   }
 
-  return { ...decoded, token, userId: admin._id };
+  return { ...decoded, token, userId: admin._id, role: admin.role || decoded.role };
 }
 
 /**
@@ -146,8 +146,8 @@ export async function getPublicOrderTrackInfoAction(tokenOrId: string, restauran
 export async function getAdminOrders(limit?: number, skip?: number, status?: string, source?: string) {
   try {
     const admin = await checkAdminAuth();
-    const isAllowed = (await can('manage_orders', admin.token, admin.restaurantId)) ||
-                      (await can('update_order_status', admin.token, admin.restaurantId));
+    const isAllowed = hasPermission(admin.role, 'manage_orders') ||
+                      hasPermission(admin.role, 'update_order_status');
     if (!isAllowed) {
       return { orders: [], total: 0, totalCount: 0, unauthorized: true, error: 'Forbidden: Insufficient permissions to view orders' };
     }
@@ -185,8 +185,8 @@ export async function updateOrderStatus(
 ) {
   try {
     const admin = await checkAdminAuth();
-    const isAllowed = (await can('update_order_status', admin.token, admin.restaurantId)) ||
-                      (await can('manage_orders', admin.token, admin.restaurantId));
+    const isAllowed = hasPermission(admin.role, 'update_order_status') ||
+                      hasPermission(admin.role, 'manage_orders');
     if (!isAllowed) {
       throw new Error('Forbidden: Insufficient permissions to update orders');
     }
@@ -221,7 +221,7 @@ export async function updateOrderStatus(
 export async function updateOrderEstimatedTime(id: string, minutes: number) {
   try {
     const admin = await checkAdminAuth();
-    const isAllowed = await can('update_order_status', admin.token, admin.restaurantId);
+    const isAllowed = hasPermission(admin.role, 'update_order_status');
     if (!isAllowed) {
       throw new Error('Forbidden: Insufficient permissions to update orders');
     }
@@ -253,7 +253,7 @@ export async function updateOrderEstimatedTime(id: string, minutes: number) {
 export async function getDashboardMetrics(startDateStr?: string, endDateStr?: string) {
   try {
     const admin = await checkAdminAuth();
-    const isAllowed = await can('view_analytics', admin.token, admin.restaurantId);
+    const isAllowed = hasPermission(admin.role, 'view_analytics');
     if (!isAllowed) {
       throw new Error('Forbidden: Insufficient permissions to view dashboard analytics');
     }
@@ -517,7 +517,7 @@ export async function createCounterOrderAction(data: {
   customerPhone: string;
   customerName?: string;
   orderType?: 'dine_in' | 'takeaway' | 'delivery';
-  paymentMode?: 'cash' | 'online';
+  paymentMode?: 'cash' | 'online' | 'credit';
   tableId?: string;
   items: Array<{
     menuItemId: string;
@@ -528,7 +528,7 @@ export async function createCounterOrderAction(data: {
 }) {
   try {
     const admin = await checkAdminAuth();
-    const isAllowed = await can('manage_orders', admin.token, admin.restaurantId);
+    const isAllowed = hasPermission(admin.role, 'manage_orders');
     if (!isAllowed) {
       throw new Error('Forbidden: Insufficient permissions to create counter orders');
     }
@@ -584,7 +584,6 @@ export async function markOrderWhatsAppNotifiedAction(orderId: string) {
     if (!updated) {
       throw new Error('Order not found or update failed');
     }
-    revalidatePath('/admin/orders');
     return { success: true, order: JSON.parse(JSON.stringify(updated)) };
   } catch (error) {
     console.error('Error marking order WhatsApp notified action:', error);
@@ -605,8 +604,8 @@ export async function updateOrderItemsAction(
   try {
     const admin = await checkAdminAuth();
     const isAllowed =
-      (await can('update_order_status', admin.token, admin.restaurantId)) ||
-      (await can('manage_orders', admin.token, admin.restaurantId));
+      hasPermission(admin.role, 'update_order_status') ||
+      hasPermission(admin.role, 'manage_orders');
     if (!isAllowed) {
       throw new Error('Forbidden: Insufficient permissions to modify order items');
     }
@@ -629,5 +628,45 @@ export async function updateOrderItemsAction(
     throw new Error(message);
   }
 }
+
+/**
+ * Server action to update the payment mode ('cash' | 'online' | 'credit') of an existing order.
+ * Logs audit trail and returns the updated order.
+ */
+export async function updateOrderPaymentModeAction(
+  orderId: string,
+  paymentMode: 'cash' | 'online' | 'credit'
+) {
+  try {
+    const admin = await checkAdminAuth();
+    const isAllowed =
+      hasPermission(admin.role, 'update_order_status') ||
+      hasPermission(admin.role, 'manage_orders');
+    if (!isAllowed) {
+      throw new Error('Forbidden: Insufficient permissions to modify order payment mode');
+    }
+
+    if (!['cash', 'online', 'credit'].includes(paymentMode)) {
+      throw new Error(`Invalid payment mode: ${paymentMode}. Allowed: cash, online, credit`);
+    }
+
+    const previous = await orderService.getOrderById(orderId, admin.restaurantId);
+    const updated = await orderService.updateOrderPaymentMode(orderId, admin.restaurantId, paymentMode);
+
+    // Audit log
+    await logAction(admin.restaurantId, admin.userId, 'ORDER_PAYMENT_MODE_UPDATED', previous, {
+      orderId: updated._id,
+      previousPaymentMode: previous?.paymentMode,
+      newPaymentMode: updated.paymentMode,
+    });
+
+    return { success: true, order: JSON.parse(JSON.stringify(updated)) };
+  } catch (error) {
+    console.error('Error updating order payment mode action:', error);
+    const message = error instanceof Error ? error.message : 'Failed to update order payment mode';
+    throw new Error(message);
+  }
+}
+
 
 

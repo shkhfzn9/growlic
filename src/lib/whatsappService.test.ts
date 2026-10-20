@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { generateWhatsAppOrderLink, normalizePhoneNumber, isValidPhoneNumber } from './whatsappService';
+import { generateWhatsAppOrderLink, normalizePhoneNumber, isValidPhoneNumber, isSalonBusiness, getGrowlicFormLink } from './whatsappService';
 
 describe('WhatsApp Service - Message Link Generator', () => {
-  it('generates the exact requested message format for POS placed order', () => {
+  it('generates the exact requested message format for POS placed order including Growlic promo footer', () => {
     const link = generateWhatsAppOrderLink({
       type: 'placed',
       phone: '9876543210',
@@ -27,6 +27,9 @@ describe('WhatsApp Service - Message Link Generator', () => {
     expect(decodedMessage).toContain('*Total:* ₹129');
     expect(decodedMessage).toContain('*Payment:* Please pay at the counter for the order to get placed.');
     expect(decodedMessage).toContain('We would love to hear your feedback! How was your experience with us?');
+    expect(decodedMessage).toContain('_Powered by Growlic_ ⚡');
+    expect(decodedMessage).toContain('Custom automation & software to grow your business.');
+    expect(decodedMessage).toContain('Fill the form, get a *free audit* 👉');
   });
 
   it('correctly aggregates multiple item quantities in order receipt', () => {
@@ -53,6 +56,7 @@ describe('WhatsApp Service - Message Link Generator', () => {
     expect(decodedMessage).toContain('*Total items:* 6');
     expect(decodedMessage).toContain('*Total:* ₹550');
     expect(decodedMessage).toContain('We would love to hear your feedback! How was your experience with us?');
+    expect(decodedMessage).toContain('_Powered by Growlic_ ⚡');
   });
 
   it('generates proper pickup notification message when order is ready', () => {
@@ -74,7 +78,9 @@ describe('WhatsApp Service - Message Link Generator', () => {
     expect(decodedMessage).toContain('- Fried Momos x 2');
     expect(decodedMessage).toContain('*Total items:* 2');
     expect(decodedMessage).toContain('*Total:* ₹240');
-    expect(decodedMessage).toContain('We would love your feedback - please let us know how your experience was!');
+    expect(decodedMessage).toContain('Enjoy your meal! We would love your feedback - please let us know how your experience was!');
+    expect(decodedMessage).toContain('_Powered by Growlic_ ⚡');
+    expect(decodedMessage).toContain('Fill the form, get a *free audit* 👉');
   });
 
   it('generates updated order receipt notification when items change', () => {
@@ -99,6 +105,54 @@ describe('WhatsApp Service - Message Link Generator', () => {
     expect(decodedMessage).toContain('- Veg Steamed Momos x 1');
     expect(decodedMessage).toContain('*Total items:* 3');
     expect(decodedMessage).toContain('*Updated Total:* ₹350');
-    expect(decodedMessage).toContain('We would love to hear your feedback! How was your experience with us?');
+    expect(decodedMessage).toContain('_Powered by Growlic_ ⚡');
+  });
+
+  it('generates distinct Salon booking confirmation message with appointment details and zero food wording', () => {
+    const link = generateWhatsAppOrderLink({
+      type: 'confirmed',
+      phone: '4554614556',
+      customerName: 'test@2',
+      orderId: '66f54b87c12',
+      orderNumber: '4b87',
+      restaurantName: 'Luxe Hair & Spa Studio',
+      businessCategory: 'salon',
+      total: 1617,
+      appointmentDetails: {
+        bookingDate: '2026-10-16',
+        bookingTime: '10:30 AM',
+        specialistName: 'Any Available Specialist',
+        userNotes: 'Senior stylist preferred',
+      },
+      items: [
+        { name: 'Signature Haircut & Styling', quantity: 3, price: 599 },
+      ],
+    });
+
+    const decodedMessage = decodeURIComponent(link.split('?text=')[1]);
+
+    // Salon specific greetings and header
+    expect(decodedMessage).toContain('Hi test@2!');
+    expect(decodedMessage).toContain('booking *#Booking-4b87* at *Luxe Hair & Spa Studio* is *CONFIRMED*!');
+    expect(decodedMessage).toContain('*Booking Date:* 2026-10-16');
+    expect(decodedMessage).toContain('*Time Slot:* 10:30 AM');
+    expect(decodedMessage).toContain('*Stylist:* Any Available Specialist');
+    expect(decodedMessage).toContain('*Notes:* Senior stylist preferred');
+
+    // Services booked (not "food order")
+    expect(decodedMessage).toContain('*Services Booked:*');
+    expect(decodedMessage).toContain('- Signature Haircut & Styling x 3');
+    expect(decodedMessage).toContain('*Total Services:* 3');
+    expect(decodedMessage).toContain('*Total Amount:* ₹1617');
+
+    // Must NEVER contain restaurant / food wording
+    expect(decodedMessage).not.toContain('meal');
+    expect(decodedMessage).not.toContain('PICKUP');
+    expect(decodedMessage).not.toContain('counter for the order');
+
+    // Must contain Growlic promotional footer with free audit link
+    expect(decodedMessage).toContain('_Powered by Growlic_ ⚡');
+    expect(decodedMessage).toContain('Custom automation & software to grow your business.');
+    expect(decodedMessage).toContain('Fill the form, get a *free audit* 👉');
   });
 });

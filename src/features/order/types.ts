@@ -24,7 +24,7 @@ export interface IOrder {
   customerPhone: string;
   tableId?: string;
   orderType?: 'dine_in' | 'takeaway' | 'delivery';
-  paymentMode?: 'cash' | 'online';
+  paymentMode?: 'cash' | 'online' | 'credit';
   items: IOrderItem[];
   subtotal: number;
   total: number;

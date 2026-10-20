@@ -67,8 +67,12 @@ export default function SuperAdminRestaurantsPage() {
     if (showLoading) setLoading(true);
     try {
       const res = await fetch(`/api/super-admin/restaurants?startDate=${start}&endDate=${end}`);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.error || `Failed to load restaurants list (HTTP ${res.status})`);
+      }
       const data = await res.json();
-      if (!res.ok || !data.success) {
+      if (!data.success) {
         throw new Error(data.error || 'Failed to load restaurants list');
       }
       setRestaurants(data.restaurants);

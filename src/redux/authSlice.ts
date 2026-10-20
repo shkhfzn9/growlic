@@ -8,6 +8,7 @@ export interface AuthState {
   restaurantId: string | null;
   restaurantName: string | null;
   email: string | null;
+  businessCategory?: string | null;
 }
 
 const initialState: AuthState = {
@@ -18,6 +19,7 @@ const initialState: AuthState = {
   restaurantId: null,
   restaurantName: null,
   email: null,
+  businessCategory: null,
 };
 
 const authSlice = createSlice({

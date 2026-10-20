@@ -37,7 +37,7 @@ export async function createOrder(data: {
   customerOldPhone?: string;
   tableId?: string;
   orderType?: 'dine_in' | 'takeaway' | 'delivery';
-  paymentMode?: 'cash' | 'online';
+  paymentMode?: 'cash' | 'online' | 'credit';
   items: Array<{
     menuItemId: string;
     name?: string;
@@ -599,6 +599,35 @@ export async function getBookedSlotsForDate(
 export async function markWhatsAppNotified(restaurantId: string, id: string): Promise<IOrder | null> {
   validateRestaurantId(restaurantId);
   return orderRepo.markWhatsAppNotified(restaurantId, id);
+}
+
+/**
+ * Updates the payment mode of an existing order.
+ */
+export async function updateOrderPaymentMode(
+  id: string,
+  restaurantId: string,
+  paymentMode: 'cash' | 'online' | 'credit'
+): Promise<IOrder> {
+  validateOrderId(id);
+  validateRestaurantId(restaurantId);
+
+  const cleanRestId = orderRepo.sanitizeTenantId(restaurantId);
+  const existing = await orderRepo.findById(cleanRestId, id);
+  if (!existing || existing.restaurantId !== cleanRestId) {
+    throw new NotFoundError(`Order '${id}' not found`);
+  }
+
+  if (['cancelled', 'rejected'].includes(existing.status)) {
+    throw new Error(`Cannot update payment for order '${id}' because it has already been ${existing.status}`);
+  }
+
+  const updated = await orderRepo.updatePaymentMode(cleanRestId, id, paymentMode);
+  if (!updated) {
+    throw new NotFoundError(`Order '${id}' not found`);
+  }
+
+  return updated;
 }
 
 

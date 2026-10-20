@@ -33,8 +33,10 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
   
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     dispatch(hydrateAuth());
   }, [dispatch]);
 
@@ -121,7 +123,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
           </nav>
 
           <div className="border-t border-white/10 pt-4 flex flex-col gap-2">
-            {auth.email && <div className="text-xs text-white/40 px-3">{auth.email}</div>}
+            {mounted && auth.email && <div className="text-xs text-white/40 px-3">{auth.email}</div>}
             <button
               onClick={handleLogout}
               className="flex items-center gap-2 rounded-lg text-white/60 hover:bg-[#2A3347] hover:text-white transition-colors w-full px-3 py-2.5"
@@ -229,7 +231,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
 
         {/* Footer */}
         <div className={`border-t border-white/10 p-3 ${collapsed ? 'flex flex-col items-center' : ''}`}>
-          {!collapsed && auth.email && (
+          {mounted && !collapsed && auth.email && (
             <div className="text-[11px] text-white/40 truncate mb-2 px-1">{auth.email}</div>
           )}
           <button

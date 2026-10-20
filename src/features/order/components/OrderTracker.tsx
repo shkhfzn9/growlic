@@ -11,6 +11,7 @@ import { TRACK_NUDGES } from '../constants/trackNudges';
 import { getCachedRestaurantMenuContext } from '@/actions/menu';
 import { getActiveTheme, saveActiveTheme } from '@/config/themes';
 import { getVocabulary } from '@/config/businessVocabulary';
+import { getGrowlicFormLink } from '@/lib/whatsappService';
 
 interface OrderItem {
   menuItemId: string;
@@ -405,6 +406,9 @@ export default function OrderTracker({ initialOrder, orderId }: OrderTrackerProp
 
   const currentTrackUrl = mounted && typeof window !== 'undefined' ? window.location.href : '';
 
+  const growlicFormLink = getGrowlicFormLink();
+  const growlicFooter = `\n\n_Powered by Growlic_ ⚡\nCustom automation & software to grow your business.\nFill the form, get a *free audit* 👉 ${growlicFormLink}`;
+
   const whatsappMessageText = businessCategory === 'salon'
     ? `Hello! I just booked an appointment on your catalog:
 
@@ -418,7 +422,7 @@ ${orderItemsFormatted}
 *Total Amount:* ₹${order.total}${cleanNotes ? `\n*Note:* ${cleanNotes}` : ''}
 
 Please confirm my booking appointment!
-*Track Booking:* ${currentTrackUrl}`
+*Track Booking:* ${currentTrackUrl}${growlicFooter}`
     : `Hello! I just placed an order on your digital menu:
 
 *Order ID:* #${displayId} (${order._id})
@@ -431,7 +435,7 @@ ${orderItemsFormatted}
 *Total Amount:* ₹${order.total}${cleanNotes ? `\n*Note:* ${cleanNotes}` : ''}
 
 Please confirm and prepare my order!
-*Track Order:* ${currentTrackUrl}`;
+*Track Order:* ${currentTrackUrl}${growlicFooter}`;
 
   const whatsappUrl = `https://wa.me/${formattedWaPhone}?text=${encodeURIComponent(whatsappMessageText)}`;
 

@@ -5,7 +5,8 @@ export type AuditAction =
   | 'LOGIN_FAILED'
   | 'ORDER_STATUS_CHANGED'
   | 'COUNTER_ORDER_CREATED'
-  | 'ORDER_ITEMS_MODIFIED';
+  | 'ORDER_ITEMS_MODIFIED'
+  | 'ORDER_PAYMENT_MODE_UPDATED';
 
 export interface IAuditLog {
   _id: string;

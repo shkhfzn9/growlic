@@ -478,13 +478,22 @@ export function hasPermission(role: string, permission: string): boolean {
 
 /**
  * Checks whether the currently authenticated admin token holds the requested permission.
+ * Resolves role from knownRole or verified JWT payload without duplicate DB queries.
  */
-export async function can(permission: string, token: string, restaurantId: string): Promise<boolean> {
-  const isValid = await validateSession(restaurantId, token);
-  if (!isValid) return false;
+export async function can(permission: string, token: string, restaurantId: string, knownRole?: string): Promise<boolean> {
+  if (knownRole) {
+    return hasPermission(knownRole, permission);
+  }
 
   const decoded = verifyToken(token);
   if (!decoded) return false;
+
+  const isValid = await validateSession(restaurantId, token);
+  if (!isValid) return false;
+
+  if (decoded.role) {
+    return hasPermission(decoded.role, permission);
+  }
 
   const admin = await adminRepo.findByEmail(restaurantId, decoded.email);
   if (!admin) return false;

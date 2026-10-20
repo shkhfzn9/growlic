@@ -67,8 +67,12 @@ export default function SuperAdminDashboardPage() {
     if (showLoading) setLoading(true);
     try {
       const res = await fetch(`/api/super-admin/overview?startDate=${start}&endDate=${end}`);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.error || `Failed to load platform overview (HTTP ${res.status})`);
+      }
       const data = await res.json();
-      if (!res.ok || !data.success) {
+      if (!data.success) {
         throw new Error(data.error || 'Failed to load platform overview');
       }
       setOverview(data.overview);

@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useEffect, useState, Suspense, useRef, useCallback } from 'react';
+import React, { useEffect, useState, Suspense, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { getAdminOrders, updateOrderStatus, updateOrderEstimatedTime, markOrderWhatsAppNotifiedAction, updateOrderItemsAction } from '../services/order.service';
+import { getAdminOrders, updateOrderStatus, updateOrderEstimatedTime, markOrderWhatsAppNotifiedAction, updateOrderItemsAction, updateOrderPaymentModeAction } from '../services/order.service';
 import { getCachedOrders, setCachedOrders, updateOrderInCache, prefetchPosMenu, getCachedPosMenu, KitchenStats } from '../services/orderClientCache';
 import { PageHeader, StatusBadge, AdminButton } from '@/components/ui';
 import { useOrderNotification } from '@/components/providers';
-import { Clock, ArrowLeft, AlertTriangle, CheckCircle2, TrendingDown, MessageSquare, X, ShieldAlert, Plus, Minus, Trash2, Edit, Search, ExternalLink, ShoppingBag, Sparkles, RefreshCw } from 'lucide-react';
+import { Clock, ArrowLeft, AlertTriangle, CheckCircle2, TrendingDown, MessageSquare, X, ShieldAlert, Plus, Minus, Trash2, Edit, Search, ExternalLink, ShoppingBag, Sparkles, RefreshCw, CreditCard, Banknote } from 'lucide-react';
 import { OrderItem, Order } from '../types/order.types';
 import { ORDER_CONFIG } from '@/config/orderConfig';
 import { generateWhatsAppOrderLink } from '@/lib/whatsappService';
@@ -15,6 +15,8 @@ import { generateWhatsAppOrderLink } from '@/lib/whatsappService';
 import { getRestaurantDetails } from '@/actions/auth';
 import { getMenuItems } from '@/actions/menu';
 import { getVocabulary, getDelayReasons, getRejectionReasons } from '@/config/businessVocabulary';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/redux/store';
 
 type FilterStatus = 'all' | Order['status'] | 'delayed' | 'missed';
 
@@ -30,66 +32,927 @@ function getStatusVariant(status: Order['status']) {
   }
 }
 
-function getOrderTimerInfo(order: Order, now: number) {
-  const isFinalized = ['cancelled', 'rejected'].includes(order.status);
-  if (isFinalized) {
-    return null;
-  }
-
+function getCompletedPrepDuration(order: Order) {
   const placedTime = new Date(order.placed_at || order.createdAt).getTime();
-
-  // If order is ready or completed, show the frozen, recorded prep duration
-  if (order.status === 'ready' || order.status === 'completed') {
-    let prepSecs = order.prep_duration_seconds;
-    if (prepSecs == null && order.ready_at) {
-      prepSecs = Math.max(0, Math.round((new Date(order.ready_at).getTime() - placedTime) / 1000));
-    }
-    if (prepSecs == null && order.actualPrepTimeMinutes) {
-      prepSecs = order.actualPrepTimeMinutes * 60;
-    }
-    if (prepSecs == null) {
-      const finishTime = new Date(order.updatedAt || order.createdAt).getTime();
-      prepSecs = Math.max(0, Math.round((finishTime - placedTime) / 1000));
-    }
-    const mins = Math.floor(prepSecs / 60);
-    const secs = prepSecs % 60;
-    const isDelayed = mins >= ORDER_CONFIG.COUNTER_ORDER_DELAY_THRESHOLD_MINUTES;
-    const isCapped = mins >= ORDER_CONFIG.MAX_PREP_STOPWATCH_MINUTES;
-    return {
-      type: 'completed' as const,
-      label: isCapped ? '1hr +' : `${mins}m ${secs.toString().padStart(2, '0')}s`,
-      isDelayed,
-      mins,
-      isCapped,
-    };
+  let prepSecs = order.prep_duration_seconds;
+  if (prepSecs == null && order.ready_at) {
+    prepSecs = Math.max(0, Math.round((new Date(order.ready_at).getTime() - placedTime) / 1000));
   }
-
-  // Active running timer: count up from +ve 0m 00s -> 1m -> 2m...
-  const elapsedSec = Math.max(0, Math.floor((now - placedTime) / 1000));
-  const elapsedMins = Math.floor(elapsedSec / 60);
-  const elapsedSecsRem = elapsedSec % 60;
-  const isDelayed = elapsedMins >= ORDER_CONFIG.COUNTER_ORDER_DELAY_THRESHOLD_MINUTES;
-  const isCapped = elapsedMins >= ORDER_CONFIG.MAX_PREP_STOPWATCH_MINUTES;
-
-  // Guard rail: Stop stopwatch when 1hr has passed; display '1hr +' without running infinitely
-  if (isCapped) {
-    return {
-      type: 'running' as const,
-      label: '1hr +',
-      isDelayed: true,
-      mins: elapsedMins,
-      isCapped: true,
-    };
+  if (prepSecs == null && order.actualPrepTimeMinutes) {
+    prepSecs = order.actualPrepTimeMinutes * 60;
   }
-
+  if (prepSecs == null) {
+    const finishTime = new Date(order.updatedAt || order.createdAt).getTime();
+    prepSecs = Math.max(0, Math.round((finishTime - placedTime) / 1000));
+  }
+  const mins = Math.floor(prepSecs / 60);
+  const secs = prepSecs % 60;
+  const isDelayed = mins >= ORDER_CONFIG.COUNTER_ORDER_DELAY_THRESHOLD_MINUTES;
+  const isCapped = mins >= ORDER_CONFIG.MAX_PREP_STOPWATCH_MINUTES;
   return {
-    type: 'running' as const,
-    label: `+${elapsedMins}m ${elapsedSecsRem.toString().padStart(2, '0')}s`,
+    label: isCapped ? '1hr +' : `${mins}m ${secs.toString().padStart(2, '0')}s`,
     isDelayed,
-    mins: elapsedMins,
-    isCapped: false,
   };
 }
+
+const CompletedOrderPrepBadge = React.memo(function CompletedOrderPrepBadge({ order }: { order: Order }) {
+  const { label, isDelayed } = useMemo(() => getCompletedPrepDuration(order), [order]);
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full border ${
+      isDelayed
+        ? 'bg-red-50 text-red-700 border-red-200'
+        : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+    }`}>
+      <CheckCircle2 className="w-3 h-3 text-current" />
+      <span>✅ Prep: {label}</span>
+    </span>
+  );
+});
+
+const ActiveOrderTimer = React.memo(function ActiveOrderTimer({ placedAt }: { placedAt?: string | Date }) {
+  const placedTime = useMemo(() => new Date(placedAt || Date.now()).getTime(), [placedAt]);
+  const maxStopwatchMs = ORDER_CONFIG.MAX_PREP_STOPWATCH_MINUTES * 60 * 1000;
+
+  const [timerState, setTimerState] = useState(() => {
+    const diffMs = Date.now() - placedTime;
+    if (diffMs >= maxStopwatchMs) {
+      return { label: '1hr +', isDelayed: true, isCapped: true };
+    }
+    const elapsedSec = Math.max(0, Math.floor(diffMs / 1000));
+    const elapsedMins = Math.floor(elapsedSec / 60);
+    const elapsedSecsRem = elapsedSec % 60;
+    const isDelayed = elapsedMins >= ORDER_CONFIG.COUNTER_ORDER_DELAY_THRESHOLD_MINUTES;
+    return {
+      label: `+${elapsedMins}m ${elapsedSecsRem.toString().padStart(2, '0')}s`,
+      isDelayed,
+      isCapped: false,
+    };
+  });
+
+  useEffect(() => {
+    // If order has already surpassed 1hr, do NOT start any interval at all!
+    if (Date.now() - placedTime >= maxStopwatchMs) {
+      setTimerState({ label: '1hr +', isDelayed: true, isCapped: true });
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const diffMs = now - placedTime;
+
+      // HARD STOP AT 1 HOUR: Stop timer immediately!
+      if (diffMs >= maxStopwatchMs) {
+        setTimerState({ label: '1hr +', isDelayed: true, isCapped: true });
+        clearInterval(interval);
+        return;
+      }
+
+      const elapsedSec = Math.max(0, Math.floor(diffMs / 1000));
+      const elapsedMins = Math.floor(elapsedSec / 60);
+      const elapsedSecsRem = elapsedSec % 60;
+      const isDelayed = elapsedMins >= ORDER_CONFIG.COUNTER_ORDER_DELAY_THRESHOLD_MINUTES;
+
+      setTimerState({
+        label: `+${elapsedMins}m ${elapsedSecsRem.toString().padStart(2, '0')}s`,
+        isDelayed,
+        isCapped: false,
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [placedTime, maxStopwatchMs]);
+
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full border ${
+      timerState.isDelayed
+        ? `bg-red-100 text-red-800 border-red-300 ${timerState.isCapped ? '' : 'animate-pulse'}`
+        : 'bg-amber-50 text-amber-800 border-amber-200'
+    }`}>
+      <Clock className="w-3 h-3 text-current" />
+      <span>⏱️ {timerState.label}</span>
+    </span>
+  );
+});
+
+const DetailActiveStopwatch = React.memo(function DetailActiveStopwatch({
+  order,
+  onMarkReady,
+  isActionLoading,
+}: {
+  order: Order;
+  onMarkReady: () => void;
+  isActionLoading?: boolean;
+}) {
+  const placedTime = useMemo(() => new Date(order.placed_at || order.createdAt).getTime(), [order.placed_at, order.createdAt]);
+  const maxStopwatchMs = ORDER_CONFIG.MAX_PREP_STOPWATCH_MINUTES * 60 * 1000;
+
+  const [timerState, setTimerState] = useState(() => {
+    const diffMs = Date.now() - placedTime;
+    if (diffMs >= maxStopwatchMs) {
+      return { label: '1hr +', isDelayed: true, isCapped: true };
+    }
+    const elapsedSec = Math.max(0, Math.floor(diffMs / 1000));
+    const elapsedMins = Math.floor(elapsedSec / 60);
+    const elapsedSecsRem = elapsedSec % 60;
+    const isDelayed = elapsedMins >= ORDER_CONFIG.COUNTER_ORDER_DELAY_THRESHOLD_MINUTES;
+    return {
+      label: `+${elapsedMins}m ${elapsedSecsRem.toString().padStart(2, '0')}s`,
+      isDelayed,
+      isCapped: false,
+    };
+  });
+
+  useEffect(() => {
+    if (Date.now() - placedTime >= maxStopwatchMs) {
+      setTimerState({ label: '1hr +', isDelayed: true, isCapped: true });
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const diffMs = now - placedTime;
+
+      if (diffMs >= maxStopwatchMs) {
+        setTimerState({ label: '1hr +', isDelayed: true, isCapped: true });
+        clearInterval(interval);
+        return;
+      }
+
+      const elapsedSec = Math.max(0, Math.floor(diffMs / 1000));
+      const elapsedMins = Math.floor(elapsedSec / 60);
+      const elapsedSecsRem = elapsedSec % 60;
+      const isDelayed = elapsedMins >= ORDER_CONFIG.COUNTER_ORDER_DELAY_THRESHOLD_MINUTES;
+
+      setTimerState({
+        label: `+${elapsedMins}m ${elapsedSecsRem.toString().padStart(2, '0')}s`,
+        isDelayed,
+        isCapped: false,
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [placedTime, maxStopwatchMs]);
+
+  return (
+    <div className="border-t border-[#E2E6EA] pt-4">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6B7280]">
+          Live Prep Elapsed Stopwatch (+ve Elapsed)
+        </h3>
+        <div className="flex items-center gap-2">
+          {order.estimatedTime ? (
+            <span className="text-[10px] font-bold uppercase text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full">
+              Target: {order.estimatedTime}m
+            </span>
+          ) : null}
+          {timerState.isCapped ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-red-700 bg-red-100 border border-red-200 px-2 py-0.5 rounded-full">
+              <AlertTriangle className="w-3 h-3 text-red-600" />
+              1hr+
+            </span>
+          ) : timerState.isDelayed ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-red-700 bg-red-100 border border-red-200 px-2 py-0.5 rounded-full animate-pulse">
+              <AlertTriangle className="w-3 h-3 text-red-600" />
+              Over 10m
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <div className={`rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border ${
+        timerState.isDelayed
+          ? 'bg-gradient-to-r from-red-50 to-red-100/50 border-red-200 shadow-sm ring-1 ring-red-400'
+          : 'bg-gradient-to-r from-[#FEF2F2] to-[#FFF5F5] border-[#FEE2E2] shadow-sm'
+      }`}>
+        <div className="flex items-center gap-3">
+          <div className={`p-2.5 rounded-xl ${timerState.isDelayed ? 'bg-red-600 text-white' : 'bg-[#C0181A]/10 text-[#C0181A]'}`}>
+            <Clock className={`w-5 h-5 ${timerState.isCapped ? '' : timerState.isDelayed ? 'animate-bounce' : 'animate-pulse'}`} />
+          </div>
+          <div>
+            <span className="text-xs text-[#6B7280] block font-medium">Running Elapsed Time</span>
+            <span className={`text-2xl font-black tracking-tight tabular-nums ${timerState.isDelayed ? 'text-red-700' : 'text-[#111827]'}`}>
+              {timerState.label}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={isActionLoading}
+            onClick={onMarkReady}
+            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white text-xs font-black rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>{isActionLoading ? 'Logging...' : '⚡ Mark Ready & Log Prep Time'}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+const DetailPrepPerformanceCard = React.memo(function DetailPrepPerformanceCard({
+  order,
+  onMarkReady,
+  isActionLoading,
+}: {
+  order: Order;
+  onMarkReady: () => void;
+  isActionLoading?: boolean;
+}) {
+  const isReadyOrDone = ['ready', 'completed'].includes(order.status);
+
+  if (isReadyOrDone) {
+    const { label, isDelayed } = getCompletedPrepDuration(order);
+    const mins = Math.floor((order.prep_duration_seconds || 0) / 60) || (order.actualPrepTimeMinutes || 0);
+    const isCapped = label === '1hr +';
+
+    return (
+      <div className="border-t border-[#E2E6EA] pt-4">
+        <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6B7280] mb-2">
+          Kitchen Prep Performance
+        </h3>
+        <div className={`p-4 rounded-2xl border flex items-center justify-between ${
+          isDelayed ? 'bg-red-50/70 border-red-200' : 'bg-emerald-50/70 border-emerald-200'
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className={`p-2.5 rounded-xl ${
+              isDelayed ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'
+            }`}>
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-xs text-[#6B7280] block font-semibold">Prep Duration</span>
+              <span className="text-2xl font-black text-[#111827] tracking-tight tabular-nums">
+                {label}
+              </span>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className={`inline-flex items-center gap-1 text-[11px] font-black uppercase px-2.5 py-1 rounded-full border ${
+              isDelayed
+                ? 'bg-red-100 text-red-800 border-red-200'
+                : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+            }`}>
+              {isDelayed ? <AlertTriangle className="w-3.5 h-3.5 text-red-600" /> : <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
+              <span>{isDelayed ? `Delayed (${isCapped ? '1hr+' : `${mins}m`})` : `On-Time (${mins}m)`}</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (['received', 'accepted', 'preparing'].includes(order.status)) {
+    return <DetailActiveStopwatch order={order} onMarkReady={onMarkReady} isActionLoading={isActionLoading} />;
+  }
+
+  return null;
+});
+
+interface OrderDetailPaneProps {
+  selectedOrder: Order | null;
+  viewMode: 'list' | 'detail';
+  setViewMode: (mode: 'list' | 'detail') => void;
+  businessCategory: string;
+  isPaymentUpdating: boolean;
+  paymentSuccessMode: string | null;
+  editSuccessInfo: { total: number; count: number } | null;
+  isActionLoading: boolean;
+  isWaSending: boolean;
+  onStatusChange: (orderId: string, nextStatus: Order['status']) => void;
+  onCancelOrder: (orderId: string) => void;
+  onUpdatePaymentMode: (orderId: string, newMode: 'cash' | 'online' | 'credit') => void;
+  onSendWhatsApp: (order: Order, typeOverride?: 'placed' | 'ready' | 'updated') => void;
+  onOpenEditModal: (order: Order) => void;
+  onAcceptOrder: (orderId: string, mins: number) => Promise<void>;
+}
+
+const OrderDetailPane = React.memo(function OrderDetailPane({
+  selectedOrder,
+  viewMode,
+  setViewMode,
+  businessCategory,
+  isPaymentUpdating,
+  paymentSuccessMode,
+  editSuccessInfo,
+  isActionLoading,
+  isWaSending,
+  onStatusChange,
+  onCancelOrder,
+  onUpdatePaymentMode,
+  onSendWhatsApp,
+  onOpenEditModal,
+  onAcceptOrder,
+}: OrderDetailPaneProps) {
+  const [customEta, setCustomEta] = useState('');
+
+  return (
+    <div className={`w-full lg:w-1/2 bg-white border border-[#E2E6EA] rounded-xl p-6 flex flex-col gap-5 lg:sticky lg:top-6 ${viewMode === 'list' ? 'hidden lg:flex' : 'flex'}`}>
+      {selectedOrder ? (
+        <>
+          <button
+            onClick={() => setViewMode('list')}
+            className="lg:hidden flex items-center gap-1.5 text-sm text-[#6B7280] hover:text-[#111827] mb-2 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back to list
+          </button>
+
+          {/* Header */}
+          <div className="flex justify-between items-start border-b border-[#E2E6EA] pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold text-[#111827]">Order Details</h2>
+                <span className={`inline-flex items-center gap-1 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border ${
+                  selectedOrder.source === 'admin_counter'
+                    ? 'bg-purple-100 text-purple-800 border-purple-200'
+                    : 'bg-sky-100 text-sky-800 border-sky-200'
+                }`}>
+                  {selectedOrder.source === 'admin_counter' ? '🥡 Counter Order' : '📱 QR Scan'}
+                </span>
+              </div>
+              <span className="text-[12px] text-[#6B7280] block mt-0.5">ID: {selectedOrder._id}</span>
+              <span className="text-[12px] text-[#6B7280] block">
+                Placed: {new Date(selectedOrder.placed_at || selectedOrder.createdAt).toLocaleString()}
+              </span>
+            </div>
+            <StatusBadge label={selectedOrder.status} variant={getStatusVariant(selectedOrder.status)} />
+          </div>
+
+          {/* Delay Warning Badge in Detail View */}
+          {selectedOrder.isDelayed && (
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase tracking-wider text-red-700 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-red-600" />
+                  Order Delayed by +{selectedOrder.delayMinutes} Mins
+                </span>
+                <span className="text-[10px] bg-red-100 text-red-800 font-extrabold px-2.5 py-0.5 rounded-full">
+                  ETA: {selectedOrder.estimatedTime}m | Actual: {selectedOrder.actualPrepTimeMinutes}m
+                </span>
+              </div>
+              {selectedOrder.delayReason && (
+                <div className="text-xs text-red-900 font-semibold bg-white/70 border border-red-200/60 p-2.5 rounded-xl">
+                  <span className="font-extrabold uppercase text-[9px] text-red-700 block mb-0.5">Logged Delay Reason:</span>
+                  <p className="italic">"{selectedOrder.delayReason}"</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {selectedOrder.estimatedTime && !selectedOrder.isDelayed && (
+            <div className="inline-flex items-center gap-1.5 text-sm font-medium text-[#D97706] bg-[#FFFBEB] px-3 py-1.5 rounded-lg border border-[#D97706]/20 w-fit">
+              <Clock className="w-3.5 h-3.5" />
+              ETA: {selectedOrder.estimatedTime} mins
+            </div>
+          )}
+
+          {/* Rejection Audit Warning Badge in Detail View */}
+          {selectedOrder.status === 'cancelled' && (
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase tracking-wider text-red-700 flex items-center gap-1.5">
+                  <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
+                  Order Rejected / Cancelled
+                </span>
+                {selectedOrder.rejectedAt && (
+                  <span className="text-[10px] bg-red-100 text-red-800 font-extrabold px-2.5 py-0.5 rounded-full">
+                    {new Date(selectedOrder.rejectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-red-900 font-semibold bg-white/70 border border-red-200/60 p-2.5 rounded-xl">
+                <span className="font-extrabold uppercase text-[9px] text-red-700 block mb-0.5">Internal Audit Rejection Reason:</span>
+                <p className="italic font-bold">"{selectedOrder.rejectionReason || 'No specific reason logged'}"</p>
+              </div>
+            </div>
+          )}
+
+          {/* Customer, Order Type & Payment Method */}
+          <div>
+            <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6B7280] mb-2">Customer & Order Details</h3>
+            <p className="text-sm font-black text-[#111827]">{selectedOrder.customerName}</p>
+            <p className="text-xs font-semibold text-[#6B7280]">{selectedOrder.customerPhone}</p>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <span className={`text-xs font-extrabold px-3 py-1 rounded-full border ${
+                selectedOrder.appointmentDetails || businessCategory === 'salon'
+                  ? 'bg-purple-100 text-purple-800 border-purple-200'
+                  : selectedOrder.orderType === 'dine_in' || (selectedOrder.tableId && !selectedOrder.tableId.toLowerCase().includes('takeaway'))
+                  ? 'bg-blue-100 text-blue-800 border-blue-200'
+                  : selectedOrder.orderType === 'delivery'
+                  ? 'bg-purple-100 text-purple-800 border-purple-200'
+                  : 'bg-amber-100 text-amber-800 border-amber-200'
+              }`}>
+                {selectedOrder.appointmentDetails || businessCategory === 'salon'
+                  ? `📅 In-Salon Appointment ${selectedOrder.tableId ? `(Station ${selectedOrder.tableId})` : ''}`
+                  : selectedOrder.orderType === 'dine_in' || (selectedOrder.tableId && !selectedOrder.tableId.toLowerCase().includes('takeaway'))
+                  ? `🍽️ Dine In ${selectedOrder.tableId ? `(Table ${selectedOrder.tableId})` : '(At table)'}`
+                  : selectedOrder.orderType === 'delivery'
+                  ? '🛵 Delivery (Home delivery)'
+                  : '🥡 Takeaway (Self pickup)'}
+              </span>
+              <span className={`text-xs font-extrabold px-3 py-1 rounded-full border ${
+                selectedOrder.paymentMode === 'credit'
+                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                  : selectedOrder.paymentMode === 'online'
+                  ? 'bg-blue-100 text-blue-800 border-blue-200'
+                  : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+              }`}>
+                {selectedOrder.paymentMode === 'credit'
+                  ? '⏳ Credit / Udhar (Pending)'
+                  : selectedOrder.paymentMode === 'online'
+                  ? '💳 Online Payment'
+                  : '💵 Cash'}
+              </span>
+            </div>
+            {selectedOrder.notes && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-[#C0181A]">
+                <span className="font-extrabold uppercase tracking-wide block mb-1">
+                  {businessCategory === 'salon' ? 'Client Request Note:' : businessCategory === 'detailing' ? 'Job / Bay Note:' : 'Note to Chef:'}
+                </span>
+                <p className="italic font-medium leading-relaxed">"{selectedOrder.notes}"</p>
+              </div>
+            )}
+          </div>
+
+          {/* Payment Method & Post-Order Settlement Control */}
+          <div className={`p-4 rounded-xl border flex flex-col gap-3 transition-all ${
+            selectedOrder.paymentMode === 'credit'
+              ? 'bg-amber-50/80 border-amber-300 shadow-xs'
+              : 'bg-[#F9FAFB] border-[#E2E6EA]'
+          }`}>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-700 flex items-center gap-1.5">
+                <CreditCard className="w-4 h-4 text-gray-600" />
+                <span>Payment Method & Settlement</span>
+              </span>
+              {selectedOrder.paymentMode === 'credit' ? (
+                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-200 text-amber-950 border border-amber-300 animate-pulse">
+                  ⚠️ Pending Amount: ₹{selectedOrder.total}
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Settled
+                </span>
+              )}
+            </div>
+
+            {selectedOrder.paymentMode === 'credit' ? (
+              <div className="text-xs text-amber-950 bg-amber-100/70 p-3 rounded-lg border border-amber-200/90">
+                <p className="font-semibold leading-relaxed">
+                  This order is currently on <strong>Credit / Udhar (Pay Later)</strong>. Once the customer pays, quickly settle below to immediately reconcile your till:
+                </p>
+                <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                  <button
+                    type="button"
+                    disabled={isPaymentUpdating}
+                    onClick={() => onUpdatePaymentMode(selectedOrder._id, 'cash')}
+                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Banknote className="w-3.5 h-3.5" />
+                    <span>Settle with Cash (₹{selectedOrder.total})</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isPaymentUpdating}
+                    onClick={() => onUpdatePaymentMode(selectedOrder._id, 'online')}
+                    className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>Settle Online / UPI (₹{selectedOrder.total})</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-[11px] text-gray-600 font-medium">
+                Need to update payment mode after order was placed? Select new mode:
+              </div>
+            )}
+
+            {/* Payment Mode Selector Buttons */}
+            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+              <span className="text-[11px] font-semibold text-gray-500 mr-1">Switch Mode:</span>
+              <button
+                type="button"
+                disabled={isPaymentUpdating || selectedOrder.paymentMode === 'cash'}
+                onClick={() => onUpdatePaymentMode(selectedOrder._id, 'cash')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
+                  selectedOrder.paymentMode === 'cash'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs font-extrabold'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300'
+                } disabled:opacity-60 disabled:cursor-not-allowed`}
+              >
+                <span>💵 Cash</span>
+                {selectedOrder.paymentMode === 'cash' && <span className="text-[11px]">✓</span>}
+              </button>
+
+              <button
+                type="button"
+                disabled={isPaymentUpdating || selectedOrder.paymentMode === 'online'}
+                onClick={() => onUpdatePaymentMode(selectedOrder._id, 'online')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
+                  selectedOrder.paymentMode === 'online'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-2xs font-extrabold'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50 hover:text-blue-800 hover:border-blue-300'
+                } disabled:opacity-60 disabled:cursor-not-allowed`}
+              >
+                <span>💳 Online / UPI</span>
+                {selectedOrder.paymentMode === 'online' && <span className="text-[11px]">✓</span>}
+              </button>
+
+              <button
+                type="button"
+                disabled={isPaymentUpdating || selectedOrder.paymentMode === 'credit'}
+                onClick={() => onUpdatePaymentMode(selectedOrder._id, 'credit')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
+                  selectedOrder.paymentMode === 'credit'
+                    ? 'bg-amber-600 text-white border-amber-600 shadow-2xs font-extrabold'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-amber-50 hover:text-amber-800 hover:border-amber-300'
+                } disabled:opacity-60 disabled:cursor-not-allowed`}
+              >
+                <span>⏳ Credit (Udhar)</span>
+                {selectedOrder.paymentMode === 'credit' && <span className="text-[11px]">✓</span>}
+              </button>
+
+              {isPaymentUpdating && (
+                <span className="text-xs text-gray-600 font-semibold animate-pulse ml-2 flex items-center gap-1">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-gray-500" />
+                  <span>Updating...</span>
+                </span>
+              )}
+            </div>
+
+            {/* Payment Mode Success Toast */}
+            {paymentSuccessMode && (
+              <div className="bg-emerald-100 border border-emerald-300 text-emerald-950 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 animate-in fade-in">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                <span>Payment mode successfully updated to {paymentSuccessMode.toUpperCase()}!</span>
+              </div>
+            )}
+          </div>
+
+          {/* Updated Items Success Notification */}
+          {editSuccessInfo && (
+            <div className="bg-emerald-50 border-2 border-emerald-400 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                <div>
+                  <h4 className="font-extrabold text-xs text-emerald-950">
+                    Order Items Updated Successfully!
+                  </h4>
+                  <p className="text-[11px] font-medium text-emerald-800">
+                    New Total: <span className="font-black text-emerald-950">₹{editSuccessInfo.total}</span> ({editSuccessInfo.count} {editSuccessInfo.count === 1 ? 'item' : 'items'})
+                  </p>
+                </div>
+              </div>
+              {selectedOrder.customerPhone && (
+                <button
+                  type="button"
+                  onClick={() => onSendWhatsApp(selectedOrder, 'updated')}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#25D366] hover:bg-[#1EBE5D] text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer whitespace-nowrap active:scale-95"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Send Updated WhatsApp</span>
+                  <ExternalLink className="w-3 h-3 opacity-80" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Receipt */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Items</h3>
+              {!['cancelled', 'rejected', 'completed'].includes(selectedOrder.status) && (
+                <button
+                  type="button"
+                  onClick={() => onOpenEditModal(selectedOrder)}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-red-600 hover:text-red-700 hover:bg-red-50 px-2.5 py-1 rounded-xl border border-red-200 transition-colors cursor-pointer active:scale-95 shadow-2xs"
+                >
+                  <Edit className="w-3 h-3" />
+                  <span>Edit / Update Items</span>
+                </button>
+              )}
+            </div>
+            <div className="divide-y divide-[#E2E6EA]">
+              {selectedOrder.items.map((item, idx) => (
+                <div key={idx} className="py-2 flex justify-between text-sm">
+                  <span className="text-[#111827]">{item.name} <span className="text-[#6B7280]">×{item.quantity}</span></span>
+                  <span className="font-medium">₹{item.price * item.quantity}</span>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-[#111827] pt-3 mt-2 flex justify-between font-semibold text-[#111827]">
+              <span>Total</span>
+              <span>₹{selectedOrder.total}</span>
+            </div>
+          </div>
+
+          {/* Salon Appointment Details Card */}
+          {(selectedOrder.appointmentDetails || businessCategory === 'salon') && (
+            <div className="border-t border-[#E2E6EA] pt-4">
+              <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-purple-700 mb-2 flex items-center gap-1.5">
+                <span>Appointment Reservation Details</span>
+              </h3>
+              <div className="bg-purple-50/70 border border-purple-200/80 rounded-2xl p-4 flex flex-col gap-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-white/90 rounded-xl p-3 border border-purple-100">
+                    <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">Date & Slot</span>
+                    <span className="font-black text-sm text-gray-900 block">
+                      {selectedOrder.appointmentDetails?.bookingDate || 'Scheduled Date'} • {selectedOrder.appointmentDetails?.bookingTime || 'Scheduled Slot'}
+                    </span>
+                  </div>
+                  <div className="bg-white/90 rounded-xl p-3 border border-purple-100">
+                    <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">Assigned Specialist</span>
+                    <span className="font-black text-sm text-gray-900 block truncate">
+                      {selectedOrder.appointmentDetails?.specialistName || 'Any Available Specialist'}
+                    </span>
+                  </div>
+                </div>
+                {selectedOrder.appointmentDetails?.userNotes && (
+                  <div className="bg-white/90 rounded-xl p-3 border border-purple-100 text-xs">
+                    <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">Client Special Notes:</span>
+                    <p className="italic text-gray-700">"{selectedOrder.appointmentDetails.userNotes}"</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Running Prep Timer or Completed Performance Card - STRICTLY for Restaurant ONLY */}
+          {businessCategory === 'restaurant' && ['received', 'accepted', 'preparing', 'ready', 'completed'].includes(selectedOrder.status) && (
+            <DetailPrepPerformanceCard
+              order={selectedOrder}
+              onMarkReady={() => onStatusChange(selectedOrder._id, 'ready')}
+              isActionLoading={isActionLoading}
+            />
+          )}
+
+          {/* WhatsApp Notification Card */}
+          <div className="border-t border-[#E2E6EA] pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6B7280]">
+                Customer Notification
+              </h3>
+              {selectedOrder.whatsapp_notified ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  WhatsApp Notified
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
+                  <Clock className="w-3 h-3 text-amber-600" />
+                  Pending Notification
+                </span>
+              )}
+            </div>
+            <div className="bg-[#F9FAFB] border border-[#E2E6EA] rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-[#25D366]/10 text-[#25D366] rounded-lg">
+                  <MessageSquare className="w-5 h-5 text-[#25D366]" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-[#111827]">
+                    {selectedOrder.customerPhone || 'No phone number'}
+                  </p>
+                  <p className="text-[11px] text-[#6B7280]">
+                    {selectedOrder.whatsapp_notified_at
+                      ? `Sent at ${new Date(selectedOrder.whatsapp_notified_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : selectedOrder.status === 'ready' || selectedOrder.status === 'completed'
+                      ? 'Send "Order Ready" pickup alert'
+                      : 'Send "Order Placed" receipt link'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isWaSending || !selectedOrder.customerPhone}
+                onClick={() => onSendWhatsApp(selectedOrder)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#25D366] hover:bg-[#1EBE5D] disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>
+                  {isWaSending
+                    ? 'Opening...'
+                    : selectedOrder.whatsapp_notified
+                    ? 'Resend WhatsApp'
+                    : 'Notify on WhatsApp'}
+                </span>
+                <ExternalLink className="w-3 h-3 opacity-80" />
+              </button>
+            </div>
+          </div>
+
+          {/* Status Controls */}
+          <div className="border-t border-[#E2E6EA] pt-4">
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] mb-3">Update Status</h3>
+            {isActionLoading ? (
+              <span className="text-xs text-[#6B7280] animate-pulse">Updating...</span>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {businessCategory === 'salon' ? (
+                  /* Salon / Service Business Workflow */
+                  <div className="flex flex-col gap-3">
+                    {selectedOrder.status === 'received' && (
+                      <div className="bg-[#F9FAFB] p-4 rounded-2xl border border-[#E2E6EA] flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-black uppercase text-gray-700 tracking-wider">
+                            Appointment Actions
+                          </span>
+                          <span className="text-[10px] bg-purple-100 text-purple-800 font-extrabold px-2.5 py-0.5 rounded-full">
+                            New Booking
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2.5 items-center">
+                          <AdminButton
+                            variant="success"
+                            onClick={() => onAcceptOrder(selectedOrder._id, 30)}
+                          >
+                            <span className="flex items-center gap-1.5 font-bold">
+                              <CheckCircle2 className="w-4 h-4 text-white" />
+                              <span>Accept & Confirm Booking</span>
+                            </span>
+                          </AdminButton>
+                          <AdminButton
+                            variant="secondary"
+                            onClick={() => onStatusChange(selectedOrder._id, 'preparing')}
+                          >
+                            Start Service
+                          </AdminButton>
+                          <AdminButton
+                            variant="dangerSolid"
+                            onClick={() => onCancelOrder(selectedOrder._id)}
+                          >
+                            Decline Booking
+                          </AdminButton>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-2">
+                      {selectedOrder.status === 'accepted' && (
+                        <>
+                          <AdminButton onClick={() => onStatusChange(selectedOrder._id, 'preparing')}>
+                            Start Service
+                          </AdminButton>
+                          <AdminButton variant="success" onClick={() => onStatusChange(selectedOrder._id, 'completed')}>
+                            Mark Completed
+                          </AdminButton>
+                        </>
+                      )}
+                      {selectedOrder.status === 'preparing' && (
+                        <AdminButton variant="success" onClick={() => onStatusChange(selectedOrder._id, 'completed')}>
+                          Mark Completed
+                        </AdminButton>
+                      )}
+                      {selectedOrder.status === 'ready' && (
+                        <AdminButton variant="success" onClick={() => onStatusChange(selectedOrder._id, 'completed')}>
+                          Complete Service
+                        </AdminButton>
+                      )}
+                      {['accepted', 'preparing', 'ready'].includes(selectedOrder.status) && (
+                        <AdminButton variant="danger" onClick={() => onCancelOrder(selectedOrder._id)}>
+                          Cancel Booking
+                        </AdminButton>
+                      )}
+                      {['completed', 'cancelled'].includes(selectedOrder.status) && (
+                        <span className="text-sm text-[#6B7280]">This appointment is finalized.</span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  /* Standard Restaurant Workflow */
+                  <div className="flex flex-col gap-3">
+                    {selectedOrder.status === 'received' && (
+                      selectedOrder.source === 'admin_counter' ? (
+                        <div className="bg-[#F9FAFB] p-4 rounded-2xl border border-[#E2E6EA] flex flex-col gap-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-black uppercase text-gray-700 tracking-wider">
+                              Walk-in Counter Actions
+                            </span>
+                            <span className="text-[10px] bg-purple-100 text-purple-800 font-extrabold px-2.5 py-0.5 rounded-full">
+                              Walk-in POS
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-2.5 items-center">
+                            <AdminButton
+                              variant="success"
+                              onClick={() => onStatusChange(selectedOrder._id, 'ready')}
+                            >
+                              <span className="flex items-center gap-1.5 font-black">
+                                <Sparkles className="w-4 h-4 text-amber-300" />
+                                <span>⚡ Mark Ready</span>
+                              </span>
+                            </AdminButton>
+                            <AdminButton
+                              variant="secondary"
+                              onClick={() => onStatusChange(selectedOrder._id, 'preparing')}
+                            >
+                              Start Preparing
+                            </AdminButton>
+                            <AdminButton
+                              variant="dangerSolid"
+                              onClick={() => onCancelOrder(selectedOrder._id)}
+                            >
+                              Cancel Order
+                            </AdminButton>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-[#F9FAFB] p-3 rounded-lg border border-[#E2E6EA] w-full">
+                          <label className="text-[11px] font-bold text-[#374151] uppercase tracking-wider block mb-2">Set Preparation Time</label>
+                          <div className="flex flex-col gap-2">
+                            <div className="flex flex-wrap gap-1.5">
+                              {[15, 20, 30, 45, 60].map((mins) => (
+                                <button
+                                  key={mins}
+                                  type="button"
+                                  onClick={() => setCustomEta(mins.toString())}
+                                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors border ${
+                                    customEta === mins.toString()
+                                      ? 'bg-green-600 text-white border-green-600'
+                                      : 'bg-white text-[#374151] border-[#E2E6EA] hover:bg-[#F4F6F9]'
+                                  }`}
+                                >
+                                  {mins} min
+                                </button>
+                              ))}
+                            </div>
+                            <div className="flex gap-2 items-center">
+                              <input
+                                type="number"
+                                min="1"
+                                max="180"
+                                placeholder="Custom minutes"
+                                value={customEta}
+                                onChange={(e) => setCustomEta(e.target.value)}
+                                className="px-3 py-1.5 text-xs border border-[#E2E6EA] rounded-lg w-32 outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981]"
+                              />
+                            </div>
+                            <div className="flex flex-wrap gap-2 items-center mt-2 border-t border-[#E2E6EA] pt-2">
+                              <AdminButton
+                                variant="success"
+                                onClick={async () => {
+                                  const mins = parseInt(customEta, 10) || 20;
+                                  await onAcceptOrder(selectedOrder._id, mins);
+                                  setCustomEta('');
+                                }}
+                              >
+                                Accept Order
+                              </AdminButton>
+                              <AdminButton
+                                variant="secondary"
+                                onClick={() => onStatusChange(selectedOrder._id, 'ready')}
+                              >
+                                <span className="flex items-center gap-1 font-black">
+                                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                                  <span>Mark Ready</span>
+                                </span>
+                              </AdminButton>
+                              <AdminButton
+                                variant="dangerSolid"
+                                onClick={() => onCancelOrder(selectedOrder._id)}
+                              >
+                                Reject Order
+                              </AdminButton>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {selectedOrder.status === 'accepted' && (
+                        <>
+                          <AdminButton onClick={() => onStatusChange(selectedOrder._id, 'preparing')}>Start Preparing</AdminButton>
+                          <AdminButton variant="success" onClick={() => onStatusChange(selectedOrder._id, 'ready')}>Mark Ready</AdminButton>
+                        </>
+                      )}
+                      {selectedOrder.status === 'preparing' && (
+                        <AdminButton variant="success" onClick={() => onStatusChange(selectedOrder._id, 'ready')}>Mark Ready</AdminButton>
+                      )}
+                      {selectedOrder.status === 'ready' && (
+                        <AdminButton variant="success" onClick={() => onStatusChange(selectedOrder._id, 'completed')}>Complete / Delivered</AdminButton>
+                      )}
+                      {['accepted', 'preparing', 'ready'].includes(selectedOrder.status) && (
+                        <AdminButton variant="danger" onClick={() => onCancelOrder(selectedOrder._id)}>Cancel</AdminButton>
+                      )}
+                      {['completed', 'cancelled'].includes(selectedOrder.status) && (
+                        <span className="text-sm text-[#6B7280]">This order is finalized.</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="text-center py-12 text-sm text-[#6B7280]">
+          Select an order from the list to view details.
+        </div>
+      )}
+    </div>
+  );
+});
 
 function OrdersContent() {
   const searchParams = useSearchParams();
@@ -101,12 +964,18 @@ function OrdersContent() {
   const initialCacheKey = `${initialSourceTab}_all_1`;
   const initialCached = getCachedOrders(initialCacheKey);
 
-  const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
-  const [restaurantName, setRestaurantName] = useState<string>(() => {
-    const pos = getCachedPosMenu();
-    return pos?.details?.restaurantName || pos?.details?.name || 'Restaurant';
+  const auth = useSelector((state: RootState) => state.auth);
+  const initialPos = getCachedPosMenu();
+
+  const [businessCategory, setBusinessCategory] = useState<string>(() => {
+    return (auth as any)?.businessCategory || initialPos?.details?.businessCategory || 'restaurant';
   });
-  const [restaurantId, setRestaurantId] = useState<string>('');
+  const [restaurantName, setRestaurantName] = useState<string>(() => {
+    return auth.restaurantName || initialPos?.details?.restaurantName || initialPos?.details?.name || 'Restaurant';
+  });
+  const [restaurantId, setRestaurantId] = useState<string>(() => {
+    return auth.restaurantId || initialPos?.details?.restaurantId || '';
+  });
   const [sourceTab, setSourceTab] = useState<'qr_scan' | 'admin_counter' | 'all'>(initialSourceTab);
   const [orders, setOrders] = useState<Order[]>(initialCached?.orders || []);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(initialCached?.orders[0] || null);
@@ -114,12 +983,51 @@ function OrdersContent() {
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [loading, setLoading] = useState(!initialCached);
   const [error, setError] = useState('');
-  const [customEta, setCustomEta] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
   const [waSending, setWaSending] = useState<Record<string, boolean>>({});
+  const [paymentFilter, setPaymentFilter] = useState<'all' | 'cash' | 'online' | 'credit'>('all');
+  const [paymentModeUpdating, setPaymentModeUpdating] = useState<string | null>(null);
+  const [paymentModeSuccess, setPaymentModeSuccess] = useState<{ orderId: string; mode: string } | null>(null);
+
+  const handleUpdateOrderPaymentMode = async (
+    orderId: string,
+    newMode: 'cash' | 'online' | 'credit'
+  ) => {
+    setPaymentModeUpdating(orderId);
+    try {
+      const res = await updateOrderPaymentModeAction(orderId, newMode);
+      if (res?.success && res.order) {
+        const updatedOrder: Order = res.order;
+        setOrders((prev) => prev.map((o) => (o._id === orderId ? { ...o, paymentMode: newMode } : o)));
+        if (selectedOrder?._id === orderId) {
+          setSelectedOrder((prev) => (prev ? { ...prev, paymentMode: newMode } : null));
+        }
+        updateOrderInCache({ ...((orders.find((o) => o._id === orderId)) || selectedOrder || {}), paymentMode: newMode } as Order);
+        setPaymentModeSuccess({ orderId, mode: newMode });
+        setTimeout(() => setPaymentModeSuccess(null), 4000);
+      }
+    } catch (err) {
+      console.error('Failed to update order payment mode:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to update payment mode';
+      alert(msg);
+    } finally {
+      setPaymentModeUpdating(null);
+    }
+  };
+
+  const displayedOrders = useMemo(() => {
+    if (paymentFilter === 'all') return orders;
+    return orders.filter((o) => (o.paymentMode || 'cash') === paymentFilter);
+  }, [orders, paymentFilter]);
 
   useEffect(() => {
+    // If restaurantId is already resolved from Redux/cache, prefetch POS menu if needed and skip server roundtrip
+    if (restaurantId) {
+      prefetchPosMenu(restaurantId);
+      return;
+    }
+
     getRestaurantDetails()
       .then((details) => {
         if (details?.businessCategory) {
@@ -135,7 +1043,7 @@ function OrdersContent() {
         }
       })
       .catch((err) => console.error('Error loading business category for orders:', err));
-  }, []);
+  }, [restaurantId]);
 
   const vocab = getVocabulary(businessCategory);
   const presetDelayReasons = getDelayReasons(businessCategory);
@@ -205,38 +1113,6 @@ function OrdersContent() {
   useEffect(() => { highlightIdRef.current = highlightId; }, [highlightId]);
   useEffect(() => { sourceTabRef.current = sourceTab; }, [sourceTab]);
 
-  // Live timer state for countdown / prep stopwatch
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const maxStopwatchMs = ORDER_CONFIG.MAX_PREP_STOPWATCH_MINUTES * 60 * 1000;
-
-    const timer = setInterval(() => {
-      const currentNow = Date.now();
-      const currentOrders = ordersRef.current;
-      const currentSelected = selectedOrderRef.current;
-      const allActive = [
-        ...currentOrders,
-        ...(currentSelected && !currentOrders.some((o) => o._id === currentSelected._id) ? [currentSelected] : []),
-      ];
-
-      // Guard rail: only tick/re-render if there's at least one active order under the 1hr cap
-      const hasActive = allActive.some((order) => {
-        if (['ready', 'completed', 'cancelled', 'rejected'].includes(order.status)) return false;
-        const placedTime = new Date(order.placed_at || order.createdAt).getTime();
-        const elapsedMs = currentNow - placedTime;
-        return elapsedMs >= 0 && elapsedMs < maxStopwatchMs;
-      });
-
-      if (hasActive) {
-        setNow(currentNow);
-      }
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-
   const loadOrders = async (showLoading = false, pageNum?: number) => {
     const activePage = pageNum !== undefined ? pageNum : currentPageRef.current;
     const activeFilter = filterRef.current;
@@ -301,7 +1177,7 @@ function OrdersContent() {
         setError('Failed to load orders.');
       }
     } finally {
-      if (showLoading) setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -342,7 +1218,28 @@ function OrdersContent() {
       }
       setLoading(false);
     } else {
-      setLoading(true);
+      // Instant client-side preview from current orders pool to eliminate skeletons
+      const allCacheKey = `${sourceTab}_all_1`;
+      const allCached = getCachedOrders(allCacheKey);
+      const pool = allCached?.orders || (filter === 'all' ? ordersRef.current : []);
+
+      if (pool.length > 0) {
+        const matched = pool.filter((o) => {
+          if (newFilter === 'all') return true;
+          if (newFilter === 'delayed') return !!o.isDelayed;
+          if (newFilter === 'missed') {
+            const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+            return o.status === 'received' && new Date(o.createdAt).getTime() < tenMinutesAgo;
+          }
+          return o.status === newFilter;
+        });
+        setOrders(matched);
+        setTotalCount(matched.length);
+        if (matched.length > 0) {
+          setSelectedOrder(matched[0]);
+        }
+      }
+      setLoading(false);
     }
   };
 
@@ -591,9 +1488,12 @@ function OrdersContent() {
       phone: order.customerPhone,
       customerName: order.customerName,
       orderId: order._id,
+      orderNumber: (order as any).orderNumber,
       restaurantName: restaurantName || 'Restaurant',
       total: order.total,
       items: order.items,
+      businessCategory: (order as any).businessCategory || (order.appointmentDetails ? 'salon' : undefined),
+      appointmentDetails: order.appointmentDetails,
     });
 
     if (waUrl) {
@@ -651,6 +1551,25 @@ function OrdersContent() {
       executeStatusUpdate(orderId, 'cancelled');
     }
   };
+
+  const handleAcceptOrder = useCallback(
+    async (orderId: string, mins: number) => {
+      setActionLoading((prev) => ({ ...prev, [orderId]: true }));
+      try {
+        const updated = await updateOrderEstimatedTime(orderId, mins);
+        setOrders((prev) => prev.map((o) => (o._id === orderId ? updated : o)));
+        setSelectedOrder(updated);
+        updateOrderInCache(updated);
+        acknowledgeOrder(orderId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to accept order';
+        alert(message);
+      } finally {
+        setActionLoading((prev) => ({ ...prev, [orderId]: false }));
+      }
+    },
+    [acknowledgeOrder]
+  );
 
   // Calculate kitchen metrics with fallback to local orders if server stats not yet loaded
   const delayedOrders = orders.filter((o) => o.isDelayed);
@@ -839,6 +1758,51 @@ function OrdersContent() {
         )}
       </div>
 
+      {/* Payment Filter Bar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Payment:</span>
+        <div className="flex items-center gap-1 p-0.5 bg-gray-100 rounded-xl">
+          {(['all', 'cash', 'online', 'credit'] as const).map((mode) => {
+            const count = mode === 'all'
+              ? orders.length
+              : orders.filter((o) => (o.paymentMode || 'cash') === mode).length;
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setPaymentFilter(mode)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  paymentFilter === mode
+                    ? mode === 'credit'
+                      ? 'bg-amber-600 text-white shadow-xs font-black'
+                      : 'bg-white text-gray-900 shadow-xs'
+                    : mode === 'credit'
+                    ? 'text-amber-900 hover:bg-amber-100/70 font-extrabold'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <span>
+                  {mode === 'all'
+                    ? 'All Payments'
+                    : mode === 'cash'
+                    ? '💵 Cash'
+                    : mode === 'online'
+                    ? '💳 Online'
+                    : '⏳ Credit (Pending)'}
+                </span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                  paymentFilter === mode
+                    ? mode === 'credit' ? 'bg-amber-800 text-white' : 'bg-gray-200 text-gray-800'
+                    : mode === 'credit' ? 'bg-amber-200 text-amber-900' : 'bg-gray-200/80 text-gray-700'
+                }`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {orders.length === 0 ? (
         loading ? (
           <div className="flex flex-col lg:flex-row gap-4 items-start w-full animate-pulse">
@@ -862,10 +1826,22 @@ function OrdersContent() {
               {sourceTab === 'admin_counter' ? <ShoppingBag className="w-8 h-8 text-gray-400" /> : <Clock className="w-8 h-8 text-gray-400" />}
             </div>
             <p className="text-sm font-semibold text-[#6B7280]">
-              {sourceTab === 'admin_counter'
+              {sourceTab === 'admin_counter' && filter === 'all'
                 ? 'No counter orders found for this view.'
                 : filter === 'delayed'
                 ? 'Great job! No delayed orders found.'
+                : filter === 'missed'
+                ? 'No missed orders pending attention.'
+                : filter === 'preparing'
+                ? 'No orders currently preparing.'
+                : filter === 'ready'
+                ? 'No orders waiting to be served or picked up.'
+                : filter === 'completed'
+                ? 'No completed orders in this view.'
+                : filter === 'cancelled'
+                ? 'No cancelled orders.'
+                : filter === 'received'
+                ? 'No new received orders.'
                 : 'No orders received yet.'}
             </p>
             {sourceTab === 'admin_counter' && (
@@ -886,18 +1862,30 @@ function OrdersContent() {
           <div className={`w-full lg:w-1/2 flex flex-col gap-3 ${viewMode === 'detail' ? 'hidden lg:flex' : 'flex'}`}>
             <div className="bg-white border border-[#E2E6EA] rounded-xl max-h-[600px] overflow-y-auto">
               <div className="divide-y divide-[#E2E6EA]">
-                {orders.map((order) => (
-                  <OrderListItem
-                    key={order._id}
-                    order={order}
-                    isSelected={selectedOrder?._id === order._id}
-                    onClick={handleOrderSelect}
-                    now={now}
-                    onStatusChange={handleStatusChange}
-                    isActionLoading={actionLoading[order._id] || false}
-                    businessCategory={businessCategory}
-                  />
-                ))}
+                {displayedOrders.length === 0 ? (
+                  <div className="p-8 text-center text-sm text-[#6B7280]">
+                    <p className="font-semibold text-gray-700">No {paymentFilter === 'credit' ? 'credit (Udhar)' : paymentFilter} orders found in this view.</p>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentFilter('all')}
+                      className="mt-2 text-xs font-bold text-[#C0181A] hover:underline cursor-pointer"
+                    >
+                      Clear payment filter
+                    </button>
+                  </div>
+                ) : (
+                  displayedOrders.map((order) => (
+                    <OrderListItem
+                      key={order._id}
+                      order={order}
+                      isSelected={selectedOrder?._id === order._id}
+                      onClick={handleOrderSelect}
+                      onStatusChange={handleStatusChange}
+                      isActionLoading={actionLoading[order._id] || false}
+                      businessCategory={businessCategory}
+                    />
+                  ))
+                )}
               </div>
             </div>
 
@@ -924,614 +1912,24 @@ function OrdersContent() {
             )}
           </div>
 
-          {/* Right pane: Detail */}
-          <div className={`w-full lg:w-1/2 bg-white border border-[#E2E6EA] rounded-xl p-6 flex flex-col gap-5 lg:sticky lg:top-6 ${viewMode === 'list' ? 'hidden lg:flex' : 'flex'}`}>
-            {selectedOrder ? (
-              <>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className="lg:hidden flex items-center gap-1.5 text-sm text-[#6B7280] hover:text-[#111827] mb-2 transition-colors"
-                >
-                  <ArrowLeft className="w-4 h-4" /> Back to list
-                </button>
-
-                {/* Header */}
-                <div className="flex justify-between items-start border-b border-[#E2E6EA] pb-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-lg font-bold text-[#111827]">Order Details</h2>
-                      <span className={`inline-flex items-center gap-1 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border ${
-                        selectedOrder.source === 'admin_counter'
-                          ? 'bg-purple-100 text-purple-800 border-purple-200'
-                          : 'bg-sky-100 text-sky-800 border-sky-200'
-                      }`}>
-                        {selectedOrder.source === 'admin_counter' ? '🥡 Counter Order' : '📱 QR Scan'}
-                      </span>
-                    </div>
-                    <span className="text-[12px] text-[#6B7280] block mt-0.5">ID: {selectedOrder._id}</span>
-                    <span className="text-[12px] text-[#6B7280] block">
-                      Placed: {new Date(selectedOrder.placed_at || selectedOrder.createdAt).toLocaleString()}
-                    </span>
-                  </div>
-                  <StatusBadge label={selectedOrder.status} variant={getStatusVariant(selectedOrder.status)} />
-                </div>
-
-                {/* Delay Warning Badge in Detail View */}
-                {selectedOrder.isDelayed && (
-                  <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-black uppercase tracking-wider text-red-700 flex items-center gap-1.5">
-                        <AlertTriangle className="w-4 h-4 text-red-600" />
-                        Order Delayed by +{selectedOrder.delayMinutes} Mins
-                      </span>
-                      <span className="text-[10px] bg-red-100 text-red-800 font-extrabold px-2.5 py-0.5 rounded-full">
-                        ETA: {selectedOrder.estimatedTime}m | Actual: {selectedOrder.actualPrepTimeMinutes}m
-                      </span>
-                    </div>
-                    {selectedOrder.delayReason && (
-                      <div className="text-xs text-red-900 font-semibold bg-white/70 border border-red-200/60 p-2.5 rounded-xl">
-                        <span className="font-extrabold uppercase text-[9px] text-red-700 block mb-0.5">Logged Delay Reason:</span>
-                        <p className="italic">"{selectedOrder.delayReason}"</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {selectedOrder.estimatedTime && !selectedOrder.isDelayed && (
-                  <div className="inline-flex items-center gap-1.5 text-sm font-medium text-[#D97706] bg-[#FFFBEB] px-3 py-1.5 rounded-lg border border-[#D97706]/20 w-fit">
-                    <Clock className="w-3.5 h-3.5" />
-                    ETA: {selectedOrder.estimatedTime} mins
-                  </div>
-                )}
-
-                {/* Rejection Audit Warning Badge in Detail View */}
-                {selectedOrder.status === 'cancelled' && (
-                  <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-black uppercase tracking-wider text-red-700 flex items-center gap-1.5">
-                        <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
-                        Order Rejected / Cancelled
-                      </span>
-                      {selectedOrder.rejectedAt && (
-                        <span className="text-[10px] bg-red-100 text-red-800 font-extrabold px-2.5 py-0.5 rounded-full">
-                          {new Date(selectedOrder.rejectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-red-900 font-semibold bg-white/70 border border-red-200/60 p-2.5 rounded-xl">
-                      <span className="font-extrabold uppercase text-[9px] text-red-700 block mb-0.5">Internal Audit Rejection Reason:</span>
-                      <p className="italic font-bold">"{selectedOrder.rejectionReason || 'No specific reason logged'}"</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Customer, Order Type & Payment Method */}
-                <div>
-                  <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6B7280] mb-2">Customer & Order Details</h3>
-                  <p className="text-sm font-black text-[#111827]">{selectedOrder.customerName}</p>
-                  <p className="text-xs font-semibold text-[#6B7280]">{selectedOrder.customerPhone}</p>
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <span className={`text-xs font-extrabold px-3 py-1 rounded-full border ${
-                      selectedOrder.appointmentDetails || businessCategory === 'salon'
-                        ? 'bg-purple-100 text-purple-800 border-purple-200'
-                        : selectedOrder.orderType === 'dine_in' || (selectedOrder.tableId && !selectedOrder.tableId.toLowerCase().includes('takeaway'))
-                        ? 'bg-blue-100 text-blue-800 border-blue-200'
-                        : selectedOrder.orderType === 'delivery'
-                        ? 'bg-purple-100 text-purple-800 border-purple-200'
-                        : 'bg-amber-100 text-amber-800 border-amber-200'
-                    }`}>
-                      {selectedOrder.appointmentDetails || businessCategory === 'salon'
-                        ? `📅 In-Salon Appointment ${selectedOrder.tableId ? `(Station ${selectedOrder.tableId})` : ''}`
-                        : selectedOrder.orderType === 'dine_in' || (selectedOrder.tableId && !selectedOrder.tableId.toLowerCase().includes('takeaway'))
-                        ? `🍽️ Dine In ${selectedOrder.tableId ? `(Table ${selectedOrder.tableId})` : '(At table)'}`
-                        : selectedOrder.orderType === 'delivery'
-                        ? '🛵 Delivery (Home delivery)'
-                        : '🥡 Takeaway (Self pickup)'}
-                    </span>
-                    <span className={`text-xs font-extrabold px-3 py-1 rounded-full border ${
-                      selectedOrder.paymentMode === 'online'
-                        ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                        : 'bg-green-100 text-green-800 border-green-200'
-                    }`}>
-                      {selectedOrder.paymentMode === 'online' ? '💳 Online Payment' : '💵 Cash'}
-                    </span>
-                  </div>
-                  {selectedOrder.notes && (
-                    <div className="mt-3 p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-[#C0181A]">
-                      <span className="font-extrabold uppercase tracking-wide block mb-1">
-                        {businessCategory === 'salon' ? 'Client Request Note:' : businessCategory === 'detailing' ? 'Job / Bay Note:' : 'Note to Chef:'}
-                      </span>
-                      <p className="italic font-medium leading-relaxed">"{selectedOrder.notes}"</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Updated Items Success Notification */}
-                {editSuccessAlert && editSuccessAlert.orderId === selectedOrder._id && (
-                  <div className="bg-emerald-50 border-2 border-emerald-400 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
-                    <div className="flex items-center gap-2.5">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                      <div>
-                        <h4 className="font-extrabold text-xs text-emerald-950">
-                          Order Items Updated Successfully!
-                        </h4>
-                        <p className="text-[11px] font-medium text-emerald-800">
-                          New Total: <span className="font-black text-emerald-950">₹{editSuccessAlert.total}</span> ({editSuccessAlert.count} {editSuccessAlert.count === 1 ? 'item' : 'items'})
-                        </p>
-                      </div>
-                    </div>
-                    {selectedOrder.customerPhone && (
-                      <button
-                        type="button"
-                        onClick={() => handleSendWhatsApp(selectedOrder, 'updated')}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#25D366] hover:bg-[#1EBE5D] text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer whitespace-nowrap active:scale-95"
-                      >
-                        <MessageSquare className="w-3.5 h-3.5" />
-                        <span>Send Updated WhatsApp</span>
-                        <ExternalLink className="w-3 h-3 opacity-80" />
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* Receipt */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">Items</h3>
-                    {!['cancelled', 'rejected', 'completed'].includes(selectedOrder.status) && (
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEditModal(selectedOrder)}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold text-red-600 hover:text-red-700 hover:bg-red-50 px-2.5 py-1 rounded-xl border border-red-200 transition-colors cursor-pointer active:scale-95 shadow-2xs"
-                      >
-                        <Edit className="w-3 h-3" />
-                        <span>Edit / Update Items</span>
-                      </button>
-                    )}
-                  </div>
-                  <div className="divide-y divide-[#E2E6EA]">
-                    {selectedOrder.items.map((item, idx) => (
-                      <div key={idx} className="py-2 flex justify-between text-sm">
-                        <span className="text-[#111827]">{item.name} <span className="text-[#6B7280]">×{item.quantity}</span></span>
-                        <span className="font-medium">₹{item.price * item.quantity}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="border-t border-[#111827] pt-3 mt-2 flex justify-between font-semibold text-[#111827]">
-                    <span>Total</span>
-                    <span>₹{selectedOrder.total}</span>
-                  </div>
-                </div>
-
-                {/* Salon Appointment Details Card */}
-                {(selectedOrder.appointmentDetails || businessCategory === 'salon') && (
-                  <div className="border-t border-[#E2E6EA] pt-4">
-                    <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-purple-700 mb-2 flex items-center gap-1.5">
-                      <span>Appointment Reservation Details</span>
-                    </h3>
-                    <div className="bg-purple-50/70 border border-purple-200/80 rounded-2xl p-4 flex flex-col gap-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-white/90 rounded-xl p-3 border border-purple-100">
-                          <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">Date & Slot</span>
-                          <span className="font-black text-sm text-gray-900 block">
-                            {selectedOrder.appointmentDetails?.bookingDate || 'Scheduled Date'} • {selectedOrder.appointmentDetails?.bookingTime || 'Scheduled Slot'}
-                          </span>
-                        </div>
-                        <div className="bg-white/90 rounded-xl p-3 border border-purple-100">
-                          <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">Assigned Specialist</span>
-                          <span className="font-black text-sm text-gray-900 block truncate">
-                            {selectedOrder.appointmentDetails?.specialistName || 'Any Available Specialist'}
-                          </span>
-                        </div>
-                      </div>
-                      {selectedOrder.appointmentDetails?.userNotes && (
-                        <div className="bg-white/90 rounded-xl p-3 border border-purple-100 text-xs">
-                          <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">Client Special Notes:</span>
-                          <p className="italic text-gray-700">"{selectedOrder.appointmentDetails.userNotes}"</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Running Prep Timer or Completed Performance Card - STRICTLY for Restaurant ONLY */}
-                {(() => {
-                  // Guard rail: Salons, detailing, and retail do NOT have kitchen prep metrics
-                  if (businessCategory !== 'restaurant') {
-                    return null;
-                  }
-
-                  const timerInfo = getOrderTimerInfo(selectedOrder, now);
-                  const isReadyOrDone = ['ready', 'completed'].includes(selectedOrder.status);
-
-                  if (isReadyOrDone && timerInfo?.type === 'completed') {
-                    return (
-                      <div className="border-t border-[#E2E6EA] pt-4">
-                        <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6B7280] mb-2">
-                          Kitchen Prep Performance
-                        </h3>
-                        <div className={`p-4 rounded-2xl border flex items-center justify-between ${
-                          timerInfo.isDelayed
-                            ? 'bg-red-50/70 border-red-200'
-                            : 'bg-emerald-50/70 border-emerald-200'
-                        }`}>
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2.5 rounded-xl ${
-                              timerInfo.isDelayed ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'
-                            }`}>
-                              <Clock className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <span className="text-xs text-[#6B7280] block font-semibold">Prep Duration</span>
-                              <span className="text-2xl font-black text-[#111827] tracking-tight tabular-nums">
-                                {timerInfo.label}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <span className={`inline-flex items-center gap-1 text-[11px] font-black uppercase px-2.5 py-1 rounded-full border ${
-                              timerInfo.isDelayed
-                                ? 'bg-red-100 text-red-800 border-red-200'
-                                : 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                            }`}>
-                              {timerInfo.isDelayed ? <AlertTriangle className="w-3.5 h-3.5 text-red-600" /> : <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
-                              <span>{timerInfo.isDelayed ? `Delayed (${timerInfo.isCapped ? '1hr+' : `${timerInfo.mins}m`})` : `On-Time (${timerInfo.mins}m)`}</span>
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  if (!isReadyOrDone && ['received', 'accepted', 'preparing'].includes(selectedOrder.status)) {
-                    return (
-                      <div className="border-t border-[#E2E6EA] pt-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6B7280]">
-                            Live Prep Elapsed Stopwatch (+ve Elapsed)
-                          </h3>
-                          <div className="flex items-center gap-2">
-                            {selectedOrder.estimatedTime ? (
-                              <span className="text-[10px] font-bold uppercase text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full">
-                                Target: {selectedOrder.estimatedTime}m
-                              </span>
-                            ) : null}
-                            {timerInfo?.isCapped ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-red-700 bg-red-100 border border-red-200 px-2 py-0.5 rounded-full">
-                                <AlertTriangle className="w-3 h-3 text-red-600" />
-                                1hr+
-                              </span>
-                            ) : timerInfo?.isDelayed ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-red-700 bg-red-100 border border-red-200 px-2 py-0.5 rounded-full animate-pulse">
-                                <AlertTriangle className="w-3 h-3 text-red-600" />
-                                Over 10m
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-                        <div className={`rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border ${
-                          timerInfo?.isDelayed
-                            ? 'bg-gradient-to-r from-red-50 to-red-100/50 border-red-200 shadow-sm ring-1 ring-red-400'
-                            : 'bg-gradient-to-r from-[#FEF2F2] to-[#FFF5F5] border-[#FEE2E2] shadow-sm'
-                        }`}>
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2.5 rounded-xl ${timerInfo?.isDelayed ? 'bg-red-600 text-white' : 'bg-[#C0181A]/10 text-[#C0181A]'}`}>
-                              <Clock className={`w-5 h-5 ${timerInfo?.isCapped ? '' : timerInfo?.isDelayed ? 'animate-bounce' : 'animate-pulse'}`} />
-                            </div>
-                            <div>
-                              <span className="text-xs text-[#6B7280] block font-medium">Running Elapsed Time</span>
-                              <span className={`text-2xl font-black tracking-tight tabular-nums ${timerInfo?.isDelayed ? 'text-red-700' : 'text-[#111827]'}`}>
-                                {timerInfo?.label || '+0m 00s'}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              disabled={actionLoading[selectedOrder._id]}
-                              onClick={() => handleStatusChange(selectedOrder._id, 'ready')}
-                              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white text-xs font-black rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
-                            >
-                              <Sparkles className="w-4 h-4 text-amber-300" />
-                              <span>{actionLoading[selectedOrder._id] ? 'Logging...' : '⚡ Mark Ready & Log Prep Time'}</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  return null;
-                })()}
-
-                {/* WhatsApp Notification Card */}
-                <div className="border-t border-[#E2E6EA] pt-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#6B7280]">
-                      Customer Notification
-                    </h3>
-                    {selectedOrder.whatsapp_notified ? (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        WhatsApp Notified
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
-                        <Clock className="w-3 h-3 text-amber-600" />
-                        Pending Notification
-                      </span>
-                    )}
-                  </div>
-                  <div className="bg-[#F9FAFB] border border-[#E2E6EA] rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-2 bg-[#25D366]/10 text-[#25D366] rounded-lg">
-                        <MessageSquare className="w-5 h-5 text-[#25D366]" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-[#111827]">
-                          {selectedOrder.customerPhone || 'No phone number'}
-                        </p>
-                        <p className="text-[11px] text-[#6B7280]">
-                          {selectedOrder.whatsapp_notified_at
-                            ? `Sent at ${new Date(selectedOrder.whatsapp_notified_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                            : selectedOrder.status === 'ready' || selectedOrder.status === 'completed'
-                            ? 'Send "Order Ready" pickup alert'
-                            : 'Send "Order Placed" receipt link'}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={waSending[selectedOrder._id] || !selectedOrder.customerPhone}
-                      onClick={() => handleSendWhatsApp(selectedOrder)}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#25D366] hover:bg-[#1EBE5D] disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      <span>
-                        {waSending[selectedOrder._id]
-                          ? 'Opening...'
-                          : selectedOrder.whatsapp_notified
-                          ? 'Resend WhatsApp'
-                          : 'Notify on WhatsApp'}
-                      </span>
-                      <ExternalLink className="w-3 h-3 opacity-80" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Status Controls */}
-                <div className="border-t border-[#E2E6EA] pt-4">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280] mb-3">Update Status</h3>
-                  {actionLoading[selectedOrder._id] ? (
-                    <span className="text-xs text-[#6B7280] animate-pulse">Updating...</span>
-                  ) : (
-                    <div className="flex flex-col gap-3">
-                      {businessCategory === 'salon' ? (
-                        /* Salon / Service Business Workflow */
-                        <div className="flex flex-col gap-3">
-                          {selectedOrder.status === 'received' && (
-                            <div className="bg-[#F9FAFB] p-4 rounded-2xl border border-[#E2E6EA] flex flex-col gap-3">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[11px] font-black uppercase text-gray-700 tracking-wider">
-                                  Appointment Actions
-                                </span>
-                                <span className="text-[10px] bg-purple-100 text-purple-800 font-extrabold px-2.5 py-0.5 rounded-full">
-                                  New Booking
-                                </span>
-                              </div>
-                              <div className="flex flex-wrap gap-2.5 items-center">
-                                <AdminButton
-                                  variant="success"
-                                  onClick={async () => {
-                                    setActionLoading((prev) => ({ ...prev, [selectedOrder._id]: true }));
-                                    try {
-                                      const updated = await updateOrderEstimatedTime(selectedOrder._id, 30);
-                                      setOrders((prev) => prev.map((o) => (o._id === selectedOrder._id ? updated : o)));
-                                      setSelectedOrder(updated);
-                                      acknowledgeOrder(selectedOrder._id);
-                                    } catch (err) {
-                                      const message = err instanceof Error ? err.message : 'Failed to confirm booking';
-                                      alert(message);
-                                    } finally {
-                                      setActionLoading((prev) => ({ ...prev, [selectedOrder._id]: false }));
-                                    }
-                                  }}
-                                >
-                                  <span className="flex items-center gap-1.5 font-bold">
-                                    <CheckCircle2 className="w-4 h-4 text-white" />
-                                    <span>Accept & Confirm Booking</span>
-                                  </span>
-                                </AdminButton>
-                                <AdminButton
-                                  variant="secondary"
-                                  onClick={() => handleStatusChange(selectedOrder._id, 'preparing')}
-                                >
-                                  Start Service
-                                </AdminButton>
-                                <AdminButton
-                                  variant="dangerSolid"
-                                  onClick={() => handleCancelOrder(selectedOrder._id)}
-                                >
-                                  Decline Booking
-                                </AdminButton>
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="flex flex-wrap gap-2">
-                            {selectedOrder.status === 'accepted' && (
-                              <>
-                                <AdminButton onClick={() => handleStatusChange(selectedOrder._id, 'preparing')}>
-                                  Start Service
-                                </AdminButton>
-                                <AdminButton variant="success" onClick={() => handleStatusChange(selectedOrder._id, 'completed')}>
-                                  Mark Completed
-                                </AdminButton>
-                              </>
-                            )}
-                            {selectedOrder.status === 'preparing' && (
-                              <AdminButton variant="success" onClick={() => handleStatusChange(selectedOrder._id, 'completed')}>
-                                Mark Completed
-                              </AdminButton>
-                            )}
-                            {selectedOrder.status === 'ready' && (
-                              <AdminButton variant="success" onClick={() => handleStatusChange(selectedOrder._id, 'completed')}>
-                                Complete Service
-                              </AdminButton>
-                            )}
-                            {['accepted', 'preparing', 'ready'].includes(selectedOrder.status) && (
-                              <AdminButton variant="danger" onClick={() => handleCancelOrder(selectedOrder._id)}>
-                                Cancel Booking
-                              </AdminButton>
-                            )}
-                            {['completed', 'cancelled'].includes(selectedOrder.status) && (
-                              <span className="text-sm text-[#6B7280]">This appointment is finalized.</span>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        /* Standard Restaurant Workflow */
-                        <div className="flex flex-col gap-3">
-                          {selectedOrder.status === 'received' && (
-                            selectedOrder.source === 'admin_counter' ? (
-                              <div className="bg-[#F9FAFB] p-4 rounded-2xl border border-[#E2E6EA] flex flex-col gap-3">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[11px] font-black uppercase text-gray-700 tracking-wider">
-                                    Walk-in Counter Actions
-                                  </span>
-                                  <span className="text-[10px] bg-purple-100 text-purple-800 font-extrabold px-2.5 py-0.5 rounded-full">
-                                    Walk-in POS
-                                  </span>
-                                </div>
-                                <div className="flex flex-wrap gap-2.5 items-center">
-                                  <AdminButton
-                                    variant="success"
-                                    onClick={() => handleStatusChange(selectedOrder._id, 'ready')}
-                                  >
-                                    <span className="flex items-center gap-1.5 font-black">
-                                      <Sparkles className="w-4 h-4 text-amber-300" />
-                                      <span>⚡ Mark Ready</span>
-                                    </span>
-                                  </AdminButton>
-                                  <AdminButton
-                                    variant="secondary"
-                                    onClick={() => handleStatusChange(selectedOrder._id, 'preparing')}
-                                  >
-                                    Start Preparing
-                                  </AdminButton>
-                                  <AdminButton
-                                    variant="dangerSolid"
-                                    onClick={() => handleCancelOrder(selectedOrder._id)}
-                                  >
-                                    Cancel Order
-                                  </AdminButton>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="bg-[#F9FAFB] p-3 rounded-lg border border-[#E2E6EA] w-full">
-                                <label className="text-[11px] font-bold text-[#374151] uppercase tracking-wider block mb-2">Set Preparation Time</label>
-                                <div className="flex flex-col gap-2">
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {[15, 20, 30, 45, 60].map((mins) => (
-                                      <button
-                                        key={mins}
-                                        type="button"
-                                        onClick={() => setCustomEta(mins.toString())}
-                                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors border ${
-                                          customEta === mins.toString()
-                                            ? 'bg-green-600 text-white border-green-600'
-                                            : 'bg-white text-[#374151] border-[#E2E6EA] hover:bg-[#F4F6F9]'
-                                        }`}
-                                      >
-                                        {mins} min
-                                      </button>
-                                    ))}
-                                  </div>
-                                  <div className="flex gap-2 items-center">
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      max="180"
-                                      placeholder="Custom minutes"
-                                      value={customEta}
-                                      onChange={(e) => setCustomEta(e.target.value)}
-                                      className="px-3 py-1.5 text-xs border border-[#E2E6EA] rounded-lg w-32 outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981]"
-                                    />
-                                  </div>
-                                  <div className="flex flex-wrap gap-2 items-center mt-2 border-t border-[#E2E6EA] pt-2">
-                                    <AdminButton
-                                      variant="success"
-                                      onClick={async () => {
-                                        const mins = parseInt(customEta, 10) || 20;
-                                        setActionLoading((prev) => ({ ...prev, [selectedOrder._id]: true }));
-                                        try {
-                                          const updated = await updateOrderEstimatedTime(selectedOrder._id, mins);
-                                          setOrders((prev) => prev.map((o) => (o._id === selectedOrder._id ? updated : o)));
-                                          setSelectedOrder(updated);
-                                          acknowledgeOrder(selectedOrder._id);
-                                          setCustomEta('');
-                                        } catch (err) {
-                                          const message = err instanceof Error ? err.message : 'Failed to accept order';
-                                          alert(message);
-                                        } finally {
-                                          setActionLoading((prev) => ({ ...prev, [selectedOrder._id]: false }));
-                                        }
-                                      }}
-                                    >
-                                      Accept Order
-                                    </AdminButton>
-                                    <AdminButton
-                                      variant="secondary"
-                                      onClick={() => handleStatusChange(selectedOrder._id, 'ready')}
-                                    >
-                                      <span className="flex items-center gap-1 font-black">
-                                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                                        <span>Mark Ready</span>
-                                      </span>
-                                    </AdminButton>
-                                    <AdminButton
-                                      variant="dangerSolid"
-                                      onClick={() => handleCancelOrder(selectedOrder._id)}
-                                    >
-                                      Reject Order
-                                    </AdminButton>
-                                  </div>
-                                </div>
-                              </div>
-                            )
-                          )}
-                          <div className="flex flex-wrap gap-2">
-                            {selectedOrder.status === 'accepted' && (
-                              <>
-                                <AdminButton onClick={() => handleStatusChange(selectedOrder._id, 'preparing')}>Start Preparing</AdminButton>
-                                <AdminButton variant="success" onClick={() => handleStatusChange(selectedOrder._id, 'ready')}>Mark Ready</AdminButton>
-                              </>
-                            )}
-                            {selectedOrder.status === 'preparing' && (
-                              <AdminButton variant="success" onClick={() => handleStatusChange(selectedOrder._id, 'ready')}>Mark Ready</AdminButton>
-                            )}
-                            {selectedOrder.status === 'ready' && (
-                              <AdminButton variant="success" onClick={() => handleStatusChange(selectedOrder._id, 'completed')}>Complete / Delivered</AdminButton>
-                            )}
-                            {['accepted', 'preparing', 'ready'].includes(selectedOrder.status) && (
-                              <AdminButton variant="danger" onClick={() => handleCancelOrder(selectedOrder._id)}>Cancel</AdminButton>
-                            )}
-                            {['completed', 'cancelled'].includes(selectedOrder.status) && (
-                              <span className="text-sm text-[#6B7280]">This order is finalized.</span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="text-center py-12 text-sm text-[#6B7280]">
-                Select an order from the list to view details.
-              </div>
-            )}
-          </div>
+          {/* Right pane: Detail (Memoized) */}
+          <OrderDetailPane
+            selectedOrder={selectedOrder}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            businessCategory={businessCategory}
+            isPaymentUpdating={Boolean(selectedOrder && paymentModeUpdating === selectedOrder._id)}
+            paymentSuccessMode={selectedOrder && paymentModeSuccess?.orderId === selectedOrder._id ? paymentModeSuccess.mode : null}
+            editSuccessInfo={selectedOrder && editSuccessAlert?.orderId === selectedOrder._id ? { total: editSuccessAlert.total, count: editSuccessAlert.count } : null}
+            isActionLoading={Boolean(selectedOrder && actionLoading[selectedOrder._id])}
+            isWaSending={Boolean(selectedOrder && waSending[selectedOrder._id])}
+            onStatusChange={handleStatusChange}
+            onCancelOrder={handleCancelOrder}
+            onUpdatePaymentMode={handleUpdateOrderPaymentMode}
+            onSendWhatsApp={handleSendWhatsApp}
+            onOpenEditModal={handleOpenEditModal}
+            onAcceptOrder={handleAcceptOrder}
+          />
         </div>
       )}
 
@@ -1937,7 +2335,6 @@ interface OrderListItemProps {
   order: Order;
   isSelected: boolean;
   onClick: (order: Order) => void;
-  now: number;
   onStatusChange?: (orderId: string, status: Order['status']) => void;
   isActionLoading?: boolean;
   businessCategory?: string;
@@ -1947,7 +2344,6 @@ const OrderListItem = React.memo(function OrderListItem({
   order,
   isSelected,
   onClick,
-  now,
   onStatusChange,
   isActionLoading = false,
   businessCategory = 'restaurant',
@@ -1960,10 +2356,15 @@ const OrderListItem = React.memo(function OrderListItem({
   const isDineIn = order.orderType === 'dine_in' || (order.tableId && !order.tableId.toLowerCase().includes('takeaway'));
   const isDelivery = order.orderType === 'delivery';
   const isOnlinePay = order.paymentMode === 'online';
+  const isCreditPay = order.paymentMode === 'credit';
   const isCounter = order.source === 'admin_counter';
 
-  const timerInfo = getOrderTimerInfo(order, now);
-  const isDelayedRunning = timerInfo?.type === 'running' && timerInfo.isDelayed;
+  const isFinalized = ['cancelled', 'rejected', 'ready', 'completed'].includes(order.status);
+  const isDelayedRunning = !isFinalized && (() => {
+    const placedTime = new Date(order.placed_at || order.createdAt).getTime();
+    const elapsedMins = Math.floor((Date.now() - placedTime) / (60 * 1000));
+    return elapsedMins >= ORDER_CONFIG.COUNTER_ORDER_DELAY_THRESHOLD_MINUTES;
+  })();
   const canMarkReady = ['received', 'accepted', 'preparing'].includes(order.status);
   const canComplete = order.status === 'ready';
 
@@ -2011,35 +2412,23 @@ const OrderListItem = React.memo(function OrderListItem({
             {isDineIn ? `🍽️ Table ${order.tableId || 'Dine In'}` : isDelivery ? '🛵 Delivery' : '🥡 Takeaway'}
           </span>
           <span className={`inline-flex items-center text-[10px] font-black px-2 py-0.5 rounded-full border ${
-            isOnlinePay
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+            isCreditPay
+              ? 'bg-amber-100 text-amber-900 border-amber-300 font-extrabold shadow-2xs'
+              : isOnlinePay
+              ? 'bg-blue-50 text-blue-800 border-blue-200'
               : 'bg-green-50 text-green-800 border-green-200'
           }`}>
-            {isOnlinePay ? '💳 Online' : '💵 Cash'}
+            {isCreditPay ? '⏳ Credit (Pending)' : isOnlinePay ? '💳 Online' : '💵 Cash'}
           </span>
 
           {/* Positive Count-Up Running Timer - STRICTLY for Restaurant ONLY */}
-          {effectiveCategory === 'restaurant' && timerInfo?.type === 'running' && (
-            <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full border ${
-              timerInfo.isDelayed
-                ? `bg-red-100 text-red-800 border-red-300 ${timerInfo.isCapped ? '' : 'animate-pulse'}`
-                : 'bg-amber-50 text-amber-800 border-amber-200'
-            }`}>
-              <Clock className="w-3 h-3 text-current" />
-              <span>⏱️ {timerInfo.label}</span>
-            </span>
+          {effectiveCategory === 'restaurant' && ['received', 'accepted', 'preparing'].includes(order.status) && (
+            <ActiveOrderTimer placedAt={order.placed_at || order.createdAt} />
           )}
 
           {/* Frozen Recorded Prep Duration - STRICTLY for Restaurant ONLY */}
-          {effectiveCategory === 'restaurant' && timerInfo?.type === 'completed' && (
-            <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full border ${
-              timerInfo.isDelayed
-                ? 'bg-red-50 text-red-700 border-red-200'
-                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-            }`}>
-              <CheckCircle2 className="w-3 h-3 text-current" />
-              <span>✅ Prep: {timerInfo.label}</span>
-            </span>
+          {effectiveCategory === 'restaurant' && ['ready', 'completed'].includes(order.status) && (
+            <CompletedOrderPrepBadge order={order} />
           )}
 
           {/* Salon Appointment Badge in List */}

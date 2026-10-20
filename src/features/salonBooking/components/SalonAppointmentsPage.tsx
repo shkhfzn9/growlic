@@ -18,9 +18,11 @@ import {
   Bell,
   Check,
   X,
-  Loader2
+  Loader2,
+  MessageCircle,
 } from 'lucide-react';
 import { SalonAppointment, BookingStatus } from '../types';
+import { generateWhatsAppOrderLink } from '@/lib/whatsappService';
 
 export default function SalonAppointmentsPage() {
   const auth = useSelector((state: RootState) => state.auth);
@@ -318,13 +320,43 @@ export default function SalonAppointmentsPage() {
                     <span className="text-[10px] font-black uppercase tracking-wider text-purple-800">Client Details</span>
                     <div className="flex items-center justify-between">
                       <h3 className="font-extrabold text-base text-gray-900 leading-tight">{app.customerName}</h3>
-                      <a
-                        href={`tel:${app.customerPhone}`}
-                        className="text-xs font-extrabold text-purple-700 hover:underline flex items-center gap-1"
-                      >
-                        <Phone className="w-3 h-3" />
-                        <span>{app.customerPhone}</span>
-                      </a>
+                      <div className="flex items-center gap-2">
+                        {app.customerPhone && (
+                          <a
+                            href={generateWhatsAppOrderLink({
+                              type: app.status === 'confirmed' || app.status === 'in_progress' ? 'ready' : 'placed',
+                              phone: app.customerPhone,
+                              customerName: app.customerName,
+                              orderId: app._id,
+                              orderNumber: app.orderNumber,
+                              restaurantName: auth.restaurantName || 'Salon',
+                              total: app.totalAmount,
+                              items: app.items,
+                              businessCategory: 'salon',
+                              appointmentDetails: {
+                                bookingDate: app.bookingDate,
+                                bookingTime: app.bookingTime,
+                                specialistName: app.specialistName,
+                                userNotes: app.notes,
+                              },
+                            })}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all cursor-pointer shadow-xs active:scale-95"
+                            title="Send WhatsApp Booking Confirmation"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>WhatsApp</span>
+                          </a>
+                        )}
+                        <a
+                          href={`tel:${app.customerPhone}`}
+                          className="text-xs font-extrabold text-purple-700 hover:underline flex items-center gap-1"
+                        >
+                          <Phone className="w-3 h-3" />
+                          <span>{app.customerPhone}</span>
+                        </a>
+                      </div>
                     </div>
                     <span className="text-xs text-gray-500 font-semibold flex items-center gap-1 mt-0.5">
                       <Calendar className="w-3 h-3 text-gray-400" />
