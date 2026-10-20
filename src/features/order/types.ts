@@ -29,6 +29,7 @@ export interface IOrder {
   subtotal: number;
   total: number;
   discount?: number;
+  tax?: number;
   couponCode?: string;
   status: 'received' | 'scheduled' | 'accepted' | 'confirmed' | 'in_progress' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'rejected';
   notes?: string;

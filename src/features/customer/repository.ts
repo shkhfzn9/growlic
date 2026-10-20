@@ -26,6 +26,7 @@ export function normalizeCustomer(doc: any): ICustomer {
     totalSpent,
     averageOrderValue,
     lastOrderDate: plain.lastOrderDate ? new Date(plain.lastOrderDate).toISOString() : (plain.updatedAt ? new Date(plain.updatedAt).toISOString() : null),
+    firstOrderDate: plain.firstOrderDate ? new Date(plain.firstOrderDate).toISOString() : (plain.createdAt ? new Date(plain.createdAt).toISOString() : (plain.lastOrderDate ? new Date(plain.lastOrderDate).toISOString() : null)),
     favoriteCategory: plain.favoriteCategory || '',
     stampCount: plain.stampCount ?? 0,
     lastStampDate: plain.lastStampDate ? new Date(plain.lastStampDate).toISOString() : null,
@@ -145,6 +146,7 @@ export async function incrementCustomerStats(
         $setOnInsert: {
           restaurantId: cleanRestId,
           phone: cleanPhone,
+          firstOrderDate: new Date(),
           favoriteCategory: '',
           stampCount: 0,
           hasPendingDiscount: false,

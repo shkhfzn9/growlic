@@ -30,6 +30,7 @@ export interface IOrderDocument extends Document {
   subtotal: number;
   total: number;
   discount?: number;
+  tax?: number;
   couponCode?: string;
   status: 'received' | 'scheduled' | 'accepted' | 'confirmed' | 'in_progress' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'rejected';
   notes?: string;
@@ -90,6 +91,7 @@ const OrderSchema: Schema = new Schema<IOrderDocument>(
     subtotal: { type: Number, required: true },
     total: { type: Number, required: true },
     discount: { type: Number, default: 0 },
+    tax: { type: Number, default: 0 },
     couponCode: { type: String, default: null },
     status: {
       type: String,
@@ -116,6 +118,8 @@ OrderSchema.index({ restaurantId: 1, createdAt: -1 });
 OrderSchema.index({ restaurantId: 1, status: 1, createdAt: -1 });
 OrderSchema.index({ restaurantId: 1, source: 1, createdAt: -1 });
 OrderSchema.index({ restaurantId: 1, source: 1, status: 1, createdAt: -1 });
+OrderSchema.index({ restaurantId: 1, customerPhone: 1, createdAt: -1 });
+OrderSchema.index({ restaurantId: 1, customerPhone: 1, status: 1, createdAt: -1 });
 
 // Valid Atomic Concurrency Lock: Partial Unique Index on activeSlotKey
 OrderSchema.index(

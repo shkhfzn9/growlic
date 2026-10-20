@@ -3,12 +3,17 @@
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth';
 import { getCustomersBySearch } from '@/features/customer';
+import {
+  getCustomerListWithSegments,
+  getCustomerDetail,
+  getCustomerVisitHistory,
+  getCustomerAnalytics,
+} from '@/features/customer/services/customerAnalyticsService';
+import { ICustomerListFilters } from '@/features/customer/types';
 
 /**
  * Validates the admin's authentication cookie ('admin_token') and decodes its payload.
  * Throws an Error if the token is missing or invalid.
- * 
- * @returns The decoded admin session JWT token object.
  */
 async function checkAdminAuth() {
   const cookieStore = await cookies();
@@ -26,11 +31,8 @@ async function checkAdminAuth() {
 }
 
 /**
- * Server action to fetch customers scoped to the authenticated admin's restaurant.
- * Support search filters by customer phone numbers.
- * 
- * @param searchPhone Optional search query phone string.
- * @returns Serialized, plain array of customer records.
+ * Legacy server action to fetch customers scoped to the authenticated admin's restaurant.
+ * Retained for backward compatibility.
  */
 export async function getCustomers(searchPhone?: string) {
   try {
@@ -40,6 +42,90 @@ export async function getCustomers(searchPhone?: string) {
   } catch (error) {
     console.error('Error fetching customers action:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch customers';
+    throw new Error(message);
+  }
+}
+
+/**
+ * Server action to fetch paginated customers enriched with computed segments,
+ * multi-filters, and segment count summary chips.
+ */
+export async function getCustomersWithSegmentsAction(filters: ICustomerListFilters = {}) {
+  try {
+    const admin = await checkAdminAuth();
+    const result = await getCustomerListWithSegments(admin.restaurantId, filters);
+    return JSON.parse(JSON.stringify(result));
+  } catch (error) {
+    console.error('Error fetching customers with segments:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch customers list';
+    throw new Error(message);
+  }
+}
+
+/**
+ * Server action to fetch single customer profile, RFM frequency metrics, and 6 insight cards.
+ */
+export async function getCustomerDetailAction(phone: string) {
+  try {
+    const admin = await checkAdminAuth();
+    const result = await getCustomerDetail(admin.restaurantId, phone);
+    if (!result) {
+      return null;
+    }
+    return JSON.parse(JSON.stringify(result));
+  } catch (error) {
+    console.error('Error fetching customer detail action:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch customer profile';
+    throw new Error(message);
+  }
+}
+
+/**
+ * Server action to fetch paginated visit history for a customer.
+ */
+export async function getCustomerVisitHistoryAction(phone: string, page = 1, limit = 10) {
+  try {
+    const admin = await checkAdminAuth();
+    const result = await getCustomerVisitHistory(admin.restaurantId, phone, page, limit);
+    return JSON.parse(JSON.stringify(result));
+  } catch (error) {
+    console.error('Error fetching customer visit history action:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch visit history';
+    throw new Error(message);
+  }
+}
+
+/**
+ * Server action to fetch Cohort Retention Heatmap, Pareto 80/20 data, and Summary KPIs.
+ */
+export async function getCustomerAnalyticsAction(forceRefresh = false) {
+  try {
+    const admin = await checkAdminAuth();
+    const result = await getCustomerAnalytics(admin.restaurantId, forceRefresh);
+    return JSON.parse(JSON.stringify(result));
+  } catch (error) {
+    console.error('Error fetching customer analytics action:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch customer analytics';
+    throw new Error(message);
+  }
+}
+
+/**
+ * Server action to retrieve all filtered customers formatted for CSV export.
+ */
+export async function exportCustomersCsvDataAction(filters: ICustomerListFilters = {}) {
+  try {
+    const admin = await checkAdminAuth();
+    // Fetch all matching records without pagination cutoff (limit: 5000)
+    const result = await getCustomerListWithSegments(admin.restaurantId, {
+      ...filters,
+      page: 1,
+      limit: 5000,
+    });
+    return JSON.parse(JSON.stringify(result.customers));
+  } catch (error) {
+    console.error('Error exporting customers CSV:', error);
+    const message = error instanceof Error ? error.message : 'Failed to export customers CSV';
     throw new Error(message);
   }
 }

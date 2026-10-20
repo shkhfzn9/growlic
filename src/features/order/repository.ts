@@ -40,6 +40,7 @@ export function normalizeOrder(doc: any): IOrder {
     subtotal: plain.subtotal,
     total: plain.total,
     discount: plain.discount || 0,
+    tax: plain.tax ?? Math.max(0, Math.round((plain.total - (plain.subtotal - (plain.discount || 0))) * 100) / 100),
     couponCode: plain.couponCode || undefined,
     status: plain.status,
     notes: plain.notes || '',

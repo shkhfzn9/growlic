@@ -8,6 +8,7 @@ export interface ICustomerDocument extends Document {
   totalSpent: number;
   averageOrderValue: number;
   lastOrderDate: Date | null;
+  firstOrderDate?: Date | null;
   favoriteCategory: string;
   stampCount: number;
   lastStampDate: Date | null;
@@ -24,6 +25,7 @@ const CustomerSchema: Schema = new Schema<ICustomerDocument>(
     totalSpent: { type: Number, default: 0 },
     averageOrderValue: { type: Number, default: 0 },
     lastOrderDate: { type: Date, default: null },
+    firstOrderDate: { type: Date, default: null },
     favoriteCategory: { type: String, default: '' },
     stampCount: { type: Number, default: 0 },
     lastStampDate: { type: Date, default: null },
@@ -34,6 +36,9 @@ const CustomerSchema: Schema = new Schema<ICustomerDocument>(
 );
 
 CustomerSchema.index({ restaurantId: 1, phone: 1 }, { unique: true });
+CustomerSchema.index({ restaurantId: 1, totalSpent: -1 });
+CustomerSchema.index({ restaurantId: 1, lastOrderDate: -1 });
+CustomerSchema.index({ restaurantId: 1, createdAt: -1 });
 
 const Customer: Model<ICustomerDocument> =
   mongoose.models.Customer || mongoose.model<ICustomerDocument>('Customer', CustomerSchema);
