@@ -525,6 +525,14 @@ export async function createCounterOrderAction(data: {
   }>;
   notes?: string;
   markReadyDirectly?: boolean;
+  appointmentDetails?: {
+    bookingDate?: string;
+    bookingTime?: string;
+    specialistId?: string;
+    specialistName?: string;
+    userNotes?: string;
+  };
+  initialStatus?: 'received' | 'accepted' | 'confirmed' | 'in_progress' | 'preparing' | 'ready';
 }) {
   try {
     const admin = await checkAdminAuth();
@@ -541,6 +549,18 @@ export async function createCounterOrderAction(data: {
     const cleanPhone = normalizePhoneNumber(rawPhone);
     const now = new Date();
     const isReady = !!data.markReadyDirectly;
+    const resolvedStatus: any = isReady ? 'ready' : (data.initialStatus || 'received');
+
+    const appointmentDetails =
+      data.appointmentDetails?.bookingDate && data.appointmentDetails?.bookingTime
+        ? {
+            bookingDate: data.appointmentDetails.bookingDate,
+            bookingTime: data.appointmentDetails.bookingTime,
+            specialistId: data.appointmentDetails.specialistId || '',
+            specialistName: data.appointmentDetails.specialistName || '',
+            userNotes: data.appointmentDetails.userNotes || '',
+          }
+        : undefined;
 
     const orderPayload = {
       restaurantId: admin.restaurantId,
@@ -552,10 +572,11 @@ export async function createCounterOrderAction(data: {
       items: data.items,
       notes: data.notes || '',
       source: 'admin_counter' as const,
-      status: (isReady ? 'ready' : 'received') as any,
+      status: resolvedStatus,
       placed_at: now,
       ready_at: isReady ? now : undefined,
       prep_duration_seconds: isReady ? 0 : undefined,
+      appointmentDetails,
     };
 
     const order = await orderService.createOrder(orderPayload);

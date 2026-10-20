@@ -1593,12 +1593,16 @@ function OrdersContent() {
         actions={
           <div className="flex items-center gap-2.5">
             <Link
-              href="/admin/orders/new"
+              href={businessCategory === 'salon' ? '/admin/appointments/new' : '/admin/orders/new'}
               onMouseEnter={() => { if (restaurantId) prefetchPosMenu(restaurantId); }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-[#C0181A] hover:bg-[#A01416] rounded-xl shadow-sm transition-all cursor-pointer"
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white ${
+                businessCategory === 'salon'
+                  ? 'bg-purple-700 hover:bg-purple-800'
+                  : 'bg-[#C0181A] hover:bg-[#A01416]'
+              } rounded-xl shadow-sm transition-all cursor-pointer`}
             >
               <Plus className="w-4 h-4" />
-              <span>+ New Counter Order</span>
+              <span>{businessCategory === 'salon' ? '+ Walk-in Booking (POS)' : '+ New Counter Order'}</span>
             </Link>
             <button
               type="button"

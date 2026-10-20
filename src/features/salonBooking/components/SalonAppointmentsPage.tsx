@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { PageHeader, StatusBadge, AdminButton, EmptyState } from '@/components/ui';
@@ -20,6 +21,7 @@ import {
   X,
   Loader2,
   MessageCircle,
+  Plus,
 } from 'lucide-react';
 import { SalonAppointment, BookingStatus } from '../types';
 import { generateWhatsAppOrderLink } from '@/lib/whatsappService';
@@ -83,9 +85,9 @@ export default function SalonAppointmentsPage() {
               ? 'completed'
               : order.status === 'cancelled' || order.status === 'rejected'
               ? 'cancelled'
-              : order.status === 'in_progress'
+              : order.status === 'in_progress' || order.status === 'preparing'
               ? 'in_progress'
-              : order.status === 'confirmed' || order.status === 'accepted'
+              : order.status === 'confirmed' || order.status === 'accepted' || order.status === 'ready'
               ? 'confirmed'
               : 'scheduled') as BookingStatus,
             items: (order.items || []).map((i: any) => ({
@@ -131,7 +133,7 @@ export default function SalonAppointmentsPage() {
       if (json.success) {
         fetchAppointments();
       } else {
-        alert('Failed to update status');
+        alert(json.error || 'Failed to update status');
       }
     } catch (err) {
       console.error(err);
@@ -172,15 +174,24 @@ export default function SalonAppointmentsPage() {
         title="Salon Bookings & Schedule Tracker"
         subtitle="Manage client appointments, scheduled time slots, and accept/reject booking requests"
         actions={
-          <AdminButton
-            variant="secondary"
-            onClick={handleManualRefresh}
-            disabled={loading || cooldownSec > 0}
-            className="transition-all min-w-[170px]"
-          >
-            <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
-            {cooldownSec > 0 ? `REFRESH (${cooldownSec}s)` : 'REFRESH SCHEDULE'}
-          </AdminButton>
+          <div className="flex items-center gap-2.5">
+            <Link
+              href="/admin/appointments/new"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 active:scale-95 rounded-xl shadow-sm transition-all cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Walk-in Booking (POS)</span>
+            </Link>
+            <AdminButton
+              variant="secondary"
+              onClick={handleManualRefresh}
+              disabled={loading || cooldownSec > 0}
+              className="transition-all min-w-[170px]"
+            >
+              <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
+              {cooldownSec > 0 ? `REFRESH (${cooldownSec}s)` : 'REFRESH SCHEDULE'}
+            </AdminButton>
+          </div>
         }
       />
 
@@ -445,6 +456,30 @@ export default function SalonAppointmentsPage() {
                     </>
                   ) : (
                     <>
+                      {app.status === 'confirmed' && (
+                        <button
+                          disabled={updatingId === app._id}
+                          onClick={() => handleStatusUpdate(app._id, 'in_progress')}
+                          className={`flex-1 text-purple-950 bg-purple-100 hover:bg-purple-200 text-xs font-extrabold py-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-xs ${
+                            updatingId === app._id
+                              ? 'opacity-80 cursor-not-allowed'
+                              : 'active:scale-95'
+                          }`}
+                        >
+                          {updatingId === app._id ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>SEATING...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Scissors className="w-3.5 h-3.5 text-purple-700" />
+                              <span>Seat Client</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+
                       {(app.status === 'confirmed' || app.status === 'in_progress') && (
                         <button
                           disabled={updatingId === app._id}
