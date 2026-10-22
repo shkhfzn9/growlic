@@ -23,6 +23,9 @@ export interface IMenuItem {
   prepTimeMin: number;
   prepTimeMax: number;
   chefNote: string;
+  trackInventory?: boolean;
+  stockQuantity?: number;
+  lowStockThreshold?: number;
   createdAt?: string;
   updatedAt?: string;
 }

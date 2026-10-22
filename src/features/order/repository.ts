@@ -316,6 +316,54 @@ export async function getKitchenStats(restaurantId: string): Promise<KitchenStat
   }
 }
 
+export function getOrderDateBoundaries(dateFilter?: string, customDate?: string): { start: Date; end: Date } | null {
+  if (!dateFilter || dateFilter === 'all') {
+    return null;
+  }
+
+  const now = new Date();
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const istNow = new Date(now.getTime() + istOffset);
+  const year = istNow.getUTCFullYear();
+  const month = istNow.getUTCMonth();
+  const date = istNow.getUTCDate();
+
+  const getDayStart = (y: number, m: number, d: number) => {
+    return new Date(Date.UTC(y, m, d, 0, 0, 0, 0) - istOffset);
+  };
+
+  const getDayEnd = (y: number, m: number, d: number) => {
+    return new Date(Date.UTC(y, m, d, 23, 59, 59, 999) - istOffset);
+  };
+
+  if (dateFilter === 'today') {
+    return {
+      start: getDayStart(year, month, date),
+      end: getDayEnd(year, month, date),
+    };
+  }
+
+  if (dateFilter === 'yesterday') {
+    const yDate = new Date(Date.UTC(year, month, date - 1));
+    return {
+      start: getDayStart(yDate.getUTCFullYear(), yDate.getUTCMonth(), yDate.getUTCDate()),
+      end: getDayEnd(yDate.getUTCFullYear(), yDate.getUTCMonth(), yDate.getUTCDate()),
+    };
+  }
+
+  if (dateFilter === 'custom' && customDate) {
+    const parts = customDate.split('-').map(Number);
+    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+      return {
+        start: getDayStart(parts[0], parts[1] - 1, parts[2]),
+        end: getDayEnd(parts[0], parts[1] - 1, parts[2]),
+      };
+    }
+  }
+
+  return null;
+}
+
 /**
  * Retrieves orders associated with a specific restaurant tenant, paginated and optionally filtered.
  * Runs query, count, and kitchen efficiency stats concurrently with lean projections.
@@ -324,6 +372,9 @@ export async function getKitchenStats(restaurantId: string): Promise<KitchenStat
  * @param limit Maximum number of orders to fetch.
  * @param skip Number of orders to skip.
  * @param status Optional order status filter.
+ * @param source Optional order source ('qr_scan' | 'admin_counter' | 'all').
+ * @param dateFilter Optional date filter ('today' | 'yesterday' | 'custom' | 'all').
+ * @param customDate Optional date string (YYYY-MM-DD) for 'custom' dateFilter.
  * @returns An object containing normalized IOrder objects, totalCount, and kitchen stats.
  */
 export async function findAll(
@@ -331,7 +382,9 @@ export async function findAll(
   limit?: number,
   skip?: number,
   status?: string,
-  source?: string
+  source?: string,
+  dateFilter?: 'today' | 'yesterday' | 'custom' | 'all',
+  customDate?: string
 ): Promise<{
   orders: IOrder[];
   totalCount: number;
@@ -358,6 +411,16 @@ export async function findAll(
     } else {
       query.status = status;
     }
+  }
+
+  // Date Filter Range
+  const dateRange = getOrderDateBoundaries(dateFilter, customDate);
+  if (dateRange) {
+    query.createdAt = {
+      ...(query.createdAt || {}),
+      $gte: dateRange.start,
+      $lte: dateRange.end,
+    };
   }
 
   const findQuery = Order.find(query).sort({ createdAt: -1 });

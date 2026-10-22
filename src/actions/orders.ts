@@ -143,7 +143,14 @@ export async function getPublicOrderTrackInfoAction(tokenOrId: string, restauran
  * 
  * @returns Serialized, plain array of order history.
  */
-export async function getAdminOrders(limit?: number, skip?: number, status?: string, source?: string) {
+export async function getAdminOrders(
+  limit?: number,
+  skip?: number,
+  status?: string,
+  source?: string,
+  dateFilter: 'today' | 'yesterday' | 'custom' | 'all' = 'today',
+  customDate?: string
+) {
   try {
     const admin = await checkAdminAuth();
     const isAllowed = hasPermission(admin.role, 'manage_orders') ||
@@ -152,7 +159,15 @@ export async function getAdminOrders(limit?: number, skip?: number, status?: str
       return { orders: [], total: 0, totalCount: 0, unauthorized: true, error: 'Forbidden: Insufficient permissions to view orders' };
     }
 
-    const result = await orderService.getAdminOrders(admin.restaurantId, limit, skip, status, source);
+    const result = await orderService.getAdminOrders(
+      admin.restaurantId,
+      limit,
+      skip,
+      status,
+      source,
+      dateFilter,
+      customDate
+    );
     return JSON.parse(JSON.stringify(result));
   } catch (error) {
     if (error instanceof Error && error.message.includes('Unauthorized')) {
@@ -192,7 +207,7 @@ export async function updateOrderStatus(
     }
 
     const existing = await orderService.getOrderById(id, admin.restaurantId);
-    const order = await orderService.updateOrderStatus(id, admin.restaurantId, status, delayData, rejectionReason);
+    const order = await orderService.updateOrderStatus(id, admin.restaurantId, status, delayData, rejectionReason, existing || undefined);
 
     if (existing) {
       orderTelemetry.recordStatusChange(id, existing.status, status);
@@ -227,7 +242,7 @@ export async function updateOrderEstimatedTime(id: string, minutes: number) {
     }
 
     const existing = await orderService.getOrderById(id, admin.restaurantId);
-    const order = await orderService.updateOrderEstimatedTime(id, admin.restaurantId, minutes);
+    const order = await orderService.updateOrderEstimatedTime(id, admin.restaurantId, minutes, existing || undefined);
 
     // Audit log order status change (ETA change)
     await logAction(admin.restaurantId, admin.userId, 'ORDER_STATUS_CHANGED', existing, order);

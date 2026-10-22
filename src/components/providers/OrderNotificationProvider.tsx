@@ -305,41 +305,22 @@ export default function OrderNotificationProvider({ children }: { children: Reac
     // Run check on mount
     checkIncomingOrdersAndCalls();
 
-    const isSalonRoute = pathname?.includes('/appointments') || pathname?.includes('/salon');
-
-    // Determine polling interval based on adaptive decay schedule
-    let decayIntervalMs: number | null = null;
-    const hasActiveAlerts = activeAlertOrders.length > 0 || activeStaffCalls.length > 0;
-
-    if (!isSalonRoute && hasActiveAlerts && !isTimedOut) {
-      if (elapsedSec < 30) {
-        decayIntervalMs = 5000;   // 0s - 30s: 5 sec
-      } else if (elapsedSec < 180) {
-        decayIntervalMs = 10000;  // 30s - 3m: 10 sec
-      } else if (elapsedSec < 300) {
-        decayIntervalMs = 15000;  // 3m - 5m: 15 sec
-      } else if (elapsedSec < 420) {
-        decayIntervalMs = 20000;  // 5m - 7m: 20 sec
-      } else if (elapsedSec < 600) {
-        decayIntervalMs = 30000;  // 7m - 10m: 30 sec
-      }
-      // > 10m: decayIntervalMs = null (Polling paused)
-    }
-
-    let pollerInterval: NodeJS.Timeout | null = null;
-    if (decayIntervalMs) {
-      pollerInterval = setInterval(checkIncomingOrdersAndCalls, decayIntervalMs);
-    }
-
-    // Setup BroadcastChannel for instant < 10ms real-time triggers across tabs
+    // Setup BroadcastChannel for instant < 10ms real-time triggers across tabs without continuous polling
     let broadcastChannel: BroadcastChannel | null = null;
+    let lastBroadcastTrigger = 0;
+
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
         broadcastChannel = new BroadcastChannel('growlic_order_channel');
         broadcastChannel.onmessage = (event) => {
           if (event.data?.type === 'NEW_ORDER_PLACED' || event.data?.type === 'ORDER_STATUS_UPDATED') {
-            setAlertFirstSeenTime(Date.now()); // Reset backoff clock on new order event
-            checkIncomingOrdersAndCalls();
+            const now = Date.now();
+            // Debounce to at most once every 1000ms to guarantee no rapid loops
+            if (now - lastBroadcastTrigger > 1000) {
+              lastBroadcastTrigger = now;
+              setAlertFirstSeenTime(now);
+              checkIncomingOrdersAndCalls();
+            }
           }
         };
       } catch (e) {
@@ -347,33 +328,12 @@ export default function OrderNotificationProvider({ children }: { children: Reac
       }
     }
 
-    // Trigger check on window focus & reset decay clock (throttled to at most once per 25s)
-    let lastFocusCheckTime = 0;
-    const handleActivity = () => {
-      const now = Date.now();
-      if (now - lastFocusCheckTime > 25000) {
-        lastFocusCheckTime = now;
-        setAlertFirstSeenTime(now);
-        checkIncomingOrdersAndCalls();
-      }
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('focus', handleActivity);
-    }
-
     return () => {
-      if (pollerInterval) {
-        clearInterval(pollerInterval);
-      }
       if (broadcastChannel) {
         broadcastChannel.close();
       }
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('focus', handleActivity);
-      }
     };
-  }, [auth.isLoggedIn, auth.restaurantId, acknowledgedIds, acknowledgedCallIds, isAdminRoute, activeAlertOrders.length, activeStaffCalls.length, elapsedSec, isTimedOut]);
+  }, [auth.isLoggedIn, auth.restaurantId, acknowledgedIds, acknowledgedCallIds, isAdminRoute]);
 
   // Stop alert for a specific order (Add to acknowledged lists)
   const acknowledgeOrder = (orderId: string) => {

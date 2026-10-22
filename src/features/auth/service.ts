@@ -21,8 +21,20 @@ const SVG_RICE = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5v
 const SVG_BOWL = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjIiLz48dGV4dCB4PSI1MCUiIHk9IjU1JSIgZm9udC1mYW1pbHk9Im1vbm9zcGFjZSIgZm9udC1zaXplPSIzNCIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+8J+NuDwvdGV4dD48L3N2Zz4=`;
 const SVG_SNACKS = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjIiLz48dGV4dCB4PSI1MCUiIHk9IjU1JSIgZm9udC1mYW1pbHk9Im1vbm9zcGFjZSIgZm9udC1zaXplPSIzNCIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+8J+fjzwvdGV4dD48L3N2Zz4=`;
 
+const ADMIN_CACHE_TTL_MS = 30 * 1000; // 30 seconds
+const adminProfileCache = new Map<string, { admin: IAdmin; expiresAt: number }>();
+
+export function clearAdminProfileCache(restaurantId?: string) {
+  if (restaurantId) {
+    adminProfileCache.delete(restaurantId.toLowerCase().trim());
+  } else {
+    adminProfileCache.clear();
+  }
+}
+
 /**
  * Retrieves the restaurant administrator profile details matched by the restaurant slug ID.
+ * Employs a 30-second in-memory TTL cache to avoid redundant database roundtrips.
  * Throws a ValidationError if the restaurantId argument is missing.
  * 
  * @param restaurantId The unique identifier slug of the restaurant tenant.
@@ -30,7 +42,17 @@ const SVG_SNACKS = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My
  */
 export async function getAdminByRestaurantId(restaurantId: string): Promise<IAdmin | null> {
   getAdminByRestaurantIdValidation(restaurantId);
-  return adminRepo.findByRestaurantId(restaurantId);
+  const cleanId = restaurantId.toLowerCase().trim();
+  const now = Date.now();
+  const cached = adminProfileCache.get(cleanId);
+  if (cached && cached.expiresAt > now) {
+    return cached.admin;
+  }
+  const admin = await adminRepo.findByRestaurantId(cleanId);
+  if (admin) {
+    adminProfileCache.set(cleanId, { admin, expiresAt: now + ADMIN_CACHE_TTL_MS });
+  }
+  return admin;
 }
 
 /**
@@ -424,20 +446,48 @@ export async function registerRestaurant(data: {
   return newAdmin;
 }
 
+const SESSION_CACHE_TTL_MS = 30 * 1000; // 30 seconds
+const sessionValidationCache = new Map<string, { valid: boolean; expiresAt: number }>();
+
+export function clearSessionCache(tokenHash?: string) {
+  if (tokenHash) {
+    sessionValidationCache.delete(tokenHash);
+  } else {
+    sessionValidationCache.clear();
+  }
+}
+
 /**
  * Validates a session by checking if it exists in the DB, is not revoked, and is not expired.
+ * Employs a 30-second in-memory TTL cache to eliminate redundant session lookups across admin actions.
  */
 export async function validateSession(restaurantId: string, token: string): Promise<boolean> {
   if (!token) return false;
   try {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const now = Date.now();
+    const cached = sessionValidationCache.get(tokenHash);
+    if (cached && cached.expiresAt > now) {
+      return cached.valid;
+    }
+
     const session = await adminRepo.findSessionByTokenHash(restaurantId, tokenHash);
-    if (!session) return false;
-    if (session.revoked) return false;
+    if (!session) {
+      sessionValidationCache.set(tokenHash, { valid: false, expiresAt: now + 5000 });
+      return false;
+    }
+    if (session.revoked) {
+      sessionValidationCache.set(tokenHash, { valid: false, expiresAt: now + 60000 });
+      return false;
+    }
 
     const expiryDate = new Date(session.expiresAt);
-    if (expiryDate.getTime() < Date.now()) return false;
+    if (expiryDate.getTime() < now) {
+      sessionValidationCache.set(tokenHash, { valid: false, expiresAt: now + 60000 });
+      return false;
+    }
 
+    sessionValidationCache.set(tokenHash, { valid: true, expiresAt: now + SESSION_CACHE_TTL_MS });
     return true;
   } catch (error) {
     console.error('Error validating session:', error);
@@ -446,12 +496,13 @@ export async function validateSession(restaurantId: string, token: string): Prom
 }
 
 /**
- * Revokes a session by token.
+ * Revokes a session by token and purges the token validation cache.
  */
 export async function revokeSession(restaurantId: string, token: string): Promise<boolean> {
   if (!token) return false;
   try {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    clearSessionCache(tokenHash);
     return await adminRepo.revokeSession(restaurantId, tokenHash);
   } catch (error) {
     console.error('Error revoking session:', error);
@@ -529,6 +580,7 @@ export async function updateRestaurantBranding(
   if (!restaurantId) {
     throw new ValidationError('Restaurant ID is required');
   }
+  clearAdminProfileCache(restaurantId);
   return adminRepo.updateBranding(restaurantId, data);
 }
 
@@ -543,11 +595,13 @@ export async function updatePushTokens(
   if (!restaurantId) {
     throw new ValidationError('Restaurant ID is required');
   }
+  clearAdminProfileCache(restaurantId);
   return adminRepo.updatePushTokens(restaurantId, expoPushToken, fcmToken);
 }
 
 export async function removeStaleFcmToken(restaurantId: string, staleFcmToken: string) {
   if (!restaurantId || !staleFcmToken) return;
+  clearAdminProfileCache(restaurantId);
   return adminRepo.removeStaleFcmToken(restaurantId, staleFcmToken);
 }
 

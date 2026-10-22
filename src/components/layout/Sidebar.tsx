@@ -21,6 +21,7 @@ import {
   Wallet,
   Percent,
   Calendar,
+  Boxes,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -33,6 +34,7 @@ const navLinks = [
   { href: '/admin/appointments', label: 'Bookings & Schedule', icon: Calendar },
   { href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/admin/inventory', label: 'Inventory & Analytics', icon: Boxes },
   { href: '/admin/expense', label: 'Expense Tracker', icon: Wallet },
   { href: '/admin/discounts', label: 'Discounts & Offers', icon: Percent },
   { href: '/admin/menu', label: 'Menu', icon: UtensilsCrossed },

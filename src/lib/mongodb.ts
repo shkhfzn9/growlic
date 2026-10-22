@@ -32,10 +32,18 @@ async function dbConnect() {
   }
 
   if (!cached.promise) {
+    const maxPoolSize = process.env.MONGODB_MAX_POOL_SIZE
+      ? parseInt(process.env.MONGODB_MAX_POOL_SIZE, 10)
+      : 25;
+
+    const minPoolSize = process.env.MONGODB_MIN_POOL_SIZE
+      ? parseInt(process.env.MONGODB_MIN_POOL_SIZE, 10)
+      : 2;
+
     const opts = {
       bufferCommands: false,
-      maxPoolSize: 2,
-      minPoolSize: 0,
+      maxPoolSize,
+      minPoolSize,
       serverSelectionTimeoutMS: 5000,
     };
 

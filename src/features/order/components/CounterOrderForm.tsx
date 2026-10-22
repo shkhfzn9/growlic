@@ -25,6 +25,7 @@ import {
   UtensilsCrossed,
   MessageSquare,
   Sparkles,
+  RefreshCw,
 } from 'lucide-react';
 
 import { getVocabulary } from '@/config/businessVocabulary';
@@ -85,8 +86,25 @@ export default function CounterOrderForm() {
   // UI state: instant 0ms mount if cache is present
   const [loading, setLoading] = useState(!cachedPos);
   const [submitting, setSubmitting] = useState(false);
+  const [refreshingMenu, setRefreshingMenu] = useState(false);
   const [error, setError] = useState('');
   const [successOrder, setSuccessOrder] = useState<any | null>(null);
+
+  const handleRefreshMenu = async () => {
+    if (!auth.restaurantId || refreshingMenu) return;
+    setRefreshingMenu(true);
+    try {
+      const items = await getMenuItems(auth.restaurantId);
+      if (items) {
+        setMenuItems(items);
+        setCachedPosMenu(items, cachedPos?.details);
+      }
+    } catch (err) {
+      console.error('Failed to refresh POS menu:', err);
+    } finally {
+      setRefreshingMenu(false);
+    }
+  };
 
   // Load menu items & store profile (syncs and updates cache)
   useEffect(() => {
@@ -245,6 +263,18 @@ export default function CounterOrderForm() {
       if (res.success && res.order) {
         setSuccessOrder(res.order);
         prependOrderToCache(res.order);
+
+        // Instant <10ms real-time sync with Kitchen and Audio Notification systems across tabs
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          try {
+            const bc = new BroadcastChannel('growlic_order_channel');
+            bc.postMessage({ type: 'NEW_ORDER_PLACED', orderId: res.order._id });
+            bc.close();
+          } catch (e) {
+            console.error('Error broadcasting counter order:', e);
+          }
+        }
+
         // Reset form inputs for next order
         setCart([]);
         setCustomerPhone('');
@@ -313,12 +343,24 @@ export default function CounterOrderForm() {
           </div>
         </div>
 
-        <Link
-          href="/admin/orders?tab=counter"
-          className="text-xs font-bold text-gray-600 hover:text-gray-900 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors self-start sm:self-auto"
-        >
-          View Counter Orders Tab
-        </Link>
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          <button
+            type="button"
+            disabled={refreshingMenu}
+            onClick={handleRefreshMenu}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-700 hover:text-gray-900 px-3.5 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl transition-all cursor-pointer disabled:opacity-50 shadow-2xs"
+            title="Refresh menu items from database"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshingMenu ? 'animate-spin text-red-600' : ''}`} />
+            <span>Refresh Menu</span>
+          </button>
+          <Link
+            href="/admin/orders?tab=counter"
+            className="text-xs font-bold text-gray-600 hover:text-gray-900 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
+          >
+            View Counter Orders Tab
+          </Link>
+        </div>
       </div>
 
       {/* Success Notification Alert */}

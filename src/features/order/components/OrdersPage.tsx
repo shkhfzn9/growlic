@@ -4,10 +4,10 @@ import React, { useEffect, useState, Suspense, useRef, useCallback, useMemo } fr
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getAdminOrders, updateOrderStatus, updateOrderEstimatedTime, markOrderWhatsAppNotifiedAction, updateOrderItemsAction, updateOrderPaymentModeAction } from '../services/order.service';
-import { getCachedOrders, setCachedOrders, updateOrderInCache, prefetchPosMenu, getCachedPosMenu, KitchenStats } from '../services/orderClientCache';
+import { getCachedOrders, setCachedOrders, updateOrderInCache, prefetchPosMenu, getCachedPosMenu, KitchenStats, isOrdersCacheFresh, invalidateOrdersCache } from '../services/orderClientCache';
 import { PageHeader, StatusBadge, AdminButton } from '@/components/ui';
 import { useOrderNotification } from '@/components/providers';
-import { Clock, ArrowLeft, AlertTriangle, CheckCircle2, TrendingDown, MessageSquare, X, ShieldAlert, Plus, Minus, Trash2, Edit, Search, ExternalLink, ShoppingBag, Sparkles, RefreshCw, CreditCard, Banknote } from 'lucide-react';
+import { Clock, ArrowLeft, AlertTriangle, CheckCircle2, TrendingDown, MessageSquare, X, ShieldAlert, Plus, Minus, Trash2, Edit, Search, ExternalLink, ShoppingBag, Sparkles, RefreshCw, CreditCard, Banknote, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { OrderItem, Order } from '../types/order.types';
 import { ORDER_CONFIG } from '@/config/orderConfig';
 import { generateWhatsAppOrderLink } from '@/lib/whatsappService';
@@ -961,7 +961,14 @@ function OrdersContent() {
   const initialSourceTab = tabParam === 'counter' ? 'admin_counter' : 'qr_scan';
   const { acknowledgeOrder } = useOrderNotification();
 
-  const initialCacheKey = `${initialSourceTab}_all_1`;
+  type OrderDateFilter = 'today' | 'yesterday' | 'custom' | 'all';
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const todayStr = useMemo(() => new Date(Date.now() + istOffset).toISOString().split('T')[0], [istOffset]);
+
+  const [dateFilter, setDateFilter] = useState<OrderDateFilter>('today');
+  const [customDate, setCustomDate] = useState<string>(todayStr);
+
+  const initialCacheKey = `${initialSourceTab}_all_today_${todayStr}_1`;
   const initialCached = getCachedOrders(initialCacheKey);
 
   const auth = useSelector((state: RootState) => state.auth);
@@ -1096,7 +1103,7 @@ function OrdersContent() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const limit = 50;
+  const limit = 25; // 25 orders per page for fast response & render
 
   // Refs to avoid stale closures in background polling and loading callbacks
   const filterRef = useRef(filter);
@@ -1105,6 +1112,8 @@ function OrdersContent() {
   const selectedOrderRef = useRef(selectedOrder);
   const highlightIdRef = useRef(highlightId);
   const sourceTabRef = useRef(sourceTab);
+  const dateFilterRef = useRef(dateFilter);
+  const customDateRef = useRef(customDate);
 
   useEffect(() => { filterRef.current = filter; }, [filter]);
   useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
@@ -1112,18 +1121,43 @@ function OrdersContent() {
   useEffect(() => { selectedOrderRef.current = selectedOrder; }, [selectedOrder]);
   useEffect(() => { highlightIdRef.current = highlightId; }, [highlightId]);
   useEffect(() => { sourceTabRef.current = sourceTab; }, [sourceTab]);
+  useEffect(() => { dateFilterRef.current = dateFilter; }, [dateFilter]);
+  useEffect(() => { customDateRef.current = customDate; }, [customDate]);
 
-  const loadOrders = async (showLoading = false, pageNum?: number) => {
+  const loadOrders = async (showLoading = false, pageNum?: number, forceBypassCache = false) => {
     const activePage = pageNum !== undefined ? pageNum : currentPageRef.current;
     const activeFilter = filterRef.current;
     const activeHighlightId = highlightIdRef.current;
     const activeSource = sourceTabRef.current;
-    const cacheKey = `${activeSource}_${activeFilter}_${activePage}`;
+    const activeDateFilter = dateFilterRef.current;
+    const activeCustomDate = customDateRef.current;
+    const cacheKey = `${activeSource}_${activeFilter}_${activeDateFilter}_${activeCustomDate || ''}_${activePage}`;
+
+    if (!forceBypassCache) {
+      const cached = getCachedOrders(cacheKey);
+      if (cached && isOrdersCacheFresh(cacheKey, 30000)) {
+        setOrders(cached.orders);
+        setTotalCount(cached.totalCount);
+        if (cached.stats) setServerStats(cached.stats);
+        if (cached.orders.length > 0 && !selectedOrderRef.current) {
+          setSelectedOrder(cached.orders[0]);
+        }
+        setLoading(false);
+        return;
+      }
+    }
 
     if (showLoading) setLoading(true);
     try {
       const skipNum = (activePage - 1) * limit;
-      const data = await getAdminOrders(limit, skipNum, activeFilter, activeSource);
+      const data = await getAdminOrders(
+        limit,
+        skipNum,
+        activeFilter,
+        activeSource,
+        activeDateFilter,
+        activeCustomDate
+      );
       if (data?.unauthorized) {
         setError('Your session has expired or you are not logged in. Please log in again.');
         setOrders([]);
@@ -1187,7 +1221,7 @@ function OrdersContent() {
     setFilter('all');
     setCurrentPage(1);
 
-    const cacheKey = `${newSource}_all_1`;
+    const cacheKey = `${newSource}_all_${dateFilter}_${customDate}_1`;
     const cached = getCachedOrders(cacheKey);
     if (cached) {
       setOrders(cached.orders);
@@ -1207,7 +1241,7 @@ function OrdersContent() {
     setFilter(newFilter);
     setCurrentPage(1);
 
-    const cacheKey = `${sourceTab}_${newFilter}_1`;
+    const cacheKey = `${sourceTab}_${newFilter}_${dateFilter}_${customDate}_1`;
     const cached = getCachedOrders(cacheKey);
     if (cached) {
       setOrders(cached.orders);
@@ -1219,7 +1253,7 @@ function OrdersContent() {
       setLoading(false);
     } else {
       // Instant client-side preview from current orders pool to eliminate skeletons
-      const allCacheKey = `${sourceTab}_all_1`;
+      const allCacheKey = `${sourceTab}_all_${dateFilter}_${customDate}_1`;
       const allCached = getCachedOrders(allCacheKey);
       const pool = allCached?.orders || (filter === 'all' ? ordersRef.current : []);
 
@@ -1243,10 +1277,38 @@ function OrdersContent() {
     }
   };
 
+  const handleDateFilterChange = (newDateFilter: OrderDateFilter) => {
+    if (newDateFilter === dateFilter) return;
+    setDateFilter(newDateFilter);
+    setCurrentPage(1);
+
+    const cacheKey = `${sourceTab}_${filter}_${newDateFilter}_${customDate}_1`;
+    const cached = getCachedOrders(cacheKey);
+    if (cached) {
+      setOrders(cached.orders);
+      setTotalCount(cached.totalCount);
+      if (cached.stats) setServerStats(cached.stats);
+      if (cached.orders.length > 0) {
+        setSelectedOrder(cached.orders[0]);
+      }
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+  };
+
+  const handleCustomDateChange = (dateVal: string) => {
+    setCustomDate(dateVal);
+    setDateFilter('custom');
+    setCurrentPage(1);
+    setLoading(true);
+  };
+
   const handlePageChange = (newPage: number) => {
+    if (newPage === currentPage || newPage < 1) return;
     setCurrentPage(newPage);
 
-    const cacheKey = `${sourceTab}_${filter}_${newPage}`;
+    const cacheKey = `${sourceTab}_${filter}_${dateFilter}_${customDate}_${newPage}`;
     const cached = getCachedOrders(cacheKey);
     if (cached) {
       setOrders(cached.orders);
@@ -1264,14 +1326,22 @@ function OrdersContent() {
   const isInitialMount = useRef(true);
 
   useEffect(() => {
-    const cacheKey = `${sourceTab}_${filter}_${currentPage}`;
-    const hasCache = !!getCachedOrders(cacheKey);
+    const cacheKey = `${sourceTab}_${filter}_${dateFilter}_${customDate}_${currentPage}`;
+    const cached = getCachedOrders(cacheKey);
+    const hasCache = !!cached;
+    const isFresh = isOrdersCacheFresh(cacheKey, 30000);
+
+    // If tab cache is fresh (<= 30s), skip background network call
+    if (!isInitialMount.current && isFresh) {
+      return;
+    }
+
     const showLoading = isInitialMount.current && !hasCache;
     loadOrders(showLoading, currentPage);
     if (isInitialMount.current) {
       isInitialMount.current = false;
     }
-  }, [filter, currentPage, highlightId, sourceTab]);
+  }, [filter, currentPage, highlightId, sourceTab, dateFilter, customDate]);
 
   useEffect(() => {
     if (tabParam === 'counter' && sourceTab !== 'admin_counter') {
@@ -1279,7 +1349,29 @@ function OrdersContent() {
     }
   }, [tabParam]);
 
-
+  // Real-time synchronization: listen for new orders and status transitions across tabs
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('BroadcastChannel' in window)) return;
+    let lastBroadcastTrigger = 0;
+    try {
+      const bc = new BroadcastChannel('growlic_order_channel');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'NEW_ORDER_PLACED' || event.data?.type === 'ORDER_STATUS_UPDATED') {
+          const now = Date.now();
+          // Debounce at least 1500ms between automated refreshes to eliminate any infinite loops
+          if (now - lastBroadcastTrigger > 1500) {
+            lastBroadcastTrigger = now;
+            loadOrders(false);
+          }
+        }
+      };
+      return () => {
+        bc.close();
+      };
+    } catch (e) {
+      console.error('Error in OrdersPage BroadcastChannel listener:', e);
+    }
+  }, []);
 
   // Execution helper for status updates with delay metadata and rejection reason
   const executeStatusUpdate = async (
@@ -1300,6 +1392,18 @@ function OrdersContent() {
       setSelectedOrder(updated);
       updateOrderInCache(updated);
       acknowledgeOrder(orderId);
+
+      // Instant cross-tab real-time sync (<10ms)
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        try {
+          const bc = new BroadcastChannel('growlic_order_channel');
+          bc.postMessage({ type: 'ORDER_STATUS_UPDATED', orderId, status: nextStatus });
+          bc.close();
+        } catch (e) {
+          console.error('Error broadcasting status update:', e);
+        }
+      }
+
       setDelayModalOpen(false);
       setPendingDelayOrder(null);
       setRejectionModalOpen(false);
@@ -1606,12 +1710,15 @@ function OrdersContent() {
             </Link>
             <button
               type="button"
-              onClick={() => loadOrders(false)}
+              onClick={() => {
+                invalidateOrdersCache();
+                loadOrders(true, currentPage, true);
+              }}
               disabled={loading}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-white border border-[#E2E6EA] text-gray-700 hover:bg-gray-50 active:scale-95 transition-all shadow-xs cursor-pointer disabled:opacity-50"
               title="Refresh Orders"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-red-600' : ''}`} />
               <span>Refresh</span>
             </button>
           </div>
@@ -1730,6 +1837,77 @@ function OrdersContent() {
           <Plus className="w-4 h-4" />
           <span>+ Enter New Counter Order</span>
         </Link>
+      </div>
+
+      {/* Date Period Filter Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-white border border-[#E2E6EA] p-2.5 rounded-2xl shadow-xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-black uppercase text-gray-500 tracking-wider flex items-center gap-1 shrink-0">
+            <Calendar className="w-3.5 h-3.5 text-gray-500" />
+            <span>Date:</span>
+          </span>
+          <div className="flex items-center gap-1 p-0.5 bg-gray-100 rounded-xl overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => handleDateFilterChange('today')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                dateFilter === 'today'
+                  ? 'bg-white text-gray-900 shadow-xs font-black'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              📅 Today
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDateFilterChange('yesterday')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                dateFilter === 'yesterday'
+                  ? 'bg-white text-gray-900 shadow-xs font-black'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Yesterday
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDateFilterChange('custom')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                dateFilter === 'custom'
+                  ? 'bg-white text-gray-900 shadow-xs font-black'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Select Day
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDateFilterChange('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                dateFilter === 'all'
+                  ? 'bg-white text-gray-900 shadow-xs font-black'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              All Time
+            </button>
+          </div>
+
+          {dateFilter === 'custom' && (
+            <div className="flex items-center gap-1.5 animate-in fade-in duration-150">
+              <input
+                type="date"
+                value={customDate}
+                onChange={(e) => handleCustomDateChange(e.target.value)}
+                className="text-xs px-2.5 py-1 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white font-bold text-gray-800 outline-none focus:border-red-600 shadow-2xs"
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="text-[11px] font-semibold text-gray-500 self-end sm:self-auto">
+          {totalCount} {dateFilter === 'today' ? "today's orders" : dateFilter === 'yesterday' ? "yesterday's orders" : dateFilter === 'custom' ? `orders for ${customDate}` : "orders total"}
+        </div>
       </div>
 
       {/* Filter Tabs */}
@@ -1893,25 +2071,55 @@ function OrdersContent() {
               </div>
             </div>
 
-            {totalCount > limit && (
-              <div className="flex justify-between items-center px-4 py-2.5 bg-white border border-[#E2E6EA] rounded-lg text-xs">
-                <button
-                  disabled={currentPage <= 1}
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  className="px-3 py-1.5 border border-[#E2E6EA] rounded-lg hover:bg-[#F4F6F9] disabled:opacity-40 font-medium transition-colors cursor-pointer"
-                >
-                  Previous
-                </button>
-                <span className="text-[#6B7280]">
-                  Page {currentPage} of {Math.ceil(totalCount / limit)} ({totalCount} total)
+            {totalCount > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 py-2.5 bg-white border border-[#E2E6EA] rounded-xl text-xs shadow-2xs">
+                <span className="text-gray-500 font-medium text-[11px]">
+                  Showing <strong className="text-gray-900 font-bold">{Math.min(totalCount, (currentPage - 1) * limit + 1)} - {Math.min(totalCount, currentPage * limit)}</strong> of <strong className="text-gray-900 font-bold">{totalCount}</strong> orders
                 </span>
-                <button
-                  disabled={currentPage >= Math.ceil(totalCount / limit)}
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  className="px-3 py-1.5 border border-[#E2E6EA] rounded-lg hover:bg-[#F4F6F9] disabled:opacity-40 font-medium transition-colors cursor-pointer"
-                >
-                  Next
-                </button>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    disabled={currentPage <= 1 || loading}
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 border border-[#E2E6EA] rounded-lg bg-white hover:bg-[#F4F6F9] active:scale-95 disabled:opacity-30 disabled:pointer-events-none font-bold text-gray-700 transition-all cursor-pointer shadow-2xs"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Prev</span>
+                  </button>
+
+                  <div className="flex items-center gap-1 px-1">
+                    {Array.from({ length: Math.min(5, Math.ceil(totalCount / limit)) }).map((_, i) => {
+                      const totalPages = Math.ceil(totalCount / limit);
+                      let pageNumber = i + 1;
+                      if (totalPages > 5 && currentPage > 3) {
+                        pageNumber = Math.min(totalPages - 4 + i, Math.max(1, currentPage - 2 + i));
+                      }
+                      return (
+                        <button
+                          key={pageNumber}
+                          type="button"
+                          onClick={() => handlePageChange(pageNumber)}
+                          className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center ${
+                            currentPage === pageNumber
+                              ? 'bg-gray-900 text-white font-black shadow-xs'
+                              : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                          }`}
+                        >
+                          {pageNumber}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    disabled={currentPage >= Math.ceil(totalCount / limit) || loading}
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 border border-[#E2E6EA] rounded-lg bg-white hover:bg-[#F4F6F9] active:scale-95 disabled:opacity-30 disabled:pointer-events-none font-bold text-gray-700 transition-all cursor-pointer shadow-2xs"
+                  >
+                    <span>Next</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             )}
           </div>

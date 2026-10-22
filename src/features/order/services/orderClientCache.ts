@@ -24,6 +24,16 @@ export function getCachedOrders(key: string): CachedOrdersData | undefined {
   return ordersCache.get(key);
 }
 
+/**
+ * Checks whether cached orders for a given key are fresh within a specified TTL.
+ * Defaults to 30,000ms (30 seconds).
+ */
+export function isOrdersCacheFresh(key: string, maxAgeMs: number = 30000): boolean {
+  const cached = ordersCache.get(key);
+  if (!cached) return false;
+  return Date.now() - cached.timestamp < maxAgeMs;
+}
+
 export function setCachedOrders(
   key: string,
   data: {

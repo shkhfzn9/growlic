@@ -38,6 +38,9 @@ export function normalizeMenuItem(doc: any): IMenuItem {
     prepTimeMin: plain.prepTimeMin ?? 0,
     prepTimeMax: plain.prepTimeMax ?? 0,
     chefNote: plain.chefNote || '',
+    trackInventory: plain.trackInventory || false,
+    stockQuantity: plain.stockQuantity !== undefined ? plain.stockQuantity : -1,
+    lowStockThreshold: plain.lowStockThreshold ?? 5,
     createdAt: plain.createdAt ? new Date(plain.createdAt).toISOString() : undefined,
     updatedAt: plain.updatedAt ? new Date(plain.updatedAt).toISOString() : undefined,
   };

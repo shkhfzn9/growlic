@@ -250,7 +250,6 @@ export async function createOrder(data: {
 
   // Trigger FCM Push Notification asynchronously (non-blocking) to all registered restaurant devices
   try {
-    const admin = await getAdminByRestaurantId(restaurantId);
     const targetTokens = (admin?.fcmTokens && admin.fcmTokens.length > 0)
       ? admin.fcmTokens
       : (admin?.fcmToken ? [admin.fcmToken] : []);
@@ -295,7 +294,9 @@ export async function getAdminOrders(
   limit?: number,
   skip?: number,
   status?: string,
-  source?: string
+  source?: string,
+  dateFilter?: 'today' | 'yesterday' | 'custom' | 'all',
+  customDate?: string
 ): Promise<{
   orders: IOrder[];
   totalCount: number;
@@ -308,7 +309,7 @@ export async function getAdminOrders(
   };
 }> {
   validateRestaurantId(restaurantId);
-  return orderRepo.findAll(restaurantId, limit, skip, status, source);
+  return orderRepo.findAll(restaurantId, limit, skip, status, source, dateFilter, customDate);
 }
 
 /**
@@ -330,10 +331,13 @@ export async function updateOrderStatus(
     isDelayed?: boolean;
     delayReason?: string;
   },
-  rejectionReason?: string
+  rejectionReason?: string,
+  existingOrder?: IOrder | null
 ): Promise<IOrder> {
   validateOrderId(id);
-  const order = await orderRepo.findById(restaurantId, id);
+  const order = (existingOrder && existingOrder.restaurantId === restaurantId && existingOrder._id === id)
+    ? existingOrder
+    : await orderRepo.findById(restaurantId, id);
   if (!order || order.restaurantId !== restaurantId) {
     throw new NotFoundError('Unauthorized or order not found');
   }
@@ -388,11 +392,19 @@ export async function updateOrderStatus(
  * @param id The database ID string of the target order.
  * @param restaurantId Scope parameter enforcing multi-tenant isolation.
  * @param minutes The preparation duration estimate in minutes.
+ * @param existingOrder Optional pre-fetched order document to avoid redundant DB lookup.
  * @returns The updated, normalized IOrder document.
  */
-export async function updateOrderEstimatedTime(id: string, restaurantId: string, minutes: number): Promise<IOrder> {
+export async function updateOrderEstimatedTime(
+  id: string,
+  restaurantId: string,
+  minutes: number,
+  existingOrder?: IOrder | null
+): Promise<IOrder> {
   validateOrderId(id);
-  const order = await orderRepo.findById(restaurantId, id);
+  const order = (existingOrder && existingOrder.restaurantId === restaurantId && existingOrder._id === id)
+    ? existingOrder
+    : await orderRepo.findById(restaurantId, id);
   if (!order || order.restaurantId !== restaurantId) {
     throw new NotFoundError('Unauthorized or order not found');
   }

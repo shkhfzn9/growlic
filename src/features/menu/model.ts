@@ -25,6 +25,9 @@ export interface IMenu extends Document {
   prepTimeMin: number;
   prepTimeMax: number;
   chefNote?: string;
+  trackInventory?: boolean;
+  stockQuantity?: number;
+  lowStockThreshold?: number;
 }
 
 const MenuSchema: Schema = new Schema<IMenu>(
@@ -52,6 +55,9 @@ const MenuSchema: Schema = new Schema<IMenu>(
     prepTimeMin: { type: Number, default: 0 },
     prepTimeMax: { type: Number, default: 0 },
     chefNote: { type: String, default: '' },
+    trackInventory: { type: Boolean, default: false },
+    stockQuantity: { type: Number, default: -1 },
+    lowStockThreshold: { type: Number, default: 5 },
   },
   { timestamps: true }
 );
