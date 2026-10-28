@@ -15,6 +15,8 @@
 const customerCacheByTenant = new Map<string, Map<string, string>>();
 const cacheLoadedByTenant = new Set<string>();
 
+import { normalizeCustomerPhone } from '@/lib/phoneUtils';
+
 /**
  * Checks whether the customer cache has already been initialized for a given restaurant.
  */
@@ -38,8 +40,9 @@ export function initializeCustomerCache(
   }
 
   for (const c of customers) {
-    if (c?.phone && c?.name) {
-      tenantMap.set(c.phone, c.name);
+    const cleanPhone = normalizeCustomerPhone(c?.phone) || c?.phone?.trim();
+    if (cleanPhone && c?.name?.trim()) {
+      tenantMap.set(cleanPhone, c.name.trim());
     }
   }
   cacheLoadedByTenant.add(restaurantId);
@@ -54,9 +57,10 @@ export function getCachedCustomer(
   normalizedPhone: string
 ): string | null {
   if (!restaurantId || !normalizedPhone) return null;
+  const cleanPhone = normalizeCustomerPhone(normalizedPhone) || normalizedPhone.trim();
   const tenantMap = customerCacheByTenant.get(restaurantId);
   if (!tenantMap) return null;
-  return tenantMap.get(normalizedPhone) || null;
+  return tenantMap.get(cleanPhone) || null;
 }
 
 /**
@@ -68,13 +72,14 @@ export function setCachedCustomer(
   normalizedPhone: string,
   name: string
 ): void {
-  if (!restaurantId || !normalizedPhone || !name) return;
+  if (!restaurantId || !normalizedPhone || !name?.trim()) return;
+  const cleanPhone = normalizeCustomerPhone(normalizedPhone) || normalizedPhone.trim();
   let tenantMap = customerCacheByTenant.get(restaurantId);
   if (!tenantMap) {
     tenantMap = new Map<string, string>();
     customerCacheByTenant.set(restaurantId, tenantMap);
   }
-  tenantMap.set(normalizedPhone, name);
+  tenantMap.set(cleanPhone, name.trim());
 }
 
 /**

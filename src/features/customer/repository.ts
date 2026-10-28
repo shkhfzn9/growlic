@@ -1,7 +1,9 @@
 import dbConnect from '@/lib/mongodb';
 import Customer from './model';
+import Order from '@/features/order/model';
 import { ICustomer } from './types';
 import { sanitizeTenantId } from '@/lib/tenant';
+import { normalizeCustomerPhone } from '@/lib/phoneUtils';
 
 /**
  * Normalizes a raw Mongoose document representing a Customer into a standardized ICustomer plain object.
@@ -39,16 +41,26 @@ export function normalizeCustomer(doc: any): ICustomer {
 
 /**
  * Finds a customer record matching the restaurant scope ID and their phone number.
+ * Supports standard 10-digit, +91, and leading 0 formats.
  * 
  * @param restaurantId Scope parameter enforcing multi-tenant isolation.
- * @param phone The unique customer phone number string.
+ * @param phone The customer phone number string.
  * @returns The normalized ICustomer record if found, or null otherwise.
  */
 export async function findByPhone(restaurantId: string, phone: string): Promise<ICustomer | null> {
   await dbConnect();
+  const cleanPhone = normalizeCustomerPhone(phone) || phone.trim();
+  const phoneVariations = Array.from(new Set([
+    phone.trim(),
+    cleanPhone,
+    `+91${cleanPhone}`,
+    `+91 ${cleanPhone}`,
+    `0${cleanPhone}`,
+  ])).filter(Boolean);
+
   const doc = await Customer.findOne({
     restaurantId: sanitizeTenantId(restaurantId),
-    phone: phone.trim(),
+    phone: { $in: phoneVariations },
   });
   return doc ? normalizeCustomer(doc) : null;
 }
@@ -315,7 +327,8 @@ export async function updateName(
 
 /**
  * Fetches top recent customers sorted by lastOrderDate desc (max limit) for POS bounded preload.
- * Returns only phone and name.
+ * Returns normalized 10-digit phone and clean name.
+ * Also supplements from Order collection if Customer collection has fewer records.
  */
 export async function getTopRecentCustomers(
   restaurantId: string,
@@ -323,21 +336,57 @@ export async function getTopRecentCustomers(
 ): Promise<Array<{ phone: string; name: string }>> {
   await dbConnect();
   const cleanRestId = sanitizeTenantId(restaurantId);
-  // Uses index: { restaurantId: 1, lastOrderDate: -1 }
+  const resultMap = new Map<string, string>();
+
+  // 1. Fetch from Customer collection
   const docs = await Customer.find({ restaurantId: cleanRestId })
     .sort({ lastOrderDate: -1 })
     .limit(limit)
     .select('phone name -_id')
     .lean();
-  return (docs as any[]).map((d) => ({
-    phone: String(d.phone || ''),
-    name: String(d.name || ''),
+
+  for (const d of docs as any[]) {
+    const cleanPhone = normalizeCustomerPhone(d.phone) || String(d.phone || '').trim();
+    const cleanName = String(d.name || '').trim();
+    if (cleanPhone && cleanName) {
+      resultMap.set(cleanPhone, cleanName);
+    }
+  }
+
+  // 2. If Customer collection has fewer records than limit, supplement from recent Order history
+  if (resultMap.size < limit) {
+    const remaining = limit - resultMap.size;
+    const orderDocs = await Order.find({
+      restaurantId: cleanRestId,
+      customerPhone: { $exists: true, $ne: '' },
+      customerName: { $exists: true, $ne: '' },
+    })
+      .sort({ createdAt: -1 })
+      .limit(remaining * 3)
+      .select('customerPhone customerName -_id')
+      .lean();
+
+    for (const o of orderDocs as any[]) {
+      const cleanPhone = normalizeCustomerPhone(o.customerPhone) || String(o.customerPhone || '').trim();
+      const cleanName = String(o.customerName || '').trim();
+      if (cleanPhone && cleanName && !resultMap.has(cleanPhone)) {
+        resultMap.set(cleanPhone, cleanName);
+      }
+    }
+  }
+
+  return Array.from(resultMap.entries()).map(([phone, name]) => ({
+    phone,
+    name,
   }));
 }
 
 /**
  * Looks up a single customer by restaurantId and normalized phone number.
- * Returns only phone and name.
+ * 1. Checks Customer collection using phone variations (+91, 91, 0, exact).
+ * 2. If not found or name is empty, falls back to Order collection history.
+ * 3. Automatically syncs discovered order-level customer into Customer collection.
+ * Returns normalized 10-digit phone and name.
  */
 export async function lookupCustomerPhone(
   restaurantId: string,
@@ -345,16 +394,71 @@ export async function lookupCustomerPhone(
 ): Promise<{ phone: string; name: string } | null> {
   await dbConnect();
   const cleanRestId = sanitizeTenantId(restaurantId);
-  // Uses unique index: { restaurantId: 1, phone: 1 }
+  const cleanPhone = normalizeCustomerPhone(phone) || phone.trim();
+  if (!cleanPhone) return null;
+
+  const phoneVariations = Array.from(new Set([
+    phone.trim(),
+    cleanPhone,
+    `+91${cleanPhone}`,
+    `+91 ${cleanPhone}`,
+    `91${cleanPhone}`,
+    `0${cleanPhone}`,
+  ])).filter(Boolean);
+
+  // 1. Search Customer collection first
   const doc = await Customer.findOne({
     restaurantId: cleanRestId,
-    phone: phone.trim(),
+    phone: { $in: phoneVariations },
   })
     .select('phone name -_id')
     .lean();
-  if (!doc) return null;
-  return {
-    phone: String((doc as any).phone || ''),
-    name: String((doc as any).name || ''),
-  };
+
+  if (doc && (doc as any).name?.trim()) {
+    return {
+      phone: cleanPhone,
+      name: String((doc as any).name).trim(),
+    };
+  }
+
+  // 2. Fallback: Search Order collection for most recent order with a customer name
+  const orderDoc = await Order.findOne({
+    restaurantId: cleanRestId,
+    customerPhone: { $in: phoneVariations },
+    customerName: { $exists: true, $ne: '' },
+  })
+    .sort({ createdAt: -1 })
+    .select('customerPhone customerName -_id')
+    .lean();
+
+  if (orderDoc && (orderDoc as any).customerName?.trim()) {
+    const resolvedName = String((orderDoc as any).customerName).trim();
+
+    // Auto-sync into Customer collection in background so future lookups are instant
+    try {
+      await Customer.updateOne(
+        { restaurantId: cleanRestId, phone: cleanPhone },
+        {
+          $setOnInsert: {
+            restaurantId: cleanRestId,
+            name: resolvedName,
+            phone: cleanPhone,
+            totalOrders: 1,
+            totalSpent: 0,
+            lastOrderDate: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+    } catch {
+      // Non-blocking sync failure
+    }
+
+    return {
+      phone: cleanPhone,
+      name: resolvedName,
+    };
+  }
+
+  return null;
 }
