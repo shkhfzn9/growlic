@@ -30,6 +30,14 @@ import {
 
 import { getVocabulary } from '@/config/businessVocabulary';
 import { getCachedPosMenu, setCachedPosMenu, prependOrderToCache } from '../services/orderClientCache';
+import { normalizeCustomerPhone } from '@/lib/phoneUtils';
+import { getPreloadCustomersAction, lookupCustomerByPhoneAction } from '@/actions/customers';
+import {
+  isCustomerCacheLoaded,
+  initializeCustomerCache,
+  getCachedCustomer,
+  setCachedCustomer,
+} from '../services/customerPosCache';
 
 interface MenuItem {
   _id: string;
@@ -58,6 +66,13 @@ export default function CounterOrderForm() {
   // Form State
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerName, setCustomerName] = useState('');
+  const [isAutofilled, setIsAutofilled] = useState(false);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const isNameAutofilledRef = React.useRef(false);
+  const isNameManuallyEditedRef = React.useRef(false);
+  const activeLookupPhoneRef = React.useRef('');
+  const currentPhoneRef = React.useRef('');
+
   const [orderType, setOrderType] = useState<'takeaway' | 'dine_in' | 'delivery'>('takeaway');
   const [tableId, setTableId] = useState('');
   const [paymentMode, setPaymentMode] = useState<'cash' | 'online' | 'credit'>('cash');
@@ -110,6 +125,12 @@ export default function CounterOrderForm() {
   useEffect(() => {
     if (!auth.restaurantId) return;
 
+    // Fast-path: If we already have fresh cached menu data (<3m TTL), skip redundant server round-trip
+    if (cachedPos && cachedPos.items && cachedPos.items.length > 0) {
+      setLoading(false);
+      return;
+    }
+
     Promise.all([
       getMenuItems(auth.restaurantId),
       getRestaurantDetails(),
@@ -137,6 +158,104 @@ export default function CounterOrderForm() {
       })
       .finally(() => setLoading(false));
   }, [auth.restaurantId]);
+
+  // Bounded preload top recent customers (max 1,000) for instant 0ms autofill
+  useEffect(() => {
+    if (!auth.restaurantId) return;
+    if (isCustomerCacheLoaded(auth.restaurantId)) return;
+
+    getPreloadCustomersAction()
+      .then((customers) => {
+        if (Array.isArray(customers) && customers.length > 0 && auth.restaurantId) {
+          initializeCustomerCache(auth.restaurantId, customers);
+        }
+      })
+      .catch((err) => {
+        // Safe failure: wrapped in try/catch, form remains fully usable
+        console.error('Customer preload safe failure:', err);
+      });
+  }, [auth.restaurantId]);
+
+  // Phone input change handler with autofill, cache check, and stale-response protection
+  const handlePhoneChange = (inputVal: string) => {
+    const clean = normalizeCustomerPhone(inputVal);
+    currentPhoneRef.current = clean;
+    setCustomerPhone(clean);
+
+    // Requirement 2: If the name was autofilled and the phone then changes, clear the name.
+    // Never overwrite a name the admin typed manually.
+    if (isNameAutofilledRef.current) {
+      setCustomerName('');
+      isNameAutofilledRef.current = false;
+      setIsAutofilled(false);
+    }
+
+    if (clean.length < 10) {
+      activeLookupPhoneRef.current = '';
+      setLookupLoading(false);
+      return;
+    }
+
+    if (clean.length === 10 && auth.restaurantId) {
+      // 1. In-memory cache lookup first (0ms synchronous)
+      const cached = getCachedCustomer(auth.restaurantId, clean);
+      if (cached) {
+        if (!isNameManuallyEditedRef.current) {
+          setCustomerName(cached);
+          isNameAutofilledRef.current = true;
+          setIsAutofilled(true);
+        }
+        activeLookupPhoneRef.current = '';
+        setLookupLoading(false);
+        return;
+      }
+
+      // 2. Fallback DB lookup (indexed on phone)
+      activeLookupPhoneRef.current = clean;
+      setLookupLoading(true);
+
+      lookupCustomerByPhoneAction(clean)
+        .then((result) => {
+          // Cache result regardless of active typing to speed up future lookups
+          if (result?.phone && result?.name && auth.restaurantId) {
+            setCachedCustomer(auth.restaurantId, result.phone, result.name);
+          }
+
+          // Requirement 1: Ignore stale lookup responses: apply result only if its phone still matches current field value
+          if (
+            result?.name &&
+            activeLookupPhoneRef.current === clean &&
+            currentPhoneRef.current === clean &&
+            !isNameManuallyEditedRef.current
+          ) {
+            setCustomerName(result.name);
+            isNameAutofilledRef.current = true;
+            setIsAutofilled(true);
+          }
+        })
+        .catch((err) => {
+          // Requirement 5: Safe failure; form remains usable
+          console.error('Customer lookup safe failure:', err);
+        })
+        .finally(() => {
+          if (activeLookupPhoneRef.current === clean) {
+            setLookupLoading(false);
+          }
+        });
+    }
+  };
+
+  // Name input change handler: manual edits protect name from being overwritten
+  const handleNameChange = (val: string) => {
+    setCustomerName(val);
+    isNameAutofilledRef.current = false;
+    setIsAutofilled(false);
+    if (val.trim().length > 0) {
+      isNameManuallyEditedRef.current = true;
+    } else {
+      isNameManuallyEditedRef.current = false;
+    }
+  };
 
   const vocab = getVocabulary(businessCategory);
 
@@ -223,7 +342,7 @@ export default function CounterOrderForm() {
     if (submitting) return;
 
     // Validate Phone Number
-    const rawPhone = customerPhone.trim();
+    const rawPhone = normalizeCustomerPhone(customerPhone);
     if (!rawPhone) {
       setActiveMobileTab('ticket');
       setError('Customer phone number is required for counter orders.');
@@ -275,10 +394,22 @@ export default function CounterOrderForm() {
           }
         }
 
+        // Update in-memory customer cache so customer is immediately available next time
+        if (auth.restaurantId && rawPhone) {
+          const finalName = customerName.trim() || 'Walk-in Customer';
+          setCachedCustomer(auth.restaurantId, rawPhone, finalName);
+        }
+
         // Reset form inputs for next order
         setCart([]);
         setCustomerPhone('');
         setCustomerName('');
+        currentPhoneRef.current = '';
+        activeLookupPhoneRef.current = '';
+        isNameAutofilledRef.current = false;
+        isNameManuallyEditedRef.current = false;
+        setIsAutofilled(false);
+        setLookupLoading(false);
         setNotes('');
         setTableId('');
         setActiveMobileTab('menu');
@@ -600,18 +731,27 @@ export default function CounterOrderForm() {
 
             {/* Customer Phone (Required) */}
             <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-bold text-gray-700 flex items-center gap-1">
-                <span>Customer Phone *</span>
-                <span className="text-[10px] text-gray-400 font-normal">(WhatsApp Receipt)</span>
+              <label className="text-[11px] font-bold text-gray-700 flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <span>Customer Phone *</span>
+                  <span className="text-[10px] text-gray-400 font-normal">(WhatsApp Receipt)</span>
+                </span>
+                {lookupLoading && (
+                  <span className="text-[10px] text-red-600 font-semibold flex items-center gap-1 animate-in fade-in">
+                    <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                    Checking...
+                  </span>
+                )}
               </label>
               <div className="relative">
                 <Phone className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="tel"
                   required
+                  maxLength={10}
                   placeholder="e.g. 9876543210"
                   value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  onChange={(e) => handlePhoneChange(e.target.value)}
                   className="w-full text-xs font-bold pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:border-red-600 outline-none"
                 />
               </div>
@@ -619,14 +759,22 @@ export default function CounterOrderForm() {
 
             {/* Customer Name (Optional) */}
             <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-bold text-gray-700">
-                Customer Name <span className="text-[10px] text-gray-400 font-normal">(Optional)</span>
+              <label className="text-[11px] font-bold text-gray-700 flex items-center justify-between">
+                <span>
+                  Customer Name <span className="text-[10px] text-gray-400 font-normal">(Optional)</span>
+                </span>
+                {isAutofilled && (
+                  <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1 animate-in fade-in">
+                    <Sparkles className="w-2.5 h-2.5" />
+                    Autofilled
+                  </span>
+                )}
               </label>
               <input
                 type="text"
                 placeholder="Walk-in Guest"
                 value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
+                onChange={(e) => handleNameChange(e.target.value)}
                 className="w-full text-xs font-semibold px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:border-red-600 outline-none"
               />
             </div>

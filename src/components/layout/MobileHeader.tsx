@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/redux/store';
 import { getRestaurantDetails } from '@/actions/auth';
 import { getVocabulary } from '@/config/businessVocabulary';
 import {
@@ -22,6 +24,7 @@ import {
   ClipboardList,
   Calendar,
   Boxes,
+  BarChart3,
 } from 'lucide-react';
 
 interface MobileHeaderProps {
@@ -34,6 +37,7 @@ const navLinks = [
   { href: '/admin/appointments', label: 'Bookings & Schedule', icon: Calendar },
   { href: '/admin/orders', label: 'Orders', icon: ShoppingCart },
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/admin/pnl', label: 'Profit & Loss', icon: BarChart3 },
   { href: '/admin/inventory', label: 'Inventory & Analytics', icon: Boxes },
   { href: '/admin/expense', label: 'Expense Tracker', icon: Wallet },
   { href: '/admin/discounts', label: 'Discounts & Offers', icon: Percent },
@@ -48,8 +52,16 @@ const navLinks = [
 
 export default function MobileHeader({ restaurantName, email, onLogout }: MobileHeaderProps) {
   const pathname = usePathname();
+  const auth = useSelector((state: RootState) => state.auth);
+  const [mounted, setMounted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [businessCategory, setBusinessCategory] = useState<string>('restaurant');
+  const [businessCategory, setBusinessCategory] = useState<string>(() => {
+    return auth.businessCategory || 'restaurant';
+  });
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const fetchBusinessInfo = async () => {
@@ -95,7 +107,7 @@ export default function MobileHeader({ restaurantName, email, onLogout }: Mobile
             <h2 className="text-sm font-bold text-white">Growlic</h2>
             <span className="bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded leading-none">Beta</span>
           </div>
-          {restaurantName && (
+          {mounted && restaurantName && (
             <span className="text-[10px] text-white/50 font-medium block">{restaurantName}</span>
           )}
         </div>

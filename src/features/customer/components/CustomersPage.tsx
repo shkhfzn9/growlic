@@ -16,7 +16,11 @@ import {
   ArrowUpDown,
   RefreshCw,
   ExternalLink,
+  HeartHandshake,
+  Megaphone,
 } from 'lucide-react';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/redux/store';
 import { PageHeader, EmptyState } from '@/components/ui';
 import {
   getCustomersWithSegmentsAction,
@@ -29,9 +33,12 @@ import {
 } from '../types';
 import CustomerDetailDrawer, { getSegmentBadgeStyle } from './CustomerDetailDrawer';
 import CustomerAnalyticsTab from './CustomerAnalyticsTab';
+import CustomerRetentionTab from './CustomerRetentionTab';
+import CustomerOutreachTab from './CustomerOutreachTab';
 
 export default function CustomersPage() {
-  const [activeTab, setActiveTab] = useState<'directory' | 'analytics'>('directory');
+  const auth = useSelector((state: RootState) => state.auth);
+  const [activeTab, setActiveTab] = useState<'directory' | 'retention' | 'outreach' | 'analytics'>('directory');
 
   // Directory State
   const [customers, setCustomers] = useState<ICustomerWithSegment[]>([]);
@@ -214,6 +221,48 @@ export default function CustomersPage() {
           <Users className="w-4 h-4" />
           <span>Customer Directory</span>
           <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-full">{total}</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('retention')}
+          className={`px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+            activeTab === 'retention'
+              ? 'bg-purple-900 text-white shadow-xs'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          <HeartHandshake className="w-4 h-4 text-rose-500" />
+          <span>Customer Retention</span>
+          <span
+            className={`text-[10px] font-black px-2 py-0.5 rounded-full transition-colors ${
+              activeTab === 'retention'
+                ? 'bg-emerald-400 text-gray-950 shadow-xs'
+                : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+            }`}
+          >
+            WhatsApp Win-back
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('outreach')}
+          className={`px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center gap-2 ${
+            activeTab === 'outreach'
+              ? 'bg-purple-900 text-white shadow-xs'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          <Megaphone className="w-4 h-4 text-amber-500" />
+          <span>Outreach (Bulk WhatsApp)</span>
+          <span
+            className={`text-[10px] font-black px-2 py-0.5 rounded-full transition-colors ${
+              activeTab === 'outreach'
+                ? 'bg-amber-400 text-gray-950 shadow-xs'
+                : 'bg-amber-100 text-amber-900 border border-amber-300'
+            }`}
+          >
+            New Leads
+          </span>
         </button>
 
         <button
@@ -498,10 +547,30 @@ export default function CustomersPage() {
         </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* TAB 2: CUSTOMER ANALYTICS & RETENTION                         */}
+      {/* TAB 2: CUSTOMER ANALYTICS & COHORTS                           */}
       {/* ------------------------------------------------------------- */}
       <div className={activeTab === 'analytics' ? 'block' : 'hidden'}>
         <CustomerAnalyticsTab />
+      </div>
+
+      {/* ------------------------------------------------------------- */}
+      {/* TAB 3: CUSTOMER RETENTION & WHATSAPP OUTREACH                 */}
+      {/* ------------------------------------------------------------- */}
+      <div className={activeTab === 'retention' ? 'block' : 'hidden'}>
+        <CustomerRetentionTab
+          restaurantName={auth.restaurantName || 'Tokyo Momos'}
+          restaurantId={auth.restaurantId || ''}
+        />
+      </div>
+
+      {/* ------------------------------------------------------------- */}
+      {/* TAB 4: NEW CUSTOMER OUTREACH (BULK WHATSAPP CAMPAIGN)         */}
+      {/* ------------------------------------------------------------- */}
+      <div className={activeTab === 'outreach' ? 'block' : 'hidden'}>
+        <CustomerOutreachTab
+          restaurantName={auth.restaurantName || 'Tokyo Momos'}
+          restaurantId={auth.restaurantId || ''}
+        />
       </div>
 
       {/* ------------------------------------------------------------- */}

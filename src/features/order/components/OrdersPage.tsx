@@ -69,67 +69,30 @@ const CompletedOrderPrepBadge = React.memo(function CompletedOrderPrepBadge({ or
   );
 });
 
+// Single Unified Shared Ticker Context across all active orders to guarantee 0 timer overhead
+const TickerContext = React.createContext<number>(Date.now());
+
 const ActiveOrderTimer = React.memo(function ActiveOrderTimer({ placedAt }: { placedAt?: string | Date }) {
+  const currentTime = React.useContext(TickerContext);
   const placedTime = useMemo(() => new Date(placedAt || Date.now()).getTime(), [placedAt]);
   const maxStopwatchMs = ORDER_CONFIG.MAX_PREP_STOPWATCH_MINUTES * 60 * 1000;
 
-  const [timerState, setTimerState] = useState(() => {
-    const diffMs = Date.now() - placedTime;
-    if (diffMs >= maxStopwatchMs) {
-      return { label: '1hr +', isDelayed: true, isCapped: true };
-    }
-    const elapsedSec = Math.max(0, Math.floor(diffMs / 1000));
-    const elapsedMins = Math.floor(elapsedSec / 60);
-    const elapsedSecsRem = elapsedSec % 60;
-    const isDelayed = elapsedMins >= ORDER_CONFIG.COUNTER_ORDER_DELAY_THRESHOLD_MINUTES;
-    return {
-      label: `+${elapsedMins}m ${elapsedSecsRem.toString().padStart(2, '0')}s`,
-      isDelayed,
-      isCapped: false,
-    };
-  });
-
-  useEffect(() => {
-    // If order has already surpassed 1hr, do NOT start any interval at all!
-    if (Date.now() - placedTime >= maxStopwatchMs) {
-      setTimerState({ label: '1hr +', isDelayed: true, isCapped: true });
-      return;
-    }
-
-    const interval = setInterval(() => {
-      const now = Date.now();
-      const diffMs = now - placedTime;
-
-      // HARD STOP AT 1 HOUR: Stop timer immediately!
-      if (diffMs >= maxStopwatchMs) {
-        setTimerState({ label: '1hr +', isDelayed: true, isCapped: true });
-        clearInterval(interval);
-        return;
-      }
-
-      const elapsedSec = Math.max(0, Math.floor(diffMs / 1000));
-      const elapsedMins = Math.floor(elapsedSec / 60);
-      const elapsedSecsRem = elapsedSec % 60;
-      const isDelayed = elapsedMins >= ORDER_CONFIG.COUNTER_ORDER_DELAY_THRESHOLD_MINUTES;
-
-      setTimerState({
-        label: `+${elapsedMins}m ${elapsedSecsRem.toString().padStart(2, '0')}s`,
-        isDelayed,
-        isCapped: false,
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [placedTime, maxStopwatchMs]);
+  const diffMs = currentTime - placedTime;
+  const isCapped = diffMs >= maxStopwatchMs;
+  const elapsedSec = Math.max(0, Math.floor(diffMs / 1000));
+  const elapsedMins = Math.floor(elapsedSec / 60);
+  const elapsedSecsRem = elapsedSec % 60;
+  const isDelayed = elapsedMins >= ORDER_CONFIG.COUNTER_ORDER_DELAY_THRESHOLD_MINUTES;
+  const label = isCapped ? '1hr +' : `+${elapsedMins}m ${elapsedSecsRem.toString().padStart(2, '0')}s`;
 
   return (
     <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full border ${
-      timerState.isDelayed
-        ? `bg-red-100 text-red-800 border-red-300 ${timerState.isCapped ? '' : 'animate-pulse'}`
+      isDelayed
+        ? `bg-red-100 text-red-800 border-red-300 ${isCapped ? '' : 'animate-pulse'}`
         : 'bg-amber-50 text-amber-800 border-amber-200'
     }`}>
       <Clock className="w-3 h-3 text-current" />
-      <span>⏱️ {timerState.label}</span>
+      <span>⏱️ {label}</span>
     </span>
   );
 });
@@ -143,55 +106,17 @@ const DetailActiveStopwatch = React.memo(function DetailActiveStopwatch({
   onMarkReady: () => void;
   isActionLoading?: boolean;
 }) {
+  const currentTime = React.useContext(TickerContext);
   const placedTime = useMemo(() => new Date(order.placed_at || order.createdAt).getTime(), [order.placed_at, order.createdAt]);
   const maxStopwatchMs = ORDER_CONFIG.MAX_PREP_STOPWATCH_MINUTES * 60 * 1000;
 
-  const [timerState, setTimerState] = useState(() => {
-    const diffMs = Date.now() - placedTime;
-    if (diffMs >= maxStopwatchMs) {
-      return { label: '1hr +', isDelayed: true, isCapped: true };
-    }
-    const elapsedSec = Math.max(0, Math.floor(diffMs / 1000));
-    const elapsedMins = Math.floor(elapsedSec / 60);
-    const elapsedSecsRem = elapsedSec % 60;
-    const isDelayed = elapsedMins >= ORDER_CONFIG.COUNTER_ORDER_DELAY_THRESHOLD_MINUTES;
-    return {
-      label: `+${elapsedMins}m ${elapsedSecsRem.toString().padStart(2, '0')}s`,
-      isDelayed,
-      isCapped: false,
-    };
-  });
-
-  useEffect(() => {
-    if (Date.now() - placedTime >= maxStopwatchMs) {
-      setTimerState({ label: '1hr +', isDelayed: true, isCapped: true });
-      return;
-    }
-
-    const interval = setInterval(() => {
-      const now = Date.now();
-      const diffMs = now - placedTime;
-
-      if (diffMs >= maxStopwatchMs) {
-        setTimerState({ label: '1hr +', isDelayed: true, isCapped: true });
-        clearInterval(interval);
-        return;
-      }
-
-      const elapsedSec = Math.max(0, Math.floor(diffMs / 1000));
-      const elapsedMins = Math.floor(elapsedSec / 60);
-      const elapsedSecsRem = elapsedSec % 60;
-      const isDelayed = elapsedMins >= ORDER_CONFIG.COUNTER_ORDER_DELAY_THRESHOLD_MINUTES;
-
-      setTimerState({
-        label: `+${elapsedMins}m ${elapsedSecsRem.toString().padStart(2, '0')}s`,
-        isDelayed,
-        isCapped: false,
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [placedTime, maxStopwatchMs]);
+  const diffMs = currentTime - placedTime;
+  const isCapped = diffMs >= maxStopwatchMs;
+  const elapsedSec = Math.max(0, Math.floor(diffMs / 1000));
+  const elapsedMins = Math.floor(elapsedSec / 60);
+  const elapsedSecsRem = elapsedSec % 60;
+  const isDelayed = elapsedMins >= ORDER_CONFIG.COUNTER_ORDER_DELAY_THRESHOLD_MINUTES;
+  const label = isCapped ? '1hr +' : `+${elapsedMins}m ${elapsedSecsRem.toString().padStart(2, '0')}s`;
 
   return (
     <div className="border-t border-[#E2E6EA] pt-4">
@@ -205,12 +130,12 @@ const DetailActiveStopwatch = React.memo(function DetailActiveStopwatch({
               Target: {order.estimatedTime}m
             </span>
           ) : null}
-          {timerState.isCapped ? (
+          {isCapped ? (
             <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-red-700 bg-red-100 border border-red-200 px-2 py-0.5 rounded-full">
               <AlertTriangle className="w-3 h-3 text-red-600" />
               1hr+
             </span>
-          ) : timerState.isDelayed ? (
+          ) : isDelayed ? (
             <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-red-700 bg-red-100 border border-red-200 px-2 py-0.5 rounded-full animate-pulse">
               <AlertTriangle className="w-3 h-3 text-red-600" />
               Over 10m
@@ -219,18 +144,18 @@ const DetailActiveStopwatch = React.memo(function DetailActiveStopwatch({
         </div>
       </div>
       <div className={`rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border ${
-        timerState.isDelayed
+        isDelayed
           ? 'bg-gradient-to-r from-red-50 to-red-100/50 border-red-200 shadow-sm ring-1 ring-red-400'
           : 'bg-gradient-to-r from-[#FEF2F2] to-[#FFF5F5] border-[#FEE2E2] shadow-sm'
       }`}>
         <div className="flex items-center gap-3">
-          <div className={`p-2.5 rounded-xl ${timerState.isDelayed ? 'bg-red-600 text-white' : 'bg-[#C0181A]/10 text-[#C0181A]'}`}>
-            <Clock className={`w-5 h-5 ${timerState.isCapped ? '' : timerState.isDelayed ? 'animate-bounce' : 'animate-pulse'}`} />
+          <div className={`p-2.5 rounded-xl ${isDelayed ? 'bg-red-600 text-white' : 'bg-[#C0181A]/10 text-[#C0181A]'}`}>
+            <Clock className={`w-5 h-5 ${isCapped ? '' : isDelayed ? 'animate-bounce' : 'animate-pulse'}`} />
           </div>
           <div>
             <span className="text-xs text-[#6B7280] block font-medium">Running Elapsed Time</span>
-            <span className={`text-2xl font-black tracking-tight tabular-nums ${timerState.isDelayed ? 'text-red-700' : 'text-[#111827]'}`}>
-              {timerState.label}
+            <span className={`text-2xl font-black tracking-tight tabular-nums ${isDelayed ? 'text-red-700' : 'text-[#111827]'}`}>
+              {label}
             </span>
           </div>
         </div>
@@ -968,7 +893,7 @@ function OrdersContent() {
   const [dateFilter, setDateFilter] = useState<OrderDateFilter>('today');
   const [customDate, setCustomDate] = useState<string>(todayStr);
 
-  const initialCacheKey = `${initialSourceTab}_all_today_${todayStr}_1`;
+  const initialCacheKey = `${initialSourceTab}_all_today_${todayStr}`;
   const initialCached = getCachedOrders(initialCacheKey);
 
   const auth = useSelector((state: RootState) => state.auth);
@@ -989,6 +914,17 @@ function OrdersContent() {
   const [serverStats, setServerStats] = useState<KitchenStats | null>(initialCached?.stats || null);
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [loading, setLoading] = useState(!initialCached);
+  const [isBackgroundFetching, setIsBackgroundFetching] = useState(false);
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+
+  // Single unified interval for all active order timers across the page
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
@@ -1023,10 +959,70 @@ function OrdersContent() {
     }
   };
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const limit = 25; // 25 orders per page for fast response & render
+
+  // Stage counts computed from master daily order pool (never glitches to 0!)
+  const stageCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: orders.length,
+      received: 0,
+      accepted: 0,
+      preparing: 0,
+      ready: 0,
+      completed: 0,
+      delayed: 0,
+      missed: 0,
+      cancelled: 0,
+    };
+    const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+    for (const o of orders) {
+      if (counts[o.status] !== undefined) {
+        counts[o.status]++;
+      }
+      if (o.isDelayed) {
+        counts.delayed++;
+      }
+      if (o.status === 'received' && new Date(o.createdAt).getTime() < tenMinutesAgo) {
+        counts.missed++;
+      }
+    }
+    return counts;
+  }, [orders]);
+
+  // Stage filtered orders (0ms client-side filter)
+  const statusFilteredOrders = useMemo(() => {
+    if (filter === 'all') return orders;
+    if (filter === 'delayed') return orders.filter((o) => !!o.isDelayed);
+    if (filter === 'missed') {
+      const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+      return orders.filter((o) => o.status === 'received' && new Date(o.createdAt).getTime() < tenMinutesAgo);
+    }
+    return orders.filter((o) => o.status === filter);
+  }, [orders, filter]);
+
+  // Payment filtered orders
+  const filteredOrders = useMemo(() => {
+    if (paymentFilter === 'all') return statusFilteredOrders;
+    return statusFilteredOrders.filter((o) => (o.paymentMode || 'cash') === paymentFilter);
+  }, [statusFilteredOrders, paymentFilter]);
+
+  // Paginated orders for the list view (25 per page)
   const displayedOrders = useMemo(() => {
-    if (paymentFilter === 'all') return orders;
-    return orders.filter((o) => (o.paymentMode || 'cash') === paymentFilter);
-  }, [orders, paymentFilter]);
+    const start = (currentPage - 1) * limit;
+    return filteredOrders.slice(start, start + limit);
+  }, [filteredOrders, currentPage, limit]);
+
+  // Automatically update selectedOrder if current selection is filtered out
+  useEffect(() => {
+    if (filteredOrders.length > 0) {
+      if (!selectedOrder || !filteredOrders.some((o) => o._id === selectedOrder._id)) {
+        setSelectedOrder(filteredOrders[0]);
+      }
+    } else {
+      setSelectedOrder(null);
+    }
+  }, [filteredOrders]);
 
   useEffect(() => {
     // If restaurantId is already resolved from Redux/cache, prefetch POS menu if needed and skip server roundtrip
@@ -1101,10 +1097,6 @@ function OrdersContent() {
     setViewMode('detail');
   }, []);
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
-  const limit = 25; // 25 orders per page for fast response & render
-
   // Refs to avoid stale closures in background polling and loading callbacks
   const filterRef = useRef(filter);
   const currentPageRef = useRef(currentPage);
@@ -1124,36 +1116,43 @@ function OrdersContent() {
   useEffect(() => { dateFilterRef.current = dateFilter; }, [dateFilter]);
   useEffect(() => { customDateRef.current = customDate; }, [customDate]);
 
-  const loadOrders = async (showLoading = false, pageNum?: number, forceBypassCache = false) => {
-    const activePage = pageNum !== undefined ? pageNum : currentPageRef.current;
-    const activeFilter = filterRef.current;
+  const loadOrders = async (showLoading = false, forceBypassCache = false) => {
     const activeHighlightId = highlightIdRef.current;
     const activeSource = sourceTabRef.current;
     const activeDateFilter = dateFilterRef.current;
     const activeCustomDate = customDateRef.current;
-    const cacheKey = `${activeSource}_${activeFilter}_${activeDateFilter}_${activeCustomDate || ''}_${activePage}`;
+    const cacheKey = `${activeSource}_all_${activeDateFilter}_${activeCustomDate || ''}`;
 
     if (!forceBypassCache) {
       const cached = getCachedOrders(cacheKey);
       if (cached && isOrdersCacheFresh(cacheKey, 30000)) {
         setOrders(cached.orders);
-        setTotalCount(cached.totalCount);
         if (cached.stats) setServerStats(cached.stats);
         if (cached.orders.length > 0 && !selectedOrderRef.current) {
           setSelectedOrder(cached.orders[0]);
         }
         setLoading(false);
+        setIsBackgroundFetching(false);
         return;
       }
     }
 
-    if (showLoading) setLoading(true);
+    if (showLoading) {
+      if (ordersRef.current.length === 0) {
+        setLoading(true);
+      } else {
+        setIsBackgroundFetching(true);
+      }
+    } else {
+      setIsBackgroundFetching(true);
+    }
+
     try {
-      const skipNum = (activePage - 1) * limit;
+      const fetchLimit = activeDateFilter === 'all' ? 200 : 500;
       const data = await getAdminOrders(
-        limit,
-        skipNum,
-        activeFilter,
+        fetchLimit,
+        0,
+        'all',
         activeSource,
         activeDateFilter,
         activeCustomDate
@@ -1162,41 +1161,37 @@ function OrdersContent() {
         setError('Your session has expired or you are not logged in. Please log in again.');
         setOrders([]);
         setLoading(false);
+        setIsBackgroundFetching(false);
         return;
       }
       const fetchedOrders = data?.orders || [];
-      const total = data?.totalCount || 0;
       const stats = data?.stats;
 
       // Update client-side SWR cache
       setCachedOrders(cacheKey, {
         orders: fetchedOrders,
-        totalCount: total,
+        totalCount: fetchedOrders.length,
         stats,
       });
 
       setOrders(fetchedOrders);
-      setTotalCount(total);
       if (stats) setServerStats(stats);
-      setCurrentPage(activePage);
 
       const currentSelected = selectedOrderRef.current;
 
-      if (activeHighlightId && showLoading) {
+      if (activeHighlightId) {
         const found = fetchedOrders.find((o: Order) => o._id === activeHighlightId);
         if (found) {
           setSelectedOrder(found);
           setViewMode('detail');
         }
       } else if (!currentSelected && fetchedOrders.length > 0) {
-        if (showLoading) {
-          setSelectedOrder(fetchedOrders[0]);
-        }
+        setSelectedOrder(fetchedOrders[0]);
       } else if (currentSelected) {
         const updated = fetchedOrders.find((o: Order) => o._id === currentSelected._id);
         if (updated) {
           setSelectedOrder(updated);
-        } else if (showLoading) {
+        } else {
           setSelectedOrder(fetchedOrders[0] || null);
         }
       }
@@ -1212,142 +1207,93 @@ function OrdersContent() {
       }
     } finally {
       setLoading(false);
+      setIsBackgroundFetching(false);
     }
   };
 
-  const handleTabChange = (newSource: 'qr_scan' | 'admin_counter' | 'all') => {
-    if (newSource === sourceTab) return;
+  const handleTabChange = useCallback((newSource: 'qr_scan' | 'admin_counter' | 'all') => {
+    if (newSource === sourceTabRef.current) return;
     setSourceTab(newSource);
     setFilter('all');
     setCurrentPage(1);
 
-    const cacheKey = `${newSource}_all_${dateFilter}_${customDate}_1`;
+    const cacheKey = `${newSource}_all_${dateFilterRef.current}_${customDateRef.current || ''}`;
     const cached = getCachedOrders(cacheKey);
     if (cached) {
       setOrders(cached.orders);
-      setTotalCount(cached.totalCount);
       if (cached.stats) setServerStats(cached.stats);
       if (cached.orders.length > 0) {
         setSelectedOrder(cached.orders[0]);
       }
       setLoading(false);
     } else {
-      setLoading(true);
+      setIsBackgroundFetching(true);
     }
-  };
+  }, []);
 
-  const handleFilterChange = (newFilter: FilterStatus) => {
-    if (newFilter === filter) return;
+  const handleFilterChange = useCallback((newFilter: FilterStatus) => {
+    if (newFilter === filterRef.current) return;
     setFilter(newFilter);
     setCurrentPage(1);
+    // Instantaneous 0ms switch without network requests!
+  }, []);
 
-    const cacheKey = `${sourceTab}_${newFilter}_${dateFilter}_${customDate}_1`;
-    const cached = getCachedOrders(cacheKey);
-    if (cached) {
-      setOrders(cached.orders);
-      setTotalCount(cached.totalCount);
-      if (cached.stats) setServerStats(cached.stats);
-      if (cached.orders.length > 0) {
-        setSelectedOrder(cached.orders[0]);
-      }
-      setLoading(false);
-    } else {
-      // Instant client-side preview from current orders pool to eliminate skeletons
-      const allCacheKey = `${sourceTab}_all_${dateFilter}_${customDate}_1`;
-      const allCached = getCachedOrders(allCacheKey);
-      const pool = allCached?.orders || (filter === 'all' ? ordersRef.current : []);
-
-      if (pool.length > 0) {
-        const matched = pool.filter((o) => {
-          if (newFilter === 'all') return true;
-          if (newFilter === 'delayed') return !!o.isDelayed;
-          if (newFilter === 'missed') {
-            const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
-            return o.status === 'received' && new Date(o.createdAt).getTime() < tenMinutesAgo;
-          }
-          return o.status === newFilter;
-        });
-        setOrders(matched);
-        setTotalCount(matched.length);
-        if (matched.length > 0) {
-          setSelectedOrder(matched[0]);
-        }
-      }
-      setLoading(false);
-    }
-  };
-
-  const handleDateFilterChange = (newDateFilter: OrderDateFilter) => {
-    if (newDateFilter === dateFilter) return;
+  const handleDateFilterChange = useCallback((newDateFilter: OrderDateFilter) => {
+    if (newDateFilter === dateFilterRef.current) return;
     setDateFilter(newDateFilter);
     setCurrentPage(1);
 
-    const cacheKey = `${sourceTab}_${filter}_${newDateFilter}_${customDate}_1`;
+    const cacheKey = `${sourceTabRef.current}_all_${newDateFilter}_${customDateRef.current || ''}`;
     const cached = getCachedOrders(cacheKey);
     if (cached) {
       setOrders(cached.orders);
-      setTotalCount(cached.totalCount);
       if (cached.stats) setServerStats(cached.stats);
       if (cached.orders.length > 0) {
         setSelectedOrder(cached.orders[0]);
       }
       setLoading(false);
     } else {
-      setLoading(true);
+      setIsBackgroundFetching(true);
     }
-  };
+  }, []);
 
-  const handleCustomDateChange = (dateVal: string) => {
+  const handleCustomDateChange = useCallback((dateVal: string) => {
     setCustomDate(dateVal);
     setDateFilter('custom');
     setCurrentPage(1);
-    setLoading(true);
-  };
+    setIsBackgroundFetching(true);
+  }, []);
 
-  const handlePageChange = (newPage: number) => {
-    if (newPage === currentPage || newPage < 1) return;
+  const handlePageChange = useCallback((newPage: number) => {
+    if (newPage === currentPageRef.current || newPage < 1) return;
     setCurrentPage(newPage);
-
-    const cacheKey = `${sourceTab}_${filter}_${dateFilter}_${customDate}_${newPage}`;
-    const cached = getCachedOrders(cacheKey);
-    if (cached) {
-      setOrders(cached.orders);
-      setTotalCount(cached.totalCount);
-      if (cached.stats) setServerStats(cached.stats);
-      if (cached.orders.length > 0) {
-        setSelectedOrder(cached.orders[0]);
-      }
-      setLoading(false);
-    } else {
-      setLoading(true);
-    }
-  };
+  }, []);
 
   const isInitialMount = useRef(true);
 
   useEffect(() => {
-    const cacheKey = `${sourceTab}_${filter}_${dateFilter}_${customDate}_${currentPage}`;
+    const cacheKey = `${sourceTab}_all_${dateFilter}_${customDate || ''}`;
     const cached = getCachedOrders(cacheKey);
     const hasCache = !!cached;
     const isFresh = isOrdersCacheFresh(cacheKey, 30000);
 
-    // If tab cache is fresh (<= 30s), skip background network call
+    // If cache is fresh (<= 30s), skip background network call
     if (!isInitialMount.current && isFresh) {
       return;
     }
 
     const showLoading = isInitialMount.current && !hasCache;
-    loadOrders(showLoading, currentPage);
+    loadOrders(showLoading);
     if (isInitialMount.current) {
       isInitialMount.current = false;
     }
-  }, [filter, currentPage, highlightId, sourceTab, dateFilter, customDate]);
+  }, [sourceTab, dateFilter, customDate]);
 
   useEffect(() => {
     if (tabParam === 'counter' && sourceTab !== 'admin_counter') {
       handleTabChange('admin_counter');
     }
-  }, [tabParam]);
+  }, [tabParam, handleTabChange, sourceTab]);
 
   // Real-time synchronization: listen for new orders and status transitions across tabs
   useEffect(() => {
@@ -1358,10 +1304,11 @@ function OrdersContent() {
       bc.onmessage = (event) => {
         if (event.data?.type === 'NEW_ORDER_PLACED' || event.data?.type === 'ORDER_STATUS_UPDATED') {
           const now = Date.now();
-          // Debounce at least 1500ms between automated refreshes to eliminate any infinite loops
-          if (now - lastBroadcastTrigger > 1500) {
+          // Debounce at least 1000ms between automated refreshes to eliminate any infinite loops
+          if (now - lastBroadcastTrigger > 1000) {
             lastBroadcastTrigger = now;
-            loadOrders(false);
+            // Always bypass cache on live incoming event without flashing full skeletons
+            loadOrders(false, true);
           }
         }
       };
@@ -1374,7 +1321,7 @@ function OrdersContent() {
   }, []);
 
   // Execution helper for status updates with delay metadata and rejection reason
-  const executeStatusUpdate = async (
+  const executeStatusUpdate = useCallback(async (
     orderId: string,
     nextStatus: Order['status'],
     delayData?: {
@@ -1414,11 +1361,11 @@ function OrdersContent() {
     } finally {
       setActionLoading((prev) => ({ ...prev, [orderId]: false }));
     }
-  };
+  }, [acknowledgeOrder]);
 
   // Smart status change interceptor that checks for delays & cancellation reasons
-  const handleStatusChange = async (orderId: string, nextStatus: Order['status']) => {
-    const targetOrder = orders.find((o) => o._id === orderId) || selectedOrder;
+  const handleStatusChange = useCallback(async (orderId: string, nextStatus: Order['status']) => {
+    const targetOrder = ordersRef.current.find((o) => o._id === orderId) || selectedOrderRef.current;
     if (!targetOrder) return;
 
     // Check if rejecting / cancelling order
@@ -1478,7 +1425,7 @@ function OrdersContent() {
 
     // Default status change
     executeStatusUpdate(orderId, nextStatus);
-  };
+  }, [executeStatusUpdate, presetDelayReasons, presetRejectionReasons]);
 
   const handleOpenEditModal = async (order: Order) => {
     setEditingOrder(order);
@@ -1676,8 +1623,8 @@ function OrdersContent() {
   );
 
   // Calculate kitchen metrics with fallback to local orders if server stats not yet loaded
-  const delayedOrders = orders.filter((o) => o.isDelayed);
-  const totalCompletedOrders = orders.filter((o) => ['ready', 'completed'].includes(o.status)).length;
+  const delayedOrders = useMemo(() => orders.filter((o) => o.isDelayed), [orders]);
+  const totalCompletedOrders = useMemo(() => orders.filter((o) => ['ready', 'completed'].includes(o.status)).length, [orders]);
   const localOnTimeCount = Math.max(0, totalCompletedOrders - delayedOrders.length);
   const localOnTimeRate = totalCompletedOrders > 0 ? Math.round((localOnTimeCount / totalCompletedOrders) * 100) : 100;
   const localTotalDelayMins = delayedOrders.reduce((sum, o) => sum + (o.delayMinutes || 0), 0);
@@ -1686,11 +1633,12 @@ function OrdersContent() {
   const onTimeRate = serverStats?.onTimeRate ?? localOnTimeRate;
   const delayedCount = serverStats?.delayedCount ?? delayedOrders.length;
   const avgDelayMins = serverStats?.avgDelayMins ?? localAvgDelayMins;
-  const totalProcessed = serverStats?.totalProcessed ?? totalCount;
+  const totalProcessed = serverStats?.totalProcessed ?? orders.length;
   const totalCompleted = serverStats?.totalCompleted ?? totalCompletedOrders;
 
   return (
-    <div className="flex flex-col gap-5">
+    <TickerContext.Provider value={currentTime}>
+      <div className="flex flex-col gap-5">
       <PageHeader
         title={vocab.ordersNoun}
         subtitle={`Track live ${vocab.orderNoun.toLowerCase()}s, prep timers, delays & ${vocab.prepArea.toLowerCase()} performance`}
@@ -1712,7 +1660,7 @@ function OrdersContent() {
               type="button"
               onClick={() => {
                 invalidateOrdersCache();
-                loadOrders(true, currentPage, true);
+                loadOrders(true, true);
               }}
               disabled={loading}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-white border border-[#E2E6EA] text-gray-700 hover:bg-gray-50 active:scale-95 transition-all shadow-xs cursor-pointer disabled:opacity-50"
@@ -1791,7 +1739,7 @@ function OrdersContent() {
             <span>📱 QR Scan Orders</span>
             {sourceTab === 'qr_scan' && (
               <span className="bg-sky-100 text-sky-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
-                {totalCount}
+                {orders.length}
               </span>
             )}
           </button>
@@ -1808,7 +1756,7 @@ function OrdersContent() {
             <span>🥡 Counter Orders (Walk-in)</span>
             {sourceTab === 'admin_counter' ? (
               <span className="bg-white/20 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full">
-                {totalCount}
+                {orders.length}
               </span>
             ) : (
               <span className="w-2 h-2 rounded-full bg-[#C0181A]" />
@@ -1906,7 +1854,7 @@ function OrdersContent() {
         </div>
 
         <div className="text-[11px] font-semibold text-gray-500 self-end sm:self-auto">
-          {totalCount} {dateFilter === 'today' ? "today's orders" : dateFilter === 'yesterday' ? "yesterday's orders" : dateFilter === 'custom' ? `orders for ${customDate}` : "orders total"}
+          {orders.length} {dateFilter === 'today' ? "today's orders" : dateFilter === 'yesterday' ? "yesterday's orders" : dateFilter === 'custom' ? `orders for ${customDate}` : "orders total"}
         </div>
       </div>
 
@@ -1934,7 +1882,13 @@ function OrdersContent() {
               {status === 'delayed' && <AlertTriangle className="w-3.5 h-3.5 text-red-600" />}
               {status === 'missed' && <Clock className="w-3.5 h-3.5 text-amber-600 animate-pulse" />}
               {status === 'ready' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
-              <span>{status === 'delayed' ? `Delayed (${delayedOrders.length})` : status === 'missed' ? '⚠️ Missed (10m+)' : status}</span>
+              <span>
+                {status === 'delayed'
+                  ? `Delayed (${stageCounts.delayed})`
+                  : status === 'missed'
+                  ? `⚠️ Missed (10m+) (${stageCounts.missed})`
+                  : `${status} (${stageCounts[status] ?? 0})`}
+              </span>
             </button>
           )
         )}
@@ -1946,8 +1900,8 @@ function OrdersContent() {
         <div className="flex items-center gap-1 p-0.5 bg-gray-100 rounded-xl">
           {(['all', 'cash', 'online', 'credit'] as const).map((mode) => {
             const count = mode === 'all'
-              ? orders.length
-              : orders.filter((o) => (o.paymentMode || 'cash') === mode).length;
+              ? statusFilteredOrders.length
+              : statusFilteredOrders.filter((o) => (o.paymentMode || 'cash') === mode).length;
             return (
               <button
                 key={mode}
@@ -2042,18 +1996,43 @@ function OrdersContent() {
         <div className="flex flex-col lg:flex-row gap-4 items-start w-full">
           {/* Left pane: Orders list */}
           <div className={`w-full lg:w-1/2 flex flex-col gap-3 ${viewMode === 'detail' ? 'hidden lg:flex' : 'flex'}`}>
-            <div className="bg-white border border-[#E2E6EA] rounded-xl max-h-[600px] overflow-y-auto">
+            <div className="bg-white border border-[#E2E6EA] rounded-xl max-h-[600px] overflow-y-auto relative">
+              {isBackgroundFetching && (
+                <div className="sticky top-0 left-0 right-0 z-20 h-1 bg-red-100 overflow-hidden">
+                  <div className="h-full bg-[#C0181A] animate-pulse w-full" />
+                </div>
+              )}
               <div className="divide-y divide-[#E2E6EA]">
                 {displayedOrders.length === 0 ? (
                   <div className="p-8 text-center text-sm text-[#6B7280]">
-                    <p className="font-semibold text-gray-700">No {paymentFilter === 'credit' ? 'credit (Udhar)' : paymentFilter} orders found in this view.</p>
-                    <button
-                      type="button"
-                      onClick={() => setPaymentFilter('all')}
-                      className="mt-2 text-xs font-bold text-[#C0181A] hover:underline cursor-pointer"
-                    >
-                      Clear payment filter
-                    </button>
+                    <p className="font-semibold text-gray-700">
+                      {paymentFilter !== 'all'
+                        ? `No ${paymentFilter === 'credit' ? 'credit (Udhar)' : paymentFilter} orders found in this view.`
+                        : filter === 'delayed'
+                        ? 'Great job! No delayed orders found.'
+                        : filter === 'missed'
+                        ? 'No missed orders pending attention.'
+                        : filter === 'preparing'
+                        ? 'No orders currently preparing.'
+                        : filter === 'ready'
+                        ? 'No orders waiting to be served or picked up.'
+                        : filter === 'completed'
+                        ? 'No completed orders in this view.'
+                        : filter === 'cancelled'
+                        ? 'No cancelled orders.'
+                        : filter === 'received'
+                        ? 'No new received orders.'
+                        : 'No orders found matching this filter.'}
+                    </p>
+                    {paymentFilter !== 'all' && (
+                      <button
+                        type="button"
+                        onClick={() => setPaymentFilter('all')}
+                        className="mt-2 text-xs font-bold text-[#C0181A] hover:underline cursor-pointer"
+                      >
+                        Clear payment filter
+                      </button>
+                    )}
                   </div>
                 ) : (
                   displayedOrders.map((order) => (
@@ -2071,10 +2050,10 @@ function OrdersContent() {
               </div>
             </div>
 
-            {totalCount > 0 && (
+            {filteredOrders.length > 0 && (
               <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 py-2.5 bg-white border border-[#E2E6EA] rounded-xl text-xs shadow-2xs">
                 <span className="text-gray-500 font-medium text-[11px]">
-                  Showing <strong className="text-gray-900 font-bold">{Math.min(totalCount, (currentPage - 1) * limit + 1)} - {Math.min(totalCount, currentPage * limit)}</strong> of <strong className="text-gray-900 font-bold">{totalCount}</strong> orders
+                  Showing <strong className="text-gray-900 font-bold">{Math.min(filteredOrders.length, (currentPage - 1) * limit + 1)} - {Math.min(filteredOrders.length, currentPage * limit)}</strong> of <strong className="text-gray-900 font-bold">{filteredOrders.length}</strong> orders
                 </span>
 
                 <div className="flex items-center gap-1.5">
@@ -2088,8 +2067,8 @@ function OrdersContent() {
                   </button>
 
                   <div className="flex items-center gap-1 px-1">
-                    {Array.from({ length: Math.min(5, Math.ceil(totalCount / limit)) }).map((_, i) => {
-                      const totalPages = Math.ceil(totalCount / limit);
+                    {Array.from({ length: Math.min(5, Math.ceil(filteredOrders.length / limit)) }).map((_, i) => {
+                      const totalPages = Math.ceil(filteredOrders.length / limit);
                       let pageNumber = i + 1;
                       if (totalPages > 5 && currentPage > 3) {
                         pageNumber = Math.min(totalPages - 4 + i, Math.max(1, currentPage - 2 + i));
@@ -2112,7 +2091,7 @@ function OrdersContent() {
                   </div>
 
                   <button
-                    disabled={currentPage >= Math.ceil(totalCount / limit) || loading}
+                    disabled={currentPage >= Math.ceil(filteredOrders.length / limit) || loading}
                     onClick={() => handlePageChange(currentPage + 1)}
                     className="inline-flex items-center gap-1 px-3 py-1.5 border border-[#E2E6EA] rounded-lg bg-white hover:bg-[#F4F6F9] active:scale-95 disabled:opacity-30 disabled:pointer-events-none font-bold text-gray-700 transition-all cursor-pointer shadow-2xs"
                   >
@@ -2526,7 +2505,8 @@ function OrdersContent() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </TickerContext.Provider>
   );
 }
 

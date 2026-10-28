@@ -1,0 +1,59 @@
+[
+  {
+    "stepRestaurants": 1,
+    "durationSec": 30,
+    "totalRequests": 643,
+    "requestsPerSec": 21.34,
+    "errorCount": 0,
+    "errorRatePct": 0,
+    "createOrderP95Ms": 84,
+    "kitchenReadP95Ms": 23,
+    "customerReadP95Ms": 81,
+    "analyticsReadP95Ms": 60,
+    "simulatedDbConnections": 7,
+    "tenantIsolationViolations": 0
+  },
+  {
+    "stepRestaurants": 5,
+    "durationSec": 30,
+    "totalRequests": 1066,
+    "requestsPerSec": 35.13,
+    "errorCount": 0,
+    "errorRatePct": 0,
+    "createOrderP95Ms": 409,
+    "kitchenReadP95Ms": 86,
+    "customerReadP95Ms": 437,
+    "analyticsReadP95Ms": 350,
+    "simulatedDbConnections": 33,
+    "tenantIsolationViolations": 0
+  },
+  {
+    "stepRestaurants": 10,
+    "durationSec": 31,
+    "totalRequests": 1365,
+    "requestsPerSec": 44.68,
+    "errorCount": 0,
+    "errorRatePct": 0,
+    "createOrderP95Ms": 777,
+    "kitchenReadP95Ms": 194,
+    "customerReadP95Ms": 895,
+    "analyticsReadP95Ms": 838,
+    "simulatedDbConnections": 65,
+    "tenantIsolationViolations": 0
+  },
+  {
+    "stepRestaurants": 20,
+    "durationSec": 31,
+    "totalRequests": 1423,
+    "requestsPerSec": 46.35,
+    "errorCount": 0,
+    "errorRatePct": 0,
+    "createOrderP95Ms": 2377,
+    "kitchenReadP95Ms": 334,
+    "customerReadP95Ms": 1644,
+    "analyticsReadP95Ms": 1644,
+    "simulatedDbConnections": 130,
+    "tenantIsolationViolations": 0,
+    "stopConditionTriggered": "createOrder p95 2377ms > 1500ms SLA"
+  }
+]

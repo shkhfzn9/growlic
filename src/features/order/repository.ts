@@ -300,7 +300,7 @@ export async function getKitchenStats(restaurantId: string): Promise<KitchenStat
 
     kitchenStatsCache.set(cleanRestId, {
       stats: calculatedStats,
-      expiresAt: now + 30000,
+      expiresAt: now + 60000,
     });
 
     return calculatedStats;

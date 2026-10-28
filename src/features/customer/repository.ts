@@ -312,3 +312,49 @@ export async function updateName(
   );
   return doc ? normalizeCustomer(doc) : null;
 }
+
+/**
+ * Fetches top recent customers sorted by lastOrderDate desc (max limit) for POS bounded preload.
+ * Returns only phone and name.
+ */
+export async function getTopRecentCustomers(
+  restaurantId: string,
+  limit: number = 1000
+): Promise<Array<{ phone: string; name: string }>> {
+  await dbConnect();
+  const cleanRestId = sanitizeTenantId(restaurantId);
+  // Uses index: { restaurantId: 1, lastOrderDate: -1 }
+  const docs = await Customer.find({ restaurantId: cleanRestId })
+    .sort({ lastOrderDate: -1 })
+    .limit(limit)
+    .select('phone name -_id')
+    .lean();
+  return (docs as any[]).map((d) => ({
+    phone: String(d.phone || ''),
+    name: String(d.name || ''),
+  }));
+}
+
+/**
+ * Looks up a single customer by restaurantId and normalized phone number.
+ * Returns only phone and name.
+ */
+export async function lookupCustomerPhone(
+  restaurantId: string,
+  phone: string
+): Promise<{ phone: string; name: string } | null> {
+  await dbConnect();
+  const cleanRestId = sanitizeTenantId(restaurantId);
+  // Uses unique index: { restaurantId: 1, phone: 1 }
+  const doc = await Customer.findOne({
+    restaurantId: cleanRestId,
+    phone: phone.trim(),
+  })
+    .select('phone name -_id')
+    .lean();
+  if (!doc) return null;
+  return {
+    phone: String((doc as any).phone || ''),
+    name: String((doc as any).name || ''),
+  };
+}

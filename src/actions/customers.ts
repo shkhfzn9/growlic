@@ -10,6 +10,8 @@ import {
   getCustomerAnalytics,
 } from '@/features/customer/services/customerAnalyticsService';
 import { ICustomerListFilters } from '@/features/customer/types';
+import { getTopRecentCustomers, lookupCustomerPhone } from '@/features/customer/repository';
+import { normalizeCustomerPhone } from '@/lib/phoneUtils';
 
 /**
  * Validates the admin's authentication cookie ('admin_token') and decodes its payload.
@@ -127,5 +129,41 @@ export async function exportCustomersCsvDataAction(filters: ICustomerListFilters
     console.error('Error exporting customers CSV:', error);
     const message = error instanceof Error ? error.message : 'Failed to export customers CSV';
     throw new Error(message);
+  }
+}
+
+/**
+ * Server action to fetch top recent customers for POS counter bounded preload (max 1,000).
+ * Safe failure: returns empty array if error occurs, ensuring counter form never breaks.
+ */
+export async function getPreloadCustomersAction(): Promise<Array<{ phone: string; name: string }>> {
+  try {
+    const admin = await checkAdminAuth();
+    if (!admin?.restaurantId) return [];
+    const customers = await getTopRecentCustomers(admin.restaurantId, 1000);
+    return JSON.parse(JSON.stringify(customers));
+  } catch (error) {
+    console.error('getPreloadCustomersAction safe failure:', error);
+    return [];
+  }
+}
+
+/**
+ * Server action to look up a customer by normalized phone for POS counter fallback.
+ * Safe failure: returns null on failure so form remains fully functional.
+ */
+export async function lookupCustomerByPhoneAction(
+  phone: string
+): Promise<{ phone: string; name: string } | null> {
+  try {
+    const admin = await checkAdminAuth();
+    if (!admin?.restaurantId || !phone) return null;
+    const normalizedPhone = normalizeCustomerPhone(phone);
+    if (!normalizedPhone) return null;
+    const customer = await lookupCustomerPhone(admin.restaurantId, normalizedPhone);
+    return customer ? JSON.parse(JSON.stringify(customer)) : null;
+  } catch (error) {
+    console.error('lookupCustomerByPhoneAction safe failure:', error);
+    return null;
   }
 }

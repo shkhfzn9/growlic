@@ -17,6 +17,7 @@ import { getActiveTheme, saveActiveTheme } from '@/config/themes';
 import SalonBookingForm from '@/features/salonBooking/components/SalonBookingForm';
 import { formatSalonBookingNotes } from '@/features/salonBooking/service';
 import { SalonBookingData } from '@/features/salonBooking/types';
+import { normalizeCustomerPhone } from '@/lib/phoneUtils';
 
 const DISH_PLACEHOLDER = '/dish_placeholder.jpg';
 
@@ -232,7 +233,7 @@ function CartContent() {
   }, []);
 
   useEffect(() => {
-    const cleanPhone = phone.trim();
+    const cleanPhone = normalizeCustomerPhone(phone);
     if (cleanPhone.length === 10 && resolvedRestId) {
       if (lastFetchedPhoneRef.current === cleanPhone) return;
       lastFetchedPhoneRef.current = cleanPhone;
@@ -902,8 +903,8 @@ function CartContent() {
       const orderPayload = {
         restaurantId: targetRestaurantId,
         customerName: name.trim(),
-        customerPhone: phone.trim(),
-        customerOldPhone: originalCachedPhone ? originalCachedPhone.trim() : undefined,
+        customerPhone: normalizeCustomerPhone(phone),
+        customerOldPhone: originalCachedPhone ? normalizeCustomerPhone(originalCachedPhone) : undefined,
         tableId: cart.tableId || undefined,
         orderType: effectiveCategory === 'salon' ? ('dine_in' as const) : orderType,
         paymentMode,
@@ -1792,7 +1793,7 @@ function CartContent() {
                     maxLength={10}
                     placeholder="e.g. 9876543210"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+                    onChange={(e) => setPhone(normalizeCustomerPhone(e.target.value))}
                     disabled={loading}
                     className="bg-surface border-[1.5px] border-transparent rounded-[10px] px-4 py-3 text-sm text-text-dark outline-none transition-colors focus:border-primary placeholder:text-text-dark/40"
                     required
