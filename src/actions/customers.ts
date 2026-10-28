@@ -58,8 +58,10 @@ export async function getCustomersWithSegmentsAction(filters: ICustomerListFilte
     const result = await getCustomerListWithSegments(admin.restaurantId, filters);
     return JSON.parse(JSON.stringify(result));
   } catch (error) {
-    console.error('Error fetching customers with segments:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch customers list';
+    if (!message.includes('Unauthorized')) {
+      console.error('Error fetching customers with segments:', error);
+    }
     throw new Error(message);
   }
 }
@@ -76,8 +78,10 @@ export async function getCustomerDetailAction(phone: string) {
     }
     return JSON.parse(JSON.stringify(result));
   } catch (error) {
-    console.error('Error fetching customer detail action:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch customer profile';
+    if (!message.includes('Unauthorized')) {
+      console.error('Error fetching customer detail action:', error);
+    }
     throw new Error(message);
   }
 }
@@ -91,8 +95,10 @@ export async function getCustomerVisitHistoryAction(phone: string, page = 1, lim
     const result = await getCustomerVisitHistory(admin.restaurantId, phone, page, limit);
     return JSON.parse(JSON.stringify(result));
   } catch (error) {
-    console.error('Error fetching customer visit history action:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch visit history';
+    if (!message.includes('Unauthorized')) {
+      console.error('Error fetching customer visit history action:', error);
+    }
     throw new Error(message);
   }
 }
@@ -106,8 +112,10 @@ export async function getCustomerAnalyticsAction(forceRefresh = false) {
     const result = await getCustomerAnalytics(admin.restaurantId, forceRefresh);
     return JSON.parse(JSON.stringify(result));
   } catch (error) {
-    console.error('Error fetching customer analytics action:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch customer analytics';
+    if (!message.includes('Unauthorized')) {
+      console.error('Error fetching customer analytics action:', error);
+    }
     throw new Error(message);
   }
 }
